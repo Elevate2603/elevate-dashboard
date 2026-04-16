@@ -378,7 +378,7 @@
 
 </style>
 <!-- BUILD_TOKEN: ELEVATE-SECRETS-REMOVED-1776279864 -->
-<!-- DEPLOY-TOKEN: 1776380568-robust-parser -->
+<!-- DEPLOY-TOKEN: 1776381718-research-fix -->
 </head>
 <body>
 
@@ -769,19 +769,9 @@ async function initQueue() {
     try { json = JSON.parse(text); } catch(e) { throw new Error('Response not JSON: ' + text.slice(0, 100)); }
     console.log('[Queue Fetch] parsed:', json);
 
-    // Unwrap every shape Make might return:
-    //   1) raw array of records:           [{key, data}, ...]
-    //   2) Array Aggregator wrapper:       [{array:[{key,data},...], __IMTAGGLENGTH__:N}]
-    //   3) Single wrapper obj:             {array:[{key,data},...]}
-    //   4) {records:[...]} or {data:[...]} from REST API
-    let raw = json;
-    if (Array.isArray(raw) && raw.length === 1 && raw[0] && Array.isArray(raw[0].array)) {
-      raw = raw[0].array;
-    } else if (!Array.isArray(raw) && Array.isArray(raw.array)) {
-      raw = raw.array;
-    } else if (!Array.isArray(raw)) {
-      raw = raw.records || raw.data || [];
-    }
+    // Make Array Aggregator → TransformToJSON returns a JSON array: [{key, data:{...}}, ...]
+    // Fallback: { records: [...] } or { data: [...] } from REST API
+    const raw = Array.isArray(json) ? json : (json.records || json.data || []);
 
     const contacts = raw.map(r => {
       const d = (r && r.data) ? r.data : r;
