@@ -378,7 +378,7 @@
 
 </style>
 <!-- BUILD_TOKEN: ELEVATE-SECRETS-REMOVED-1776279864 -->
-<!-- DEPLOY-TOKEN: 1776364729-tab-display-isolation -->
+<!-- DEPLOY-TOKEN: 1776380568-robust-parser -->
 </head>
 <body>
 
@@ -763,13 +763,32 @@ async function initQueue() {
   try {
     const res = await fetch(QUEUE_FETCH, { method: 'GET' });
     if (!res.ok) throw new Error('Queue fetch failed: ' + res.status);
-    const json = await res.json();
-    // Make returns { records: [...] } or an array depending on config
-    const raw = Array.isArray(json) ? json : (json.records || json.data || []);
+    const text = await res.text();
+    console.log('[Queue Fetch] raw response:', text.slice(0, 500));
+    let json;
+    try { json = JSON.parse(text); } catch(e) { throw new Error('Response not JSON: ' + text.slice(0, 100)); }
+    console.log('[Queue Fetch] parsed:', json);
+
+    // Unwrap every shape Make might return:
+    //   1) raw array of records:           [{key, data}, ...]
+    //   2) Array Aggregator wrapper:       [{array:[{key,data},...], __IMTAGGLENGTH__:N}]
+    //   3) Single wrapper obj:             {array:[{key,data},...]}
+    //   4) {records:[...]} or {data:[...]} from REST API
+    let raw = json;
+    if (Array.isArray(raw) && raw.length === 1 && raw[0] && Array.isArray(raw[0].array)) {
+      raw = raw[0].array;
+    } else if (!Array.isArray(raw) && Array.isArray(raw.array)) {
+      raw = raw.array;
+    } else if (!Array.isArray(raw)) {
+      raw = raw.records || raw.data || [];
+    }
+
     const contacts = raw.map(r => {
-      const d = r.data || r;
-      return { ...d, key: r.key || d.key || '' };
+      const d = (r && r.data) ? r.data : r;
+      return { ...d, key: (r && r.key) || (d && d.key) || '' };
     }).filter(c => c && (c.contact_name || c.full_name));
+
+    console.log('[Queue Fetch] contacts extracted:', contacts.length);
 
     if (!contacts.length) {
       list.innerHTML = '<div class="empty-queue"><p>No contacts pending approval.</p><small>New contacts will appear here after the ZoomInfo intake pipeline runs.</small></div>';
