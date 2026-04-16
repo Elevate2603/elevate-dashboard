@@ -52,34 +52,72 @@
   .tab-btn:hover { color:var(--text); }
   .tab-btn.active { color:var(--gold); border-bottom-color:var(--gold); }
   .tab-content { display:none; }
-  .tab-content.active { }
+  .tab-content.active { display:block; }
 
   /* ═══════════════════════ APPROVAL QUEUE TAB ═══════════════════════ */
   #tabQueue { background: var(--light-bg); min-height: calc(100vh - 112px); padding: 24px; }
-  .queue-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  .queue-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
   .queue-header h2 { font-size:20px; color:var(--light-text); font-weight:700; }
-  .queue-stats { display:flex; gap:16px; }
+  .queue-stats { display:flex; gap:10px; flex-wrap:wrap; }
   .stat-pill { background:#fff; border:1px solid var(--light-border); border-radius:20px; padding:6px 16px; font-size:13px; color:var(--light-text); }
-  .stat-pill span { font-weight:700; color:var(--gold); }
-  .contact-card { background:#fff; border:1px solid var(--light-border); border-radius:10px; padding:20px; margin-bottom:12px; display:flex; align-items:center; gap:16px; }
+  .stat-pill span { font-weight:700; color:var(--gold); margin-left:4px; }
+
+  .queue-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; background:#fff; border:1px solid var(--light-border); border-radius:10px; padding:12px 16px; margin-bottom:16px; flex-wrap:wrap; }
+  .queue-toolbar-left { display:flex; gap:8px; flex-wrap:wrap; }
+  .queue-toolbar-right { display:flex; gap:8px; align-items:center; }
+  .btn-bulk { background:#fff; border:1px solid var(--light-border); color:var(--light-text); border-radius:6px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.15s; }
+  .btn-bulk:hover { background:#f4f5f7; }
+  .btn-bulk.approve-all { border-color:var(--green); color:var(--green); }
+  .btn-bulk.decline-all { border-color:#c0392b; color:#c0392b; }
+  .btn-submit { background:var(--gold); color:#000; border:none; border-radius:6px; padding:10px 22px; font-size:14px; font-weight:700; cursor:pointer; transition:all 0.15s; }
+  .btn-submit:hover:not(:disabled) { background:var(--gold-light); }
+  .btn-submit:disabled { opacity:0.5; cursor:not-allowed; }
+  .selection-count { font-size:13px; color:#666; font-weight:600; }
+
+  .contact-card { background:#fff; border:1px solid var(--light-border); border-radius:10px; padding:18px 20px; margin-bottom:10px; transition:all 0.15s; }
+  .contact-card.approved { border-left:4px solid var(--green); }
+  .contact-card.declined { border-left:4px solid #c0392b; opacity:0.65; }
+  .contact-card.is-client { background:#fff8e1; border-left:4px solid var(--gold); }
+  .contact-card-row { display:flex; align-items:center; gap:16px; }
   .contact-avatar { width:44px; height:44px; border-radius:50%; background:var(--gold); display:flex; align-items:center; justify-content:center; font-weight:700; color:#000; font-size:16px; flex-shrink:0; }
-  .contact-info { flex:1; }
-  .contact-name { font-weight:700; color:var(--light-text); font-size:15px; }
-  .contact-title { font-size:13px; color:#666; margin-top:2px; }
+  .contact-info { flex:1; min-width:0; }
+  .contact-name { font-weight:700; color:var(--light-text); font-size:15px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .contact-client-badge { background:var(--gold); color:#000; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-title { font-size:13px; color:#666; margin-top:3px; }
   .contact-company { font-size:13px; color:var(--gold); font-weight:600; margin-top:2px; }
-  .contact-actions { display:flex; gap:8px; }
-  .btn-approve { background:var(--green); color:#fff; border:none; border-radius:6px; padding:8px 18px; font-size:13px; font-weight:600; cursor:pointer; }
-  .btn-decline { background:none; border:1px solid var(--light-border); color:#666; border-radius:6px; padding:8px 18px; font-size:13px; cursor:pointer; }
-  .btn-approve:hover { opacity:0.85; }
-  .btn-decline:hover { border-color:#ccc; }
-  .empty-queue { text-align:center; padding:60px 20px; color:#aaa; }
-  .empty-queue p { font-size:15px; margin-bottom:8px; color:var(--light-text); }
-  .empty-queue small { font-size:13px; }
+
+  /* Toggle switch */
+  .toggle-wrap { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  .toggle-label { font-size:12px; font-weight:600; color:#666; min-width:60px; text-align:right; }
+  .toggle-label.on { color:var(--green); }
+  .toggle-label.off { color:#c0392b; }
+  .tog { position:relative; display:inline-block; width:48px; height:26px; }
+  .tog input { opacity:0; width:0; height:0; }
+  .tog-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#ccc; transition:0.2s; border-radius:26px; }
+  .tog-slider:before { position:absolute; content:""; height:20px; width:20px; left:3px; bottom:3px; background:white; transition:0.2s; border-radius:50%; }
+  input:checked + .tog-slider { background:var(--green); }
+  input:checked + .tog-slider:before { transform:translateX(22px); }
+
+  .contact-meta-row { display:flex; gap:20px; margin-top:12px; padding-top:12px; border-top:1px solid #f0f0f0; font-size:12px; color:#666; flex-wrap:wrap; }
+  .contact-meta-item { display:flex; gap:4px; }
+  .contact-meta-item strong { color:var(--light-text); font-weight:600; }
+  .contact-meta-item a { color:var(--gold); text-decoration:none; font-weight:600; }
+  .contact-meta-item a:hover { text-decoration:underline; }
+
+  .empty-queue { text-align:center; padding:80px 20px; color:#aaa; background:#fff; border:1px solid var(--light-border); border-radius:10px; }
+  .empty-queue p { font-size:15px; margin-bottom:8px; color:var(--light-text); font-weight:600; }
+  .empty-queue small { font-size:13px; color:#888; }
+  .queue-result { padding:14px 18px; border-radius:8px; margin-bottom:16px; font-size:14px; font-weight:600; display:none; }
+  .queue-result.ok { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
+  .queue-result.err { background:#ffebee; color:#c62828; border:1px solid #ef9a9a; }
+  .queue-loading { text-align:center; padding:60px 20px; color:#666; font-size:14px; }
 
   /* ═══════════════════════ SALES INTEL TAB ═══════════════════════ */
   #tabSales {
     background: var(--dark);
     min-height: calc(100vh - 112px);
+  }
+  #tabSales.active {
     display: grid;
     grid-template-columns: 320px 1fr 320px;
     grid-template-rows: auto 1fr;
@@ -121,33 +159,23 @@
     flex-shrink: 0;
     text-align: left;
     padding: 16px 20px;
-    background: rgba(0,0,0,0.6);
+    background: rgba(0,0,0,0.72);
     border-radius: 10px;
-    border: 1px solid rgba(200,130,10,0.3);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(200,130,10,0.1);
+    border: 1px solid rgba(200,130,10,0.35);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
   }
   .acd-pillar { }
   .acd-word {
     white-space: nowrap;
     font-size: 22px;
-    font-weight: 900;
+    font-weight: 800;
     color: #FFB020;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    text-shadow:
-      0 1px 0 #8B5A00,
-      0 2px 0 #7A4F00,
-      0 3px 0 #6B4400,
-      0 4px 0 #5C3900,
-      0 5px 0 #4D2E00,
-      0 6px 10px rgba(0,0,0,0.8),
-      0 0 20px rgba(200,130,10,0.6),
-      0 0 40px rgba(200,130,10,0.3);
-    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6));
+    text-shadow: 0 2px 4px rgba(0,0,0,0.85);
   }
-  .acd-line1 { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.9); letter-spacing: 0.06em; margin-top: 6px; text-transform: uppercase; text-shadow: 0 1px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.8); }
-  .acd-line2 { font-size: 10px; font-weight: 500; color: #FFB020; letter-spacing: 0.05em; margin-top: 4px; text-transform: uppercase; text-shadow: 0 1px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.8); opacity: 0.9; }
+  .acd-line1 { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.92); letter-spacing: 0.06em; margin-top: 6px; text-transform: uppercase; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+  .acd-line2 { font-size: 10px; font-weight: 500; color: #FFB020; letter-spacing: 0.05em; margin-top: 4px; text-transform: uppercase; text-shadow: 0 1px 3px rgba(0,0,0,0.8); opacity: 0.92; }
 
   /* Arrow glow animation */
 
@@ -350,6 +378,7 @@
 
 </style>
 <!-- BUILD_TOKEN: ELEVATE-SECRETS-REMOVED-1776279864 -->
+<!-- DEPLOY-TOKEN: 1776364729-tab-display-isolation -->
 </head>
 <body>
 
@@ -390,17 +419,25 @@
     <div class="queue-header">
       <h2>Pending Approvals</h2>
       <div class="queue-stats">
-        <div class="stat-pill">This week <span id="statWeek">0</span></div>
         <div class="stat-pill">Pending <span id="statPending">0</span></div>
         <div class="stat-pill">Approved <span id="statApproved">0</span></div>
         <div class="stat-pill">Declined <span id="statDeclined">0</span></div>
+        <div class="stat-pill">Clients <span id="statClients">0</span></div>
+      </div>
+    </div>
+    <div id="queueResult" class="queue-result"></div>
+    <div class="queue-toolbar" id="queueToolbar" style="display:none;">
+      <div class="queue-toolbar-left">
+        <button class="btn-bulk approve-all" onclick="bulkApprove()">✓ Approve all</button>
+        <button class="btn-bulk decline-all" onclick="bulkDecline()">✕ Decline all</button>
+      </div>
+      <div class="queue-toolbar-right">
+        <span class="selection-count" id="selectionCount">0 approved</span>
+        <button class="btn-submit" id="submitBtn" onclick="submitQueue()">Submit decisions</button>
       </div>
     </div>
     <div id="queueList">
-      <div class="empty-queue">
-        <p>No contacts pending approval.</p>
-        <small>Check back after your morning email.</small>
-      </div>
+      <div class="queue-loading">Loading queue…</div>
     </div>
   </div>
 
@@ -711,42 +748,198 @@ function showTab(name, btn) {
 // APPROVAL QUEUE
 // ═══════════════════════════════════════════
 // Queue URLs defined in constants block below
+const APPROVAL_WEBHOOK = 'https://hook.us2.make.com/aq8yfoqv8itfhrewo1k6iib7u6rq4gm1';
+let queueContacts = [];
 
 async function initQueue() {
   const list = document.getElementById('queueList');
+  const toolbar = document.getElementById('queueToolbar');
+  const result = document.getElementById('queueResult');
   if (!list) return;
-  list.innerHTML = '<div class="empty-queue"><p>Loading queue...</p></div>';
+  list.innerHTML = '<div class="queue-loading">Loading queue…</div>';
+  if (toolbar) toolbar.style.display = 'none';
+  if (result) result.style.display = 'none';
+
   try {
-    const res = await fetch(
-      'https://us2.make.com/api/v2/data-store-records?dataStoreId=86836&limit=50',
-      { headers: { 'Authorization': 'Token 5faedbe0-a966-4b38-9ff7-2e26bcd73b87' } }
-    );
+    const res = await fetch(QUEUE_FETCH, { method: 'GET' });
     if (!res.ok) throw new Error('Queue fetch failed: ' + res.status);
     const json = await res.json();
+    // Make returns { records: [...] } or an array depending on config
     const raw = Array.isArray(json) ? json : (json.records || json.data || []);
-    const contacts = raw.map(r => r.data || r).filter(Boolean);
+    const contacts = raw.map(r => {
+      const d = r.data || r;
+      return { ...d, key: r.key || d.key || '' };
+    }).filter(c => c && (c.contact_name || c.full_name));
+
     if (!contacts.length) {
-      list.innerHTML = '<div class="empty-queue"><p>No contacts pending approval.</p><small>Check back after your morning email.</small></div>';
+      list.innerHTML = '<div class="empty-queue"><p>No contacts pending approval.</p><small>New contacts will appear here after the ZoomInfo intake pipeline runs.</small></div>';
+      renderQueueStats([]);
       return;
     }
-    list.innerHTML = contacts.map(c => {
-      const name = c.full_name || c.name || c.contact_name || 'Unknown';
-      const company = c.company_name || c.company || '';
-      const title = c.title || c.job_title || '';
-      const id = c.id || c.contact_id || '';
-      return `<div class="queue-item" data-id="${id}">
-        <div class="queue-name">${name}</div>
-        <div class="queue-meta">${[title, company].filter(Boolean).join(' · ')}</div>
-        <div class="queue-actions">
-          <button class="btn-approve" onclick="approveContact('${id}','${name}')">✓ Approve</button>
-          <button class="btn-skip" onclick="skipContact('${id}')">Skip</button>
+
+    // Default: approve non-clients, decline clients (clients shouldn't be re-contacted)
+    queueContacts = contacts.map(c => ({ ...c, _approved: !c.is_client }));
+    renderQueue();
+    if (toolbar) toolbar.style.display = 'flex';
+  } catch (e) {
+    console.error('initQueue error:', e);
+    list.innerHTML = '<div class="empty-queue"><p>Could not load queue.</p><small>' + (e.message || 'Unknown error') + ' — check that Queue Fetch scenario is active in Make.</small></div>';
+  }
+}
+
+function renderQueue() {
+  const list = document.getElementById('queueList');
+  if (!queueContacts.length) {
+    list.innerHTML = '<div class="empty-queue"><p>No contacts pending approval.</p></div>';
+    return;
+  }
+  list.innerHTML = queueContacts.map((c, i) => {
+    const name = c.contact_name || c.full_name || 'Unknown';
+    const initial = name.charAt(0).toUpperCase();
+    const title = c.contact_title || c.title || '';
+    const company = c.company_name || c.company || '';
+    const industry = c.company_industry || '';
+    const persona = c.persona || '';
+    const employees = c.employee_count || '';
+    const location = [c.contact_city, c.contact_state].filter(Boolean).join(', ');
+    const linkedin = c.contact_linkedin || '';
+    const sequence = c.sequence_name || '';
+    const isClient = c.is_client === true || c.is_client === 'true';
+    const approved = c._approved;
+    const cardClass = isClient ? 'is-client' : (approved ? 'approved' : 'declined');
+    return `
+      <div class="contact-card ${cardClass}" data-idx="${i}">
+        <div class="contact-card-row">
+          <div class="contact-avatar">${initial}</div>
+          <div class="contact-info">
+            <div class="contact-name">
+              ${escapeHtml(name)}
+              ${isClient ? '<span class="contact-client-badge">ACTIVE CLIENT</span>' : ''}
+            </div>
+            <div class="contact-title">${escapeHtml(title)}</div>
+            <div class="contact-company">${escapeHtml(company)}${industry ? ' · ' + escapeHtml(industry) : ''}</div>
+          </div>
+          <div class="toggle-wrap">
+            <span class="toggle-label ${approved ? 'on' : 'off'}" id="togLbl${i}">${approved ? 'APPROVE' : 'DECLINE'}</span>
+            <label class="tog">
+              <input type="checkbox" ${approved ? 'checked' : ''} onchange="toggleContact(${i}, this.checked)">
+              <span class="tog-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="contact-meta-row">
+          ${persona ? `<div class="contact-meta-item"><strong>Persona:</strong> ${escapeHtml(persona)}</div>` : ''}
+          ${sequence ? `<div class="contact-meta-item"><strong>Sequence:</strong> ${escapeHtml(sequence)}</div>` : ''}
+          ${employees ? `<div class="contact-meta-item"><strong>Employees:</strong> ${escapeHtml(employees)}</div>` : ''}
+          ${location ? `<div class="contact-meta-item"><strong>Location:</strong> ${escapeHtml(location)}</div>` : ''}
+          ${linkedin ? `<div class="contact-meta-item"><a href="${escapeAttr(linkedin)}" target="_blank" rel="noopener">LinkedIn ↗</a></div>` : ''}
         </div>
       </div>`;
-    }).join('');
-  } catch(e) {
-    console.error('initQueue error:', e);
-    list.innerHTML = '<div class="empty-queue"><p>No contacts pending approval.</p><small>Check back after your morning email.</small></div>';
+  }).join('');
+  renderQueueStats(queueContacts);
+}
+
+function renderQueueStats(contacts) {
+  const pending = contacts.length;
+  const approved = contacts.filter(c => c._approved && !c.is_client).length;
+  const declined = contacts.filter(c => !c._approved).length;
+  const clients = contacts.filter(c => c.is_client).length;
+  const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setText('statPending', pending);
+  setText('statApproved', approved);
+  setText('statDeclined', declined);
+  setText('statClients', clients);
+  setText('selectionCount', `${approved} approved, ${declined} declined`);
+}
+
+function toggleContact(idx, checked) {
+  if (!queueContacts[idx]) return;
+  queueContacts[idx]._approved = checked;
+  const card = document.querySelector(`.contact-card[data-idx="${idx}"]`);
+  const lbl = document.getElementById('togLbl' + idx);
+  if (card) {
+    card.classList.remove('approved', 'declined');
+    if (queueContacts[idx].is_client) {
+      card.classList.add('is-client');
+    } else {
+      card.classList.add(checked ? 'approved' : 'declined');
+    }
   }
+  if (lbl) {
+    lbl.textContent = checked ? 'APPROVE' : 'DECLINE';
+    lbl.className = 'toggle-label ' + (checked ? 'on' : 'off');
+  }
+  renderQueueStats(queueContacts);
+}
+
+function bulkApprove() {
+  queueContacts.forEach((c, i) => { c._approved = !c.is_client; });
+  renderQueue();
+}
+
+function bulkDecline() {
+  queueContacts.forEach(c => { c._approved = false; });
+  renderQueue();
+}
+
+async function submitQueue() {
+  const btn = document.getElementById('submitBtn');
+  const result = document.getElementById('queueResult');
+  if (!queueContacts.length) return;
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+  result.style.display = 'none';
+
+  let ok = 0, fail = 0;
+  for (const c of queueContacts) {
+    const decision = c._approved && !c.is_client ? 'approve' : 'decline';
+    const params = new URLSearchParams({
+      key: c.key || '',
+      decision: decision,
+      sequence_id: c.sequence_id || '',
+      contact_slug: c.rcrm_contact_id || '',
+      contact_name: c.contact_name || '',
+      contact_title: c.contact_title || '',
+      company_name: c.company_name || '',
+      company_industry: c.company_industry || '',
+      employee_count: c.employee_count || '',
+      persona: c.persona || '',
+      sequence_name: c.sequence_name || ''
+    });
+    try {
+      await fetch(APPROVAL_WEBHOOK + '?' + params.toString(), { method: 'GET', mode: 'no-cors' });
+      ok++;
+    } catch (e) {
+      console.error('Approval submit failed:', e);
+      fail++;
+    }
+    await new Promise(r => setTimeout(r, 250));
+  }
+
+  const approved = queueContacts.filter(c => c._approved && !c.is_client).length;
+  const declined = queueContacts.length - approved;
+  result.className = fail ? 'queue-result err' : 'queue-result ok';
+  result.textContent = `Done — ${approved} approved, ${declined} declined.` + (fail ? ` ${fail} submission(s) failed.` : ' All submitted successfully.');
+  result.style.display = 'block';
+  btn.textContent = 'Submitted';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Clear queue after short delay so user sees the result
+  setTimeout(() => {
+    queueContacts = [];
+    document.getElementById('queueList').innerHTML = '<div class="empty-queue"><p>Queue cleared.</p><small>Decisions have been sent to RecruitCRM. Refresh to check for new contacts.</small></div>';
+    document.getElementById('queueToolbar').style.display = 'none';
+    renderQueueStats([]);
+  }, 2500);
+}
+
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str).replace(/[&<>"']/g, s => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[s]);
+}
+function escapeAttr(str) {
+  if (str == null) return '';
+  return String(str).replace(/"/g, '&quot;');
 }
 
 // ═══════════════════════════════════════════
