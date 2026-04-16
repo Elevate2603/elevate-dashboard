@@ -378,7 +378,7 @@
 
 </style>
 <!-- BUILD_TOKEN: ELEVATE-SECRETS-REMOVED-1776279864 -->
-<!-- DEPLOY-TOKEN: 1776381718-research-fix -->
+<!-- DEPLOY-TOKEN: 1776382945-aggregate-unwrap -->
 </head>
 <body>
 
@@ -774,8 +774,11 @@ async function initQueue() {
     const raw = Array.isArray(json) ? json : (json.records || json.data || []);
 
     const contacts = raw.map(r => {
-      const d = (r && r.data) ? r.data : r;
-      return { ...d, key: (r && r.key) || (d && d.key) || '' };
+      // Make Array Aggregator wraps rows as {group, aggregate: {key, data}}
+      // Unwrap the aggregate layer first if present
+      const row = (r && r.aggregate) ? r.aggregate : r;
+      const d = (row && row.data) ? row.data : row;
+      return { ...d, key: (row && row.key) || (d && d.key) || '' };
     }).filter(c => c && (c.contact_name || c.full_name));
 
     console.log('[Queue Fetch] contacts extracted:', contacts.length);
