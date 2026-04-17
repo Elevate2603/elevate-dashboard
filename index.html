@@ -384,7 +384,7 @@
 
 </style>
 <!-- BUILD_TOKEN: ELEVATE-SECRETS-REMOVED-1776279864 -->
-<!-- DEPLOY-TOKEN: 1776386721-inline-info -->
+<!-- DEPLOY-TOKEN: 1776442361-approval-post-cors-fix -->
 </head>
 <body>
 
@@ -916,13 +916,15 @@ async function submitQueue() {
   result.style.display = 'none';
 
   let ok = 0, fail = 0;
+  console.log('[Approval] Submitting ' + queueContacts.length + ' decisions to ' + APPROVAL_WEBHOOK);
   for (const c of queueContacts) {
     const decision = c._approved && !c.is_client ? 'approve' : 'decline';
-    const params = new URLSearchParams({
+    const payload = {
       key: c.key || '',
       decision: decision,
       sequence_id: c.sequence_id || '',
       contact_slug: c.rcrm_contact_id || '',
+      contact_email: c.contact_email || '',
       contact_name: c.contact_name || '',
       contact_title: c.contact_title || '',
       company_name: c.company_name || '',
@@ -930,16 +932,28 @@ async function submitQueue() {
       employee_count: c.employee_count || '',
       persona: c.persona || '',
       sequence_name: c.sequence_name || ''
-    });
+    };
     try {
-      await fetch(APPROVAL_WEBHOOK + '?' + params.toString(), { method: 'GET', mode: 'no-cors' });
-      ok++;
+      const resp = await fetch(APPROVAL_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const bodyText = await resp.text();
+      console.log('[Approval] ' + c.contact_name + ' (' + decision + ') -> HTTP ' + resp.status + ' | body: ' + bodyText);
+      if (resp.ok) {
+        ok++;
+      } else {
+        fail++;
+        console.error('[Approval] FAILED for ' + c.contact_name + ' - HTTP ' + resp.status);
+      }
     } catch (e) {
-      console.error('Approval submit failed:', e);
+      console.error('[Approval] Network error for ' + c.contact_name + ':', e);
       fail++;
     }
     await new Promise(r => setTimeout(r, 250));
   }
+  console.log('[Approval] Complete. ok=' + ok + ' fail=' + fail);
 
   const approved = queueContacts.filter(c => c._approved && !c.is_client).length;
   const declined = queueContacts.length - approved;
