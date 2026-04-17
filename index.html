@@ -83,6 +83,11 @@
   .contact-info { flex:1; min-width:0; }
   .contact-name { font-weight:700; color:var(--light-text); font-size:15px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .contact-client-badge { background:var(--gold); color:#000; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-new-badge { background:#10b981; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-rcrm-badge { background:#3b82f6; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-signal-high { background:#ef4444; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-signal-medium { background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-signal-low { background:#6b7280; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   .contact-title { font-size:13px; color:#666; margin-top:3px; }
   .contact-company { font-size:13px; color:var(--gold); font-weight:600; margin-top:2px; }
 
@@ -378,7 +383,7 @@
 
 </style>
 <!-- BUILD_TOKEN: ELEVATE-SECRETS-REMOVED-1776279864 -->
-<!-- DEPLOY-TOKEN: 1776382945-aggregate-unwrap -->
+<!-- DEPLOY-TOKEN: 1776383452-status-badges -->
 </head>
 <body>
 
@@ -817,6 +822,10 @@ function renderQueue() {
     const linkedin = c.contact_linkedin || '';
     const sequence = c.sequence_name || '';
     const isClient = c.is_client === true || c.is_client === 'true';
+    const inRCRM = c.contact_exists_in_rcrm === true || c.contact_exists_in_rcrm === 'true';
+    const signal = (c.buying_signal || '').toLowerCase();
+    const signalClass = signal === 'high' ? 'contact-signal-high' : (signal === 'low' ? 'contact-signal-low' : 'contact-signal-medium');
+    const signalLabel = c.buying_signal ? c.buying_signal.toUpperCase() + ' SIGNAL' : '';
     const approved = c._approved;
     const cardClass = isClient ? 'is-client' : (approved ? 'approved' : 'declined');
     return `
@@ -827,6 +836,9 @@ function renderQueue() {
             <div class="contact-name">
               ${escapeHtml(name)}
               ${isClient ? '<span class="contact-client-badge">ACTIVE CLIENT</span>' : ''}
+              ${!isClient && inRCRM ? '<span class="contact-rcrm-badge">IN RCRM</span>' : ''}
+              ${!isClient && !inRCRM ? '<span class="contact-new-badge">NEW</span>' : ''}
+              ${signalLabel ? `<span class="${signalClass}">${signalLabel}</span>` : ''}
             </div>
             <div class="contact-title">${escapeHtml(title)}</div>
             <div class="contact-company">${escapeHtml(company)}${industry ? ' · ' + escapeHtml(industry) : ''}</div>
