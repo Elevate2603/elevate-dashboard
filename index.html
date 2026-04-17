@@ -88,6 +88,7 @@
   .contact-signal-high { background:#ef4444; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   .contact-signal-medium { background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   .contact-signal-low { background:#6b7280; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-info-badge { background:#e5e7eb; color:#374151; font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; letter-spacing:0.02em; }
   .contact-title { font-size:13px; color:#666; margin-top:3px; }
   .contact-company { font-size:13px; color:var(--gold); font-weight:600; margin-top:2px; }
 
@@ -383,7 +384,7 @@
 
 </style>
 <!-- BUILD_TOKEN: ELEVATE-SECRETS-REMOVED-1776279864 -->
-<!-- DEPLOY-TOKEN: 1776383452-status-badges -->
+<!-- DEPLOY-TOKEN: 1776386721-inline-info -->
 </head>
 <body>
 
@@ -839,6 +840,8 @@ function renderQueue() {
               ${!isClient && inRCRM ? '<span class="contact-rcrm-badge">IN RCRM</span>' : ''}
               ${!isClient && !inRCRM ? '<span class="contact-new-badge">NEW</span>' : ''}
               ${signalLabel ? `<span class="${signalClass}">${signalLabel}</span>` : ''}
+              ${employees ? `<span class="contact-info-badge">👥 ${escapeHtml(employees)}</span>` : ''}
+              ${location ? `<span class="contact-info-badge">📍 ${escapeHtml(location)}</span>` : ''}
             </div>
             <div class="contact-title">${escapeHtml(title)}</div>
             <div class="contact-company">${escapeHtml(company)}${industry ? ' · ' + escapeHtml(industry) : ''}</div>
@@ -854,8 +857,6 @@ function renderQueue() {
         <div class="contact-meta-row">
           ${persona ? `<div class="contact-meta-item"><strong>Persona:</strong> ${escapeHtml(persona)}</div>` : ''}
           ${sequence ? `<div class="contact-meta-item"><strong>Sequence:</strong> ${escapeHtml(sequence)}</div>` : ''}
-          ${employees ? `<div class="contact-meta-item"><strong>Employees:</strong> ${escapeHtml(employees)}</div>` : ''}
-          ${location ? `<div class="contact-meta-item"><strong>Location:</strong> ${escapeHtml(location)}</div>` : ''}
           ${linkedin ? `<div class="contact-meta-item"><a href="${escapeAttr(linkedin)}" target="_blank" rel="noopener">LinkedIn ↗</a></div>` : ''}
         </div>
       </div>`;
