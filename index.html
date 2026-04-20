@@ -382,9 +382,33 @@
   .btn-skip { background: var(--dark4); border: 1px solid var(--border); color: #888; font-size: 11px; padding: 4px 12px; border-radius: 20px; cursor: pointer; }
   .btn-skip:hover { border-color: #666; color: #bbb; }
 
+  /* Per-card submit button — sits next to the approve/decline toggle */
+  .btn-card-send {
+    background: var(--gold);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    margin-left: 10px;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn-card-send:hover:not(:disabled) { background: var(--gold-light); transform: translateY(-1px); }
+  .btn-card-send:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-card-send.sending { background: #888; color: #fff; }
+  .btn-card-send.sent { background: rgba(46,204,113,0.2); color: #2ecc71; border: 1px solid rgba(46,204,113,0.5); }
+  .btn-card-send.failed { background: rgba(192,57,43,0.2); color: #e74c3c; border: 1px solid rgba(192,57,43,0.5); }
+
+  .contact-card.submitted { opacity: 0.45; pointer-events: none; }
+  .contact-card.submitted .btn-card-send { pointer-events: auto; }
+
 </style>
 <!-- BUILD_TOKEN: ELEVATE-SECRETS-REMOVED-1776279864 -->
-<!-- DEPLOY-TOKEN: 1776442361-approval-post-cors-fix -->
+<!-- DEPLOY-TOKEN: 1776699324-per-card-send-button -->
 </head>
 <body>
 
@@ -852,6 +876,7 @@ function renderQueue() {
               <input type="checkbox" ${approved ? 'checked' : ''} onchange="toggleContact(${i}, this.checked)">
               <span class="tog-slider"></span>
             </label>
+            <button class="btn-card-send" id="sendBtn${i}" onclick="submitOne(${i})" title="Submit this one decision now (1 operation)">SEND</button>
           </div>
         </div>
         <div class="contact-meta-row">
@@ -907,6 +932,64 @@ function bulkDecline() {
   renderQueue();
 }
 
+async function submitOne(idx) {
+  const c = queueContacts[idx];
+  if (!c) return;
+  const btn = document.getElementById('sendBtn' + idx);
+  const card = document.querySelector(`.contact-card[data-idx="${idx}"]`);
+  if (!btn || !card) return;
+  if (btn.disabled) return;
+
+  const decision = c._approved && !c.is_client ? 'approve' : 'decline';
+  const payload = {
+    key: c.key || '',
+    decision: decision,
+    sequence_id: c.sequence_id || '',
+    contact_slug: c.rcrm_contact_id || '',
+    contact_email: c.contact_email || '',
+    contact_name: c.contact_name || '',
+    contact_title: c.contact_title || '',
+    company_name: c.company_name || '',
+    company_industry: c.company_industry || '',
+    employee_count: c.employee_count || '',
+    persona: c.persona || '',
+    sequence_name: c.sequence_name || ''
+  };
+
+  btn.disabled = true;
+  btn.classList.add('sending');
+  btn.textContent = 'SENDING…';
+
+  console.log('[ApprovalSingle] ' + c.contact_name + ' (' + decision + ') -> POST');
+  try {
+    const resp = await fetch(APPROVAL_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const bodyText = await resp.text();
+    console.log('[ApprovalSingle] ' + c.contact_name + ' (' + decision + ') -> HTTP ' + resp.status + ' | body: ' + bodyText);
+    btn.classList.remove('sending');
+    if (resp.ok) {
+      btn.classList.add('sent');
+      btn.textContent = '✓ SENT';
+      card.classList.add('submitted');
+      c._submitted = true;
+    } else {
+      btn.classList.add('failed');
+      btn.textContent = '✕ HTTP ' + resp.status;
+      btn.disabled = false;
+      console.error('[ApprovalSingle] FAILED for ' + c.contact_name + ' - HTTP ' + resp.status);
+    }
+  } catch (e) {
+    btn.classList.remove('sending');
+    btn.classList.add('failed');
+    btn.textContent = '✕ ERROR';
+    btn.disabled = false;
+    console.error('[ApprovalSingle] Network error for ' + c.contact_name + ':', e);
+  }
+}
+
 async function submitQueue() {
   const btn = document.getElementById('submitBtn');
   const result = document.getElementById('queueResult');
@@ -915,9 +998,10 @@ async function submitQueue() {
   btn.textContent = 'Submitting…';
   result.style.display = 'none';
 
-  let ok = 0, fail = 0;
+  let ok = 0, fail = 0, skipped = 0;
   console.log('[Approval] Submitting ' + queueContacts.length + ' decisions to ' + APPROVAL_WEBHOOK);
   for (const c of queueContacts) {
+    if (c._submitted) { skipped++; continue; }
     const decision = c._approved && !c.is_client ? 'approve' : 'decline';
     const payload = {
       key: c.key || '',
@@ -953,12 +1037,12 @@ async function submitQueue() {
     }
     await new Promise(r => setTimeout(r, 250));
   }
-  console.log('[Approval] Complete. ok=' + ok + ' fail=' + fail);
+  console.log('[Approval] Complete. ok=' + ok + ' fail=' + fail + ' skipped=' + skipped);
 
   const approved = queueContacts.filter(c => c._approved && !c.is_client).length;
   const declined = queueContacts.length - approved;
   result.className = fail ? 'queue-result err' : 'queue-result ok';
-  result.textContent = `Done — ${approved} approved, ${declined} declined.` + (fail ? ` ${fail} submission(s) failed.` : ' All submitted successfully.');
+  result.textContent = `Done — ${approved} approved, ${declined} declined.` + (skipped ? ` (${skipped} already sent individually, skipped.)` : '') + (fail ? ` ${fail} submission(s) failed.` : ' All submitted successfully.');
   result.style.display = 'block';
   btn.textContent = 'Submitted';
   window.scrollTo({ top: 0, behavior: 'smooth' });
