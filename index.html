@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0051)file:///C:/Users/touellette/Downloads/index_27.html -->
+<!-- ELEVATE-2026-0422-A -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -885,6 +885,9 @@ function renderQueue() {
           ${persona ? `<div class="contact-meta-item"><strong>Persona:</strong> ${escapeHtml(persona)}</div>` : ''}
           ${sequence ? `<div class="contact-meta-item"><strong>Sequence:</strong> ${escapeHtml(sequence)}</div>` : ''}
           ${linkedin ? `<div class="contact-meta-item"><a href="${escapeAttr(linkedin)}" target="_blank" rel="noopener">LinkedIn ↗</a></div>` : ''}
+          ${(inRCRM || isClient) && c.last_communication ? `<div class="contact-meta-item"><strong>Last Contact:</strong> ${escapeHtml(c.last_communication)}</div>` : ''}
+          ${(inRCRM || isClient) && c.rcrm_owner ? `<div class="contact-meta-item"><strong>Owner:</strong> ${escapeHtml(c.rcrm_owner)}</div>` : ''}
+          ${(inRCRM || isClient) && !c.last_communication ? `<div class="contact-meta-item" style="color:#f59e0b;"><strong>In RCRM</strong> — No prior contact logged</div>` : ''}
         </div>
       </div>`;
   }).join('');
