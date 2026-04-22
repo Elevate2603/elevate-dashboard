@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0422-A -->
+<!-- ELEVATE-2026-0422-C -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -89,6 +89,18 @@
   .contact-signal-medium { background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   .contact-signal-low { background:#6b7280; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   .contact-info-badge { background:#e5e7eb; color:#374151; font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; letter-spacing:0.02em; }
+  .contact-call-badge { background:#7c3aed; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-prospect-badge { background:#374151; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .queue-section { margin-bottom:24px; }
+  .queue-section-header { display:flex; align-items:center; gap:10px; padding:10px 0 8px 0; margin-bottom:8px; border-bottom:2px solid var(--light-border); }
+  .queue-section-title { font-size:13px; font-weight:700; color:var(--light-text); letter-spacing:0.05em; text-transform:uppercase; }
+  .queue-section-count { background:var(--light-border); color:#666; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; }
+  .queue-section-email .queue-section-header { border-color:#10b981; }
+  .queue-section-email .queue-section-title { color:#065f46; }
+  .queue-section-call .queue-section-header { border-color:#7c3aed; }
+  .queue-section-call .queue-section-title { color:#4c1d95; }
+  .queue-section-prospect .queue-section-header { border-color:#374151; }
+  .queue-section-prospect .queue-section-title { color:#374151; }
   .contact-title { font-size:13px; color:#666; margin-top:3px; }
   .contact-company { font-size:13px; color:var(--gold); font-weight:600; margin-top:2px; }
 
@@ -837,7 +849,8 @@ function renderQueue() {
     list.innerHTML = '<div class="empty-queue"><p>No contacts pending approval.</p></div>';
     return;
   }
-  list.innerHTML = queueContacts.map((c, i) => {
+
+  function buildCard(c, i) {
     const name = c.contact_name || c.full_name || 'Unknown';
     const initial = name.charAt(0).toUpperCase();
     const title = c.contact_title || c.title || '';
@@ -850,6 +863,8 @@ function renderQueue() {
     const sequence = c.sequence_name || '';
     const isClient = c.is_client === true || c.is_client === 'true';
     const inRCRM = c.contact_exists_in_rcrm === true || c.contact_exists_in_rcrm === 'true';
+    const outreachType = c.outreach_type || 'Email';
+    const hasPhone = c.contact_phone || c.contact_mobile || '';
     const signal = (c.buying_signal || '').toLowerCase();
     const signalClass = signal === 'high' ? 'contact-signal-high' : (signal === 'low' ? 'contact-signal-low' : 'contact-signal-medium');
     const signalLabel = c.buying_signal ? c.buying_signal.toUpperCase() + ' SIGNAL' : '';
@@ -868,6 +883,8 @@ function renderQueue() {
               ${signalLabel ? `<span class="${signalClass}">${signalLabel}</span>` : ''}
               ${employees ? `<span class="contact-info-badge">👥 ${escapeHtml(employees)}</span>` : ''}
               ${location ? `<span class="contact-info-badge">📍 ${escapeHtml(location)}</span>` : ''}
+              ${outreachType === 'Call' ? '<span class="contact-call-badge">📞 CALL</span>' : ''}
+              ${outreachType === 'Prospect' ? '<span class="contact-prospect-badge">🔍 PROSPECT</span>' : ''}
             </div>
             <div class="contact-title">${escapeHtml(title)}</div>
             <div class="contact-company">${escapeHtml(company)}${industry ? ' · ' + escapeHtml(industry) : ''}</div>
@@ -883,14 +900,38 @@ function renderQueue() {
         </div>
         <div class="contact-meta-row">
           ${persona ? `<div class="contact-meta-item"><strong>Persona:</strong> ${escapeHtml(persona)}</div>` : ''}
-          ${sequence ? `<div class="contact-meta-item"><strong>Sequence:</strong> ${escapeHtml(sequence)}</div>` : ''}
+          ${sequence ? `<div class="contact-meta-item"><strong>${outreachType !== 'Email' ? 'Action' : 'Sequence'}:</strong> ${escapeHtml(sequence)}</div>` : ''}
+          ${hasPhone && outreachType !== 'Email' ? `<div class="contact-meta-item"><strong>Phone:</strong> ${escapeHtml(c.contact_phone || c.contact_mobile)}</div>` : ''}
           ${linkedin ? `<div class="contact-meta-item"><a href="${escapeAttr(linkedin)}" target="_blank" rel="noopener">LinkedIn ↗</a></div>` : ''}
           ${(inRCRM || isClient) && c.last_communication ? `<div class="contact-meta-item"><strong>Last Contact:</strong> ${escapeHtml(c.last_communication)}</div>` : ''}
           ${(inRCRM || isClient) && c.rcrm_owner ? `<div class="contact-meta-item"><strong>Owner:</strong> ${escapeHtml(c.rcrm_owner)}</div>` : ''}
           ${(inRCRM || isClient) && !c.last_communication ? `<div class="contact-meta-item" style="color:#f59e0b;"><strong>In RCRM</strong> — No prior contact logged</div>` : ''}
         </div>
       </div>`;
-  }).join('');
+  }
+
+  const emailContacts = queueContacts.filter(c => (c.outreach_type || 'Email') === 'Email');
+  const callContacts  = queueContacts.filter(c => c.outreach_type === 'Call');
+  const prospectContacts = queueContacts.filter(c => c.outreach_type === 'Prospect');
+
+  function buildSection(contacts, title, sectionClass, icon) {
+    if (!contacts.length) return '';
+    const cards = contacts.map(c => buildCard(c, queueContacts.indexOf(c))).join('');
+    return `
+      <div class="queue-section ${sectionClass}">
+        <div class="queue-section-header">
+          <span class="queue-section-title">${icon} ${title}</span>
+          <span class="queue-section-count">${contacts.length}</span>
+        </div>
+        ${cards}
+      </div>`;
+  }
+
+  list.innerHTML =
+    buildSection(emailContacts, 'Email Outreach', 'queue-section-email', '✉️') +
+    buildSection(callContacts, 'Call Outreach', 'queue-section-call', '📞') +
+    buildSection(prospectContacts, 'Manual Prospect', 'queue-section-prospect', '🔍');
+
   renderQueueStats(queueContacts);
 }
 
