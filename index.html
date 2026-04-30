@@ -2,7 +2,7 @@
 <!-- ELEVATE-2026-0430-COUNTRY-DATASOURCE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Elevate — Sales Intelligence</title>
+<title>Elevate \u2014 Sales Intelligence</title>
 <style>
   :root {
     --gold: #C8820A;
@@ -237,7 +237,7 @@
     <label>Email</label>
     <input type="email" id="authEmail" placeholder="you@teamelevate.ca">
     <label>Password</label>
-    <input type="password" id="authPass" placeholder="••••••••">
+    <input type="password" id="authPass" placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022">
     <button onclick="doLogin()">Sign in</button>
     <div id="authError">Invalid credentials. Please try again.</div>
   </div>
@@ -274,15 +274,15 @@
     <div id="queueResult" class="queue-result"></div>
     <div class="queue-toolbar" id="queueToolbar" style="display:none;">
       <div class="queue-toolbar-left">
-        <button class="btn-bulk approve-all" onclick="bulkApprove()">✓ Approve all</button>
-        <button class="btn-bulk decline-all" onclick="bulkDecline()">✕ Decline all</button>
+        <button class="btn-bulk approve-all" onclick="bulkApprove()">\u2713 Approve all</button>
+        <button class="btn-bulk decline-all" onclick="bulkDecline()">\u2715 Decline all</button>
       </div>
       <div class="queue-toolbar-right">
         <span class="selection-count" id="selectionCount">0 approved</span>
         <button class="btn-submit" id="submitBtn" onclick="submitQueue()">Submit All Decisions</button>
       </div>
     </div>
-    <div id="queueList"><div class="queue-loading">Loading queue…</div></div>
+    <div id="queueList"><div class="queue-loading">Loading queue\u2026</div></div>
   </div>
 
   <!-- SALES INTELLIGENCE -->
@@ -294,37 +294,37 @@
     <div class="si-left">
       <div class="section-label">Market Pulse</div>
       <div class="pulse-item"><span class="pulse-tag ev">EV</span><p>Ontario EV hiring surging. Quality containment most in demand.</p><div class="pulse-stat">+34% YoY</div></div>
-      <div class="pulse-item"><span class="pulse-tag gov">GOV</span><p>Windsor–Essex infrastructure active. RFQ volume rising May–Aug.</p><div class="pulse-stat">+18%</div></div>
+      <div class="pulse-item"><span class="pulse-tag gov">GOV</span><p>Windsor\u2013Essex infrastructure active. RFQ volume rising May\u2013Aug.</p><div class="pulse-stat">+18%</div></div>
       <div class="pulse-item"><span class="pulse-tag risk">RISK</span><p>Adecco aggressive on Tier 1 accounts.</p></div>
       <div class="pulse-item"><span class="pulse-tag auto">Tier 1</span><p>Skilled trades vacancy rising. Tool &amp; die hardest to fill.</p><div class="pulse-stat">+11% regionally</div></div>
-      <div style="margin-top:20px;"><div class="section-label">Team — Who's Online</div>
+      <div style="margin-top:20px;"><div class="section-label">Team \u2014 Who's Online</div>
         <div class="team-item"><div class="team-dot online"></div><div><div class="team-name">Travis Ouellette</div><div class="team-status">Active now</div></div></div>
         <div class="team-item"><div class="team-dot away"></div><div><div class="team-name">Recruiter 1</div><div class="team-status">Last active 12m ago</div></div></div>
       </div>
     </div>
     <div class="si-center">
       <div class="refresh-bar">
-        <button class="btn-refresh" id="refreshSignalsBtn" onclick="refreshSignals()">⟳ Refresh Signals</button>
+        <button class="btn-refresh" id="refreshSignalsBtn" onclick="refreshSignals()">\u27f3 Refresh Signals</button>
         <span class="refresh-status" id="refreshStatus">Click to scan for live BD signals</span>
       </div>
       <div class="filter-btns">
         <button class="filter-btn active" onclick="filterSignals('all',this)">All</button>
-        <button class="filter-btn" onclick="filterSignals('immediate',this)">⚡ Immediate</button>
-        <button class="filter-btn" onclick="filterSignals('pipeline',this)">◎ Pipeline</button>
-        <button class="filter-btn" onclick="filterSignals('watch',this)">◇ Watch</button>
+        <button class="filter-btn" onclick="filterSignals('immediate',this)">\u26a1 Immediate</button>
+        <button class="filter-btn" onclick="filterSignals('pipeline',this)">\u25ce Pipeline</button>
+        <button class="filter-btn" onclick="filterSignals('watch',this)">\u25c7 Watch</button>
       </div>
       <div id="signalCards"><div class="scanning-msg"><p>No signals loaded yet.</p><small>Hit Refresh Signals to scan for live BD opportunities.</small></div></div>
     </div>
     <div class="si-right">
       <div class="section-label">This Week</div>
-      <div class="week-stat"><div><div class="week-stat-label">Priority calls</div></div><div class="week-stat-val" id="wkCalls">—</div></div>
-      <div class="week-stat"><div><div class="week-stat-label">BD alerts</div></div><div class="week-stat-val" id="wkAlerts">—</div></div>
-      <div class="week-stat"><div><div class="week-stat-label">New prospects</div></div><div class="week-stat-val" id="wkProspects">—</div></div>
+      <div class="week-stat"><div><div class="week-stat-label">Priority calls</div></div><div class="week-stat-val" id="wkCalls">\u2014</div></div>
+      <div class="week-stat"><div><div class="week-stat-label">BD alerts</div></div><div class="week-stat-val" id="wkAlerts">\u2014</div></div>
+      <div class="week-stat"><div><div class="week-stat-label">New prospects</div></div><div class="week-stat-val" id="wkProspects">\u2014</div></div>
       <div style="margin-top:20px;"><div class="section-label">Predictive Hiring Windows</div>
-        <div class="hiring-card"><div class="hiring-tier gold">🔶 GOLD — ACT NOW</div><div class="hiring-company">Formet Industries</div><div class="hiring-reason">Leadership change — New Plant Manager. Window closing fast.</div></div>
-        <div class="hiring-card"><div class="hiring-tier gold">🔶 GOLD — ACT NOW</div><div class="hiring-company">Essex Autoparts</div><div class="hiring-reason">QM unfilled 28 days. Adecco failing.</div></div>
-        <div class="hiring-card"><div class="hiring-tier silver">◈ SILVER — 30 DAYS</div><div class="hiring-company">Stellantis Windsor</div><div class="hiring-reason">Q3 changeover — trades surge coming.</div></div>
-        <div class="hiring-card"><div class="hiring-tier bronze">◇ BRONZE — ON RADAR</div><div class="hiring-company">NextStar Energy</div><div class="hiring-reason">Line 3 Q3 commissioning. Pre-source now.</div></div>
+        <div class="hiring-card"><div class="hiring-tier gold">\ud83d\udd36 GOLD \u2014 ACT NOW</div><div class="hiring-company">Formet Industries</div><div class="hiring-reason">Leadership change \u2014 New Plant Manager. Window closing fast.</div></div>
+        <div class="hiring-card"><div class="hiring-tier gold">\ud83d\udd36 GOLD \u2014 ACT NOW</div><div class="hiring-company">Essex Autoparts</div><div class="hiring-reason">QM unfilled 28 days. Adecco failing.</div></div>
+        <div class="hiring-card"><div class="hiring-tier silver">\u25c8 SILVER \u2014 30 DAYS</div><div class="hiring-company">Stellantis Windsor</div><div class="hiring-reason">Q3 changeover \u2014 trades surge coming.</div></div>
+        <div class="hiring-card"><div class="hiring-tier bronze">\u25c7 BRONZE \u2014 ON RADAR</div><div class="hiring-company">NextStar Energy</div><div class="hiring-reason">Line 3 Q3 commissioning. Pre-source now.</div></div>
       </div>
     </div>
   </div>
@@ -332,7 +332,7 @@
   <!-- AI SOURCING -->
   <div id="tabSourcing" class="tab-content">
     <h2 style="color:var(--gold);margin-bottom:8px;">AI Sourcing</h2>
-    <p style="color:var(--text-muted);font-size:14px;">Candidate sourcing engine — coming next phase.</p>
+    <p style="color:var(--text-muted);font-size:14px;">Candidate sourcing engine \u2014 coming next phase.</p>
   </div>
 
   <!-- CSV IMPORT -->
@@ -341,9 +341,9 @@
       <div style="margin-bottom:28px;"><div style="font-size:22px;font-weight:600;color:var(--gold);margin-bottom:6px;">CSV Import</div><div style="font-size:14px;color:var(--text-muted);">Export contacts from ZoomInfo and drop the CSV here.</div></div>
       <div class="import-drop" id="importDrop" onclick="document.getElementById('csvFile').click()">
         <input type="file" id="csvFile" accept=".csv" onchange="handleCSV(this)">
-        <span class="import-drop-icon">📂</span>
+        <span class="import-drop-icon">\ud83d\udcc2</span>
         <p id="dropLabel">Drop your ZoomInfo CSV here</p>
-        <small>or click to browse · .csv files only</small>
+        <small>or click to browse \u00b7 .csv files only</small>
       </div>
       <div class="import-stats" id="importStats" style="display:none">
         <div class="import-stat"><div class="val" id="csvTotal">0</div><div class="lbl">loaded</div></div>
@@ -373,10 +373,10 @@
         <div class="settings-row"><span class="settings-label">Claude AI</span><span class="settings-val"><span class="status-dot green"></span>Connected</span></div>
       </div>
       <div class="settings-card"><h3>Scenarios</h3>
-        <div class="settings-row"><span class="settings-label">A — ZoomInfo Intake</span><span class="settings-val">4732316</span></div>
-        <div class="settings-row"><span class="settings-label">B — Morning BD Email</span><span class="settings-val">4669709</span></div>
-        <div class="settings-row"><span class="settings-label">C — Approval Handler</span><span class="settings-val">4667221</span></div>
-        <div class="settings-row"><span class="settings-label">D — Market Intel</span><span class="settings-val">4688813</span></div>
+        <div class="settings-row"><span class="settings-label">A \u2014 ZoomInfo Intake</span><span class="settings-val">4732316</span></div>
+        <div class="settings-row"><span class="settings-label">B \u2014 Morning BD Email</span><span class="settings-val">4669709</span></div>
+        <div class="settings-row"><span class="settings-label">C \u2014 Approval Handler</span><span class="settings-val">4667221</span></div>
+        <div class="settings-row"><span class="settings-label">D \u2014 Market Intel</span><span class="settings-val">4688813</span></div>
       </div>
       <div class="settings-card"><h3>Account</h3>
         <div class="settings-row"><span class="settings-label">User</span><span class="settings-val">touellette@teamelevate.ca</span></div>
@@ -388,7 +388,7 @@
 </div><!-- /app -->
 
 <script>
-// ═══════════════════ AUTH ═══════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 AUTH \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 const USERS = { 'touellette@teamelevate.ca': 'Cripes123!@', 'admin@teamelevate.ca': 'Cripes123!@' };
 function doLogin() {
   const email = document.getElementById('authEmail').value.trim();
@@ -409,7 +409,7 @@ function doLogout() {
 }
 document.getElementById('authPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
-// ═══════════════════ TABS ═══════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 TABS \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 function showTab(name, btn) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -417,7 +417,7 @@ function showTab(name, btn) {
   btn.classList.add('active');
 }
 
-// ═══════════════════ QUEUE ═══════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 QUEUE \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 const APPROVAL_WEBHOOK = 'https://hook.us2.make.com/aq8yfoqv8itfhrewo1k6iib7u6rq4gm1';
 const QUEUE_FETCH = 'https://hook.us2.make.com/fbwggrimbt2iidjeckvs25sk61hej2lh';
 let queueContacts = [];
@@ -426,7 +426,7 @@ async function initQueue() {
   const list = document.getElementById('queueList');
   const toolbar = document.getElementById('queueToolbar');
   const result = document.getElementById('queueResult');
-  list.innerHTML = '<div class="queue-loading">Loading queue…</div>';
+  list.innerHTML = '<div class="queue-loading">Loading queue\u2026</div>';
   if (toolbar) toolbar.style.display = 'none';
   if (result) result.style.display = 'none';
   try {
@@ -481,7 +481,7 @@ function renderQueue() {
               ${isClient ? '<span class="contact-client-badge">ACTIVE CLIENT</span>' : ''}
               ${!isClient && inRCRM ? '<span class="contact-rcrm-badge">IN RCRM</span>' : ''}
               ${!isClient && !inRCRM ? '<span class="contact-new-badge">NEW</span>' : ''}
-              ${location ? `<span class="contact-info-badge">📍 ${escapeHtml(location)}</span>` : ''}
+              ${location ? `<span class="contact-info-badge">\ud83d\udccd ${escapeHtml(location)}</span>` : ''}
             </div>
             <div class="contact-title">${escapeHtml(title)}</div>
             <div class="contact-company">${escapeHtml(company)}</div>
@@ -499,7 +499,7 @@ function renderQueue() {
           ${sequence ? `<div class="contact-meta-item"><strong>Sequence:</strong> ${escapeHtml(sequence)}</div>` : ''}
           ${phone ? `<div class="contact-meta-item"><strong>Phone:</strong> ${escapeHtml(phone)}</div>` : ''}
           ${mobile ? `<div class="contact-meta-item"><strong>Mobile:</strong> ${escapeHtml(mobile)}</div>` : ''}
-          ${linkedin ? `<div class="contact-meta-item"><a href="${escapeAttr(linkedin)}" target="_blank" rel="noopener">LinkedIn ↗</a></div>` : ''}
+          ${linkedin ? `<div class="contact-meta-item"><a href="${escapeAttr(linkedin)}" target="_blank" rel="noopener">LinkedIn \u2197</a></div>` : ''}
         </div>
       </div>`;
   }
@@ -570,19 +570,19 @@ async function submitOne(idx) {
   const card = document.querySelector(`.contact-card[data-idx="${idx}"]`);
   if (!btn || btn.disabled) return;
   const payload = buildPayload(c);
-  btn.disabled = true; btn.classList.add('sending'); btn.textContent = 'Submitting…';
+  btn.disabled = true; btn.classList.add('sending'); btn.textContent = 'Submitting\u2026';
   try {
     const resp = await fetch(APPROVAL_WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     btn.classList.remove('sending');
     if (resp.ok) {
-      btn.classList.add('sent'); btn.textContent = '✓ Submitted';
+      btn.classList.add('sent'); btn.textContent = '\u2713 Submitted';
       if (card) card.classList.add('submitted');
       c._submitted = true;
     } else {
-      btn.classList.add('failed'); btn.textContent = '✕ HTTP ' + resp.status + ' — retry'; btn.disabled = false;
+      btn.classList.add('failed'); btn.textContent = '\u2715 HTTP ' + resp.status + ' \u2014 retry'; btn.disabled = false;
     }
   } catch (e) {
-    btn.classList.remove('sending'); btn.classList.add('failed'); btn.textContent = '✕ Network error — retry'; btn.disabled = false;
+    btn.classList.remove('sending'); btn.classList.add('failed'); btn.textContent = '\u2715 Network error \u2014 retry'; btn.disabled = false;
   }
 }
 
@@ -590,7 +590,7 @@ async function submitQueue() {
   const btn = document.getElementById('submitBtn');
   const result = document.getElementById('queueResult');
   if (!queueContacts.length) return;
-  btn.disabled = true; btn.textContent = 'Submitting…'; result.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Submitting\u2026'; result.style.display = 'none';
   let ok = 0, fail = 0, skipped = 0;
   for (const c of queueContacts) {
     if (c._submitted) { skipped++; continue; }
@@ -603,7 +603,7 @@ async function submitQueue() {
   const approved = queueContacts.filter(c => c._approved && !c.is_client).length;
   const declined = queueContacts.length - approved;
   result.className = fail ? 'queue-result err' : 'queue-result ok';
-  result.textContent = `Done — ${approved} approved, ${declined} declined.` + (skipped ? ` (${skipped} already sent, skipped.)` : '') + (fail ? ` ${fail} failed.` : ' All submitted successfully.');
+  result.textContent = `Done \u2014 ${approved} approved, ${declined} declined.` + (skipped ? ` (${skipped} already sent, skipped.)` : '') + (fail ? ` ${fail} failed.` : ' All submitted successfully.');
   result.style.display = 'block';
   btn.textContent = 'Submitted';
   setTimeout(() => {
@@ -617,13 +617,13 @@ async function submitQueue() {
 function escapeHtml(str) { if (str == null) return ''; return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[s]); }
 function escapeAttr(str) { if (str == null) return ''; return String(str).replace(/"/g, '&quot;'); }
 
-// ═══════════════════ SIGNALS ═══════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 SIGNALS \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 let allSignals = [], activeFilter = 'all';
 
 async function refreshSignals() {
   const btn = document.getElementById('refreshSignalsBtn');
   const status = document.getElementById('refreshStatus');
-  btn.disabled = true; btn.textContent = '⟳ Scanning...';
+  btn.disabled = true; btn.textContent = '\u27f3 Scanning...';
   status.textContent = 'Scanning... this takes 60-90 seconds';
   try {
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
@@ -641,10 +641,10 @@ async function refreshSignals() {
       document.getElementById('wkCalls').textContent = allSignals.filter(s => s.urgency === 'immediate').length;
       document.getElementById('wkAlerts').textContent = allSignals.filter(s => s.competitor_flag).length;
       document.getElementById('wkProspects').textContent = allSignals.length;
-      status.textContent = 'Updated ' + new Date().toLocaleTimeString() + ' · ' + allSignals.length + ' signals';
+      status.textContent = 'Updated ' + new Date().toLocaleTimeString() + ' \u00b7 ' + allSignals.length + ' signals';
     } else { throw new Error('No JSON array in response'); }
   } catch(e) { status.textContent = 'Error: ' + e.message; }
-  finally { btn.disabled = false; btn.textContent = '⟳ Refresh Signals'; }
+  finally { btn.disabled = false; btn.textContent = '\u27f3 Refresh Signals'; }
 }
 
 function typeClass(type) {
@@ -664,11 +664,11 @@ function renderSignals(signals) {
         <span class="sig-tag ${typeClass(s.signal_type)}">${escapeHtml(s.signal_type)}</span>
         <span class="sig-tag geo">${escapeHtml(s.geography)}</span>
         <span class="sig-tag urgency-${s.urgency}">${s.urgency.toUpperCase()}</span>
-        ${s.competitor_flag ? `<span class="sig-tag type-competitor">⚠ ${escapeHtml(s.competitor_flag)}</span>` : ''}
+        ${s.competitor_flag ? `<span class="sig-tag type-competitor">\u26a0 ${escapeHtml(s.competitor_flag)}</span>` : ''}
       </div>
       <div class="sig-why">${escapeHtml(s.why_now)}</div>
       <div class="sig-pitch">"${escapeHtml(s.pitch_angle)}"</div>
-      <div class="sig-deadline"><strong>Call by:</strong> ${escapeHtml(s.call_by_date||'')} · <strong>Titles:</strong> ${escapeHtml(s.target_titles||'')}</div>
+      <div class="sig-deadline"><strong>Call by:</strong> ${escapeHtml(s.call_by_date||'')} \u00b7 <strong>Titles:</strong> ${escapeHtml(s.target_titles||'')}</div>
       <div class="sig-links">
         ${s.company_website ? `<a class="sig-link" href="${escapeAttr(s.company_website)}" target="_blank">Website</a>` : ''}
         <a class="sig-link" href="https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(s.company_name)}" target="_blank">LinkedIn</a>
@@ -683,7 +683,7 @@ function filterSignals(urgency, btn) {
   renderSignals(allSignals);
 }
 
-// ═══════════════════ CSV IMPORT ═══════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 CSV IMPORT \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 let csvRows = [];
 function handleCSV(input) {
   const file = input.files[0];
@@ -692,7 +692,8 @@ function handleCSV(input) {
   reader.onload = e => {
     function parseCSVLine(line) { const r=[]; let c='',q=false; for(let i=0;i<line.length;i++){if(line[i]==='"'){q=!q;}else if(line[i]===','&&!q){r.push(c.trim());c='';}else{c+=line[i];}} r.push(c.trim()); return r; }
     const COL_MAP = {'first name':'ContactFirstName','last name':'ContactLastName','job title':'JobTitle','email address':'ContactEmail','direct phone number':'DirectPhone','mobile phone':'MobilePhone','linkedin contact profile url':'PersonLinkedInURL','company name':'CompanyName','company city':'CompanyCity','company state':'CompanyState','company street address':'CompanyStreet','website':'CompanyWebsite','primary industry':'Industry','employees':'EmployeeCount','person city':'ContactCity','person state':'ContactState'};
-    const lines = e.target.result.split('\n').filter(l => l.trim());
+    const lines = e.target.result.split('\
+').filter(l => l.trim());
     const headers = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g,'').trim().toLowerCase());
     csvRows = lines.slice(1).map(line => {
       const vals = parseCSVLine(line);
@@ -705,9 +706,9 @@ function handleCSV(input) {
     document.getElementById('csvFailed').textContent = 0;
     document.getElementById('importStats').style.display = 'flex';
     document.getElementById('importActions').style.display = 'flex';
-    document.getElementById('dropLabel').textContent = csvRows.length + ' contacts — ' + file.name;
+    document.getElementById('dropLabel').textContent = csvRows.length + ' contacts \u2014 ' + file.name;
     document.getElementById('csvPreview').style.display = 'block';
-    document.getElementById('csvPreviewRows').innerHTML = csvRows.slice(0,5).map(r => `<div style="padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text);">${escapeHtml(r.ContactFirstName)} ${escapeHtml(r.ContactLastName)} — ${escapeHtml(r.JobTitle)} @ ${escapeHtml(r.CompanyName)}</div>`).join('') + (csvRows.length>5?`<div style="padding:8px 16px;font-size:12px;color:var(--text-muted);">...and ${csvRows.length-5} more</div>`:'');
+    document.getElementById('csvPreviewRows').innerHTML = csvRows.slice(0,5).map(r => `<div style="padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text);">${escapeHtml(r.ContactFirstName)} ${escapeHtml(r.ContactLastName)} \u2014 ${escapeHtml(r.JobTitle)} @ ${escapeHtml(r.CompanyName)}</div>`).join('') + (csvRows.length>5?`<div style="padding:8px 16px;font-size:12px;color:var(--text-muted);">...and ${csvRows.length-5} more</div>`:'');
   };
   reader.readAsText(file);
 }
@@ -728,8 +729,8 @@ async function sendCSV() {
     msg.textContent = `Sending ${sent+failed} of ${csvRows.length}...`;
     await new Promise(r => setTimeout(r, 300));
   }
-  btn.textContent = 'Done ✓'; btn.disabled = false;
-  msg.textContent = `Complete — ${sent} contacts sent. Check Approval Queue in a few minutes.`;
+  btn.textContent = 'Done \u2713'; btn.disabled = false;
+  msg.textContent = `Complete \u2014 ${sent} contacts sent. Check Approval Queue in a few minutes.`;
 }
 
 function clearCSV() {
