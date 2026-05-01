@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0430-COMPANY-LINKEDIN -->
+<!-- ELEVATE-2026-0422-A -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -89,6 +89,7 @@
   .contact-signal-medium { background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   .contact-signal-low { background:#6b7280; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   .contact-info-badge { background:#e5e7eb; color:#374151; font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; letter-spacing:0.02em; }
+  .contact-sequence-badge { background:#7c3aed; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   .contact-title { font-size:13px; color:#666; margin-top:3px; }
   .contact-company { font-size:13px; color:var(--gold); font-weight:600; margin-top:2px; }
 
@@ -409,8 +410,8 @@
   .contact-card.submitted .btn-card-send { pointer-events: auto; }
 
 </style>
-<!-- BUILD_TOKEN: ELEVATE-2026-0430-COMPANY-LINKEDIN -->
-<!-- DEPLOY-TOKEN: 1777596000000-company-linkedin -->
+<!-- BUILD_TOKEN: ELEVATE-SECRETS-REMOVED-1776279864 -->
+<!-- DEPLOY-TOKEN: 1776700335-rename-buttons -->
 </head>
 <body>
 
@@ -850,6 +851,8 @@ function renderQueue() {
     const sequence = c.sequence_name || '';
     const isClient = c.is_client === true || c.is_client === 'true';
     const inRCRM = c.contact_exists_in_rcrm === true || c.contact_exists_in_rcrm === 'true';
+    const inSequence = c.in_sequence === true || c.in_sequence === 'true';
+    const activeSequenceName = c.active_sequence_name || '';
     const signal = (c.buying_signal || '').toLowerCase();
     const signalClass = signal === 'high' ? 'contact-signal-high' : (signal === 'low' ? 'contact-signal-low' : 'contact-signal-medium');
     const signalLabel = c.buying_signal ? c.buying_signal.toUpperCase() + ' SIGNAL' : '';
@@ -865,6 +868,7 @@ function renderQueue() {
               ${isClient ? '<span class="contact-client-badge">ACTIVE CLIENT</span>' : ''}
               ${!isClient && inRCRM ? '<span class="contact-rcrm-badge">IN RCRM</span>' : ''}
               ${!isClient && !inRCRM ? '<span class="contact-new-badge">NEW</span>' : ''}
+              ${inSequence ? `<span class="contact-sequence-badge">⚡ IN SEQUENCE</span>` : ''}
               ${signalLabel ? `<span class="${signalClass}">${signalLabel}</span>` : ''}
               ${employees ? `<span class="contact-info-badge">👥 ${escapeHtml(employees)}</span>` : ''}
               ${location ? `<span class="contact-info-badge">📍 ${escapeHtml(location)}</span>` : ''}
@@ -888,6 +892,7 @@ function renderQueue() {
           ${(inRCRM || isClient) && c.last_communication ? `<div class="contact-meta-item"><strong>Last Contact:</strong> ${escapeHtml(c.last_communication)}</div>` : ''}
           ${(inRCRM || isClient) && c.rcrm_owner ? `<div class="contact-meta-item"><strong>Owner:</strong> ${escapeHtml(c.rcrm_owner)}</div>` : ''}
           ${(inRCRM || isClient) && !c.last_communication ? `<div class="contact-meta-item" style="color:#f59e0b;"><strong>In RCRM</strong> — No prior contact logged</div>` : ''}
+          ${inSequence && activeSequenceName ? `<div class="contact-meta-item" style="color:#7c3aed;"><strong>Active Sequence:</strong> ${escapeHtml(activeSequenceName)}</div>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -954,24 +959,11 @@ async function submitOne(idx) {
     contact_email: c.contact_email || '',
     contact_name: c.contact_name || '',
     contact_title: c.contact_title || '',
-    contact_phone: c.contact_phone || '',
-    contact_mobile: c.contact_mobile || '',
-    contact_linkedin: c.contact_linkedin || '',
-    contact_city: c.contact_city || '',
-    contact_state: c.contact_state || '',
-    contact_country: c.contact_country || '',
     company_name: c.company_name || '',
     company_industry: c.company_industry || '',
-    company_address: c.company_address || '',
-    company_website: c.company_website || '',
-    company_linkedin: c.company_linkedin || '',
     employee_count: c.employee_count || '',
-    annual_revenue: c.annual_revenue || '',
     persona: c.persona || '',
-    sequence_name: c.sequence_name || '',
-    data_collection_source: c.data_collection_source || '',
-    buying_signal: c.buying_signal || '',
-    about_company: c.about_company || ''
+    sequence_name: c.sequence_name || ''
   };
 
   btn.disabled = true;
@@ -1029,24 +1021,11 @@ async function submitQueue() {
       contact_email: c.contact_email || '',
       contact_name: c.contact_name || '',
       contact_title: c.contact_title || '',
-      contact_phone: c.contact_phone || '',
-      contact_mobile: c.contact_mobile || '',
-      contact_linkedin: c.contact_linkedin || '',
-      contact_city: c.contact_city || '',
-      contact_state: c.contact_state || '',
-      contact_country: c.contact_country || '',
       company_name: c.company_name || '',
       company_industry: c.company_industry || '',
-      company_address: c.company_address || '',
-      company_website: c.company_website || '',
-      company_linkedin: c.company_linkedin || '',
       employee_count: c.employee_count || '',
-      annual_revenue: c.annual_revenue || '',
       persona: c.persona || '',
-      sequence_name: c.sequence_name || '',
-      data_collection_source: c.data_collection_source || '',
-      buying_signal: c.buying_signal || '',
-      about_company: c.about_company || ''
+      sequence_name: c.sequence_name || ''
     };
     try {
       const resp = await fetch(APPROVAL_WEBHOOK, {
