@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0504-HIRING-SIGNALS -->
+<!-- ELEVATE-2026-0504-HIRING-SIGNALS-PREVIEW -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -865,6 +865,48 @@ async function loadHiringSignals() {
   const list = document.getElementById('hsList');
   if (!section || !list) return;
 
+  // ═══ PREVIEW MODE: hardcoded mock data so you can see the UI ═══
+  // Remove this block when HS_PENDING_FETCH webhook is live
+  hsRecords = [
+    {
+      key: 'queue_signal-003_stellantis',
+      signal_key: 'signal-003',
+      company_name: 'Stellantis Windsor Assembly',
+      signal_tag: 'Q3 Changeover Window',
+      pitch_angle: 'Q3 changeover ramp coming. Pre-source skilled trades before posting hits.',
+      target_titles: 'Plant Manager, HR Manager, Production Supervisor',
+      urgency: 'immediate',
+      score: 92,
+      trigger_phrase: 'retrieve contacts for signal-003'
+    },
+    {
+      key: 'queue_signal-007_formet',
+      signal_key: 'signal-007',
+      company_name: 'Formet Industries — Strathroy',
+      signal_tag: 'Leadership Change — New Plant Manager',
+      pitch_angle: 'New PM reassessing all vendors. 30-day window before staffing relationships lock in.',
+      target_titles: 'Plant Manager, HR Director',
+      urgency: 'immediate',
+      score: 87,
+      trigger_phrase: 'retrieve contacts for signal-007'
+    },
+    {
+      key: 'queue_signal-012_essexauto',
+      signal_key: 'signal-012',
+      company_name: 'Essex Autoparts — Windsor',
+      signal_tag: 'QM Role Unfilled 28+ Days',
+      pitch_angle: 'Adecco on site failing to fill. Direct alternative pitch — quality containment expertise.',
+      target_titles: 'HR Manager, Quality Manager',
+      urgency: 'pipeline',
+      score: 74,
+      trigger_phrase: 'retrieve contacts for signal-012'
+    }
+  ];
+  section.style.display = 'block';
+  renderHiringSignals();
+  return;
+  // ═══ END PREVIEW MODE ═══
+
   // Show section as loading (will hide if no records)
   section.style.display = 'block';
   list.innerHTML = '<div class="hs-empty">Loading hiring signals…</div>';
@@ -1125,19 +1167,65 @@ async function initQueue() {
     console.log('[Queue Fetch] contacts extracted:', contacts.length);
 
     if (!contacts.length) {
-      list.innerHTML = '<div class="empty-queue"><p>No contacts pending approval.</p><small>New contacts will appear here after the ZoomInfo intake pipeline runs.</small></div>';
-      renderQueueStats([]);
+      // ═══ PREVIEW MODE: still show mock card even if queue empty ═══
+      queueContacts = [];
+      injectMockHiringSignalContact();
+      renderQueue();
+      if (toolbar) toolbar.style.display = 'flex';
       return;
+      // ═══ END PREVIEW MODE ═══
+      // list.innerHTML = '<div class="empty-queue"><p>No contacts pending approval.</p><small>New contacts will appear here after the ZoomInfo intake pipeline runs.</small></div>';
+      // renderQueueStats([]);
+      // return;
     }
 
     // Default: approve non-clients, decline clients (clients shouldn't be re-contacted)
     queueContacts = contacts.map(c => ({ ...c, _approved: !c.is_client }));
+
+    // ═══ PREVIEW MODE: prepend mock hiring_signals contact ═══
+    // Remove this block when real hiring_signals contacts are flowing through
+    injectMockHiringSignalContact();
+    // ═══ END PREVIEW MODE ═══
+
     renderQueue();
     if (toolbar) toolbar.style.display = 'flex';
   } catch (e) {
     console.error('initQueue error:', e);
-    list.innerHTML = '<div class="empty-queue"><p>Could not load queue.</p><small>' + (e.message || 'Unknown error') + ' — check that Queue Fetch scenario is active in Make.</small></div>';
+    // Even on error, show mock card so you can see the UI
+    queueContacts = [];
+    injectMockHiringSignalContact();
+    renderQueue();
+    if (toolbar) toolbar.style.display = 'flex';
+    return;
+    // (Original error UI disabled in preview mode)
+    // list.innerHTML = '<div class="empty-queue"><p>Could not load queue.</p><small>' + (e.message || 'Unknown error') + ' — check that Queue Fetch scenario is active in Make.</small></div>';
   }
+}
+
+// PREVIEW HELPER — remove with the rest of preview mode
+function injectMockHiringSignalContact() {
+  queueContacts.unshift({
+    key: 'mock_hs_001',
+    lead_source: 'hiring_signals',
+    contact_name: 'Mike Tremblay',
+    contact_title: 'Plant Manager',
+    company_name: 'Stellantis Windsor Assembly',
+    company_industry: 'Automotive Tier 1',
+    employee_count: '4500',
+    contact_city: 'Windsor',
+    contact_state: 'ON',
+    contact_linkedin: 'https://www.linkedin.com/in/example',
+    persona: 'Operations Decision Maker',
+    signal_tag: 'Q3 Changeover Window — Skilled Trades Surge',
+    pitch_angle: 'Q3 changeover ramp coming. Pre-source skilled trades before posting hits.',
+    contact_exists_in_rcrm: false,
+    is_client: false,
+    buying_signal: 'high',
+    email_draft_subject: 'Quick question about your Q3 trades ramp',
+    email_draft_body: 'Hi Mike,\n\nNoticed Stellantis Windsor is heading into changeover season in 6-8 weeks. Most plants in the corridor are scrambling for skilled trades right when the line goes down.\n\nElevate has pre-sourced trades benches we can deploy on short notice for changeover work — no agency markup games.\n\nWorth a 15-minute call next week?\n\nTravis',
+    email_status: '',
+    _approved: true
+  });
 }
 
 function renderQueue() {
