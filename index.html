@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0422-A -->
+<!-- ELEVATE-2026-0504-HIRING-SIGNALS -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -118,6 +118,49 @@
   .queue-result.ok { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
   .queue-result.err { background:#ffebee; color:#c62828; border:1px solid #ef9a9a; }
   .queue-loading { text-align:center; padding:60px 20px; color:#666; font-size:14px; }
+
+  /* ═══════════════════════ HIRING SIGNALS SECTION ═══════════════════════ */
+  .hs-section { background:#fff; border:1px solid var(--light-border); border-left:4px solid #f59e0b; border-radius:10px; padding:18px 20px; margin-bottom:20px; }
+  .hs-section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px; }
+  .hs-section-title { font-size:15px; font-weight:700; color:var(--light-text); display:flex; align-items:center; gap:8px; }
+  .hs-section-title::before { content:'⚡'; color:#f59e0b; font-size:18px; }
+  .hs-section-sub { font-size:12px; color:#666; }
+  .hs-count { background:#fef3c7; color:#92400e; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; letter-spacing:0.05em; }
+  .hs-empty { padding:20px; text-align:center; color:#666; font-size:13px; background:#fafafa; border-radius:8px; }
+  .hs-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:12px; }
+  .hs-card { background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:14px 16px; transition:all 0.15s; position:relative; }
+  .hs-card:hover { border-color:#f59e0b; box-shadow:0 2px 8px rgba(245,158,11,0.15); }
+  .hs-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:8px; }
+  .hs-company { font-weight:700; color:var(--light-text); font-size:14px; line-height:1.3; }
+  .hs-score { background:#f59e0b; color:#fff; font-size:11px; font-weight:700; padding:3px 8px; border-radius:10px; flex-shrink:0; }
+  .hs-tag-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+  .hs-tag { background:#fff; border:1px solid #fde68a; color:#92400e; font-size:10px; font-weight:600; padding:2px 8px; border-radius:10px; letter-spacing:0.02em; }
+  .hs-tag.urgency-immediate { background:#fee2e2; border-color:#fecaca; color:#991b1b; }
+  .hs-tag.urgency-pipeline { background:#fef3c7; border-color:#fde68a; color:#92400e; }
+  .hs-tag.urgency-watch { background:#e5e7eb; border-color:#d1d5db; color:#374151; }
+  .hs-pitch { font-size:12px; color:#444; line-height:1.5; margin-bottom:8px; font-style:italic; }
+  .hs-meta { font-size:11px; color:#666; margin-bottom:10px; line-height:1.5; }
+  .hs-meta strong { color:#444; font-weight:600; }
+  .hs-actions { display:flex; gap:6px; flex-wrap:wrap; padding-top:10px; border-top:1px solid #fde68a; }
+  .hs-btn { background:#fff; border:1px solid #fde68a; color:#92400e; font-size:11px; font-weight:600; padding:6px 10px; border-radius:5px; cursor:pointer; transition:all 0.15s; flex:1; min-width:90px; text-align:center; }
+  .hs-btn:hover:not(:disabled) { background:#f59e0b; color:#fff; border-color:#f59e0b; }
+  .hs-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .hs-btn.primary { background:#f59e0b; color:#fff; border-color:#f59e0b; }
+  .hs-btn.primary:hover:not(:disabled) { background:#d97706; border-color:#d97706; }
+  .hs-btn.danger { color:#991b1b; border-color:#fecaca; }
+  .hs-btn.danger:hover:not(:disabled) { background:#dc2626; color:#fff; border-color:#dc2626; }
+  .hs-btn.sent { background:#10b981; color:#fff; border-color:#10b981; }
+  .hs-trigger { display:none; background:#1c1c1f; color:#fbbf24; font-family:'Courier New', monospace; font-size:11px; padding:8px 10px; border-radius:5px; margin-top:8px; cursor:pointer; word-break:break-all; }
+  .hs-trigger.show { display:block; }
+  .hs-trigger:hover { background:#000; }
+  .hs-trigger-label { font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px; }
+  .hs-draft-preview { display:none; position:absolute; bottom:calc(100% + 8px); left:0; right:0; background:#1c1c1f; color:#e8e8e8; border:1px solid #f59e0b; border-radius:8px; padding:14px; box-shadow:0 8px 24px rgba(0,0,0,0.3); z-index:50; font-size:12px; line-height:1.5; max-height:300px; overflow-y:auto; }
+  .hs-card:hover .hs-draft-preview.has-draft { display:block; }
+  .hs-draft-subject { font-weight:700; color:#f59e0b; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #333; }
+  .hs-draft-body { white-space:pre-wrap; font-family:'Segoe UI', system-ui, sans-serif; }
+  .hs-draft-loading { color:#999; font-style:italic; }
+  .hs-amber-card { background:#fffbeb !important; border:1px solid #fde68a !important; border-left:4px solid #f59e0b !important; }
+  .hs-source-badge { background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
 
   /* ═══════════════════════ SALES INTEL TAB ═══════════════════════ */
   #tabSales {
@@ -463,6 +506,21 @@
         <div class="stat-pill">Clients <span id="statClients">0</span></div>
       </div>
     </div>
+
+    <!-- ══════════ HIRING SIGNALS — Companies Awaiting Retrieval ══════════ -->
+    <div class="hs-section" id="hsSection" style="display:none;">
+      <div class="hs-section-header">
+        <div>
+          <div class="hs-section-title">Hiring Signals — Companies Awaiting Retrieval</div>
+          <div class="hs-section-sub">Approved BD signals waiting on contact retrieval. Copy the trigger phrase and run it in Claude.</div>
+        </div>
+        <span class="hs-count" id="hsCount">0 PENDING</span>
+      </div>
+      <div id="hsList">
+        <div class="hs-empty">Loading hiring signals…</div>
+      </div>
+    </div>
+
     <div id="queueResult" class="queue-result"></div>
     <div class="queue-toolbar" id="queueToolbar" style="display:none;">
       <div class="queue-toolbar-left">
@@ -759,6 +817,7 @@ function doLogin() {
     document.getElementById('app').style.display = 'block';
     document.getElementById('authError').style.display = 'none';
     initQueue();
+    loadHiringSignals();
     loadSignals();
   } else {
     document.getElementById('authError').style.display = 'block';
@@ -789,6 +848,249 @@ function showTab(name, btn) {
 const APPROVAL_WEBHOOK = 'https://hook.us2.make.com/aq8yfoqv8itfhrewo1k6iib7u6rq4gm1';
 const ENRICH_WEBHOOK = 'https://hook.us2.make.com/9et4dubq18kst3vibqkiunmhjrt4ngxl';
 let queueContacts = [];
+
+// ═══════════════════════════════════════════
+// HIRING SIGNALS — Awaiting Retrieval + Email Drafting
+// ═══════════════════════════════════════════
+const HS_PENDING_FETCH  = 'https://hook.us2.make.com/REPLACE_pending_retrieval_fetch';
+const HS_DRAFT_EMAIL    = 'https://hook.us2.make.com/0xpttva4xkzzq9bo3gafpb4r2ytwunyj';
+const HS_SEND_OUTLOOK   = 'https://hook.us2.make.com/gxwjwb3suti31c9ujqh84wx7597nfttt';
+const HS_BLOCK_COMPANY  = 'https://hook.us2.make.com/REPLACE_block_company';
+
+let hsRecords = [];
+let hsDrafts = {}; // cache: queue_key -> {subject, body}
+
+async function loadHiringSignals() {
+  const section = document.getElementById('hsSection');
+  const list = document.getElementById('hsList');
+  if (!section || !list) return;
+
+  // Show section as loading (will hide if no records)
+  section.style.display = 'block';
+  list.innerHTML = '<div class="hs-empty">Loading hiring signals…</div>';
+
+  try {
+    const res = await fetch(HS_PENDING_FETCH, { method: 'GET' });
+    if (!res.ok) throw new Error('Fetch failed: ' + res.status);
+    const text = await res.text();
+    let json;
+    try { json = JSON.parse(text); } catch(e) {
+      console.warn('[HS] Response not JSON, hiding section. Raw:', text.slice(0, 200));
+      section.style.display = 'none';
+      return;
+    }
+    const raw = Array.isArray(json) ? json : (json.records || json.data || []);
+    const records = raw.map(r => {
+      const row = (r && r.aggregate) ? r.aggregate : r;
+      const d = (row && row.data) ? row.data : row;
+      return { ...d, key: (row && row.key) || (d && d.key) || '' };
+    }).filter(r => r && (r.company_name || r.signal_key));
+
+    hsRecords = records;
+    renderHiringSignals();
+
+    if (!records.length) {
+      // Hide entirely if nothing pending — don't clutter the queue
+      section.style.display = 'none';
+    }
+  } catch (e) {
+    console.error('[HS] loadHiringSignals error:', e);
+    // Hide on error — don't block the queue
+    section.style.display = 'none';
+  }
+}
+
+function renderHiringSignals() {
+  const list = document.getElementById('hsList');
+  const count = document.getElementById('hsCount');
+  if (!list) return;
+
+  if (count) count.textContent = `${hsRecords.length} PENDING`;
+
+  if (!hsRecords.length) {
+    list.innerHTML = '<div class="hs-empty">No hiring signals awaiting retrieval.</div>';
+    return;
+  }
+
+  list.innerHTML = '<div class="hs-grid">' + hsRecords.map((r, i) => {
+    const company = r.company_name || 'Unknown company';
+    const signalKey = r.signal_key || r.key || '';
+    const signalTag = r.signal_tag || '';
+    const pitch = r.pitch_angle || '';
+    const titles = r.target_titles || '';
+    const urgency = (r.urgency || 'pipeline').toLowerCase();
+    const score = r.score || '';
+    const triggerPhrase = r.trigger_phrase || `retrieve contacts for ${signalKey}`;
+
+    return `
+      <div class="hs-card" data-idx="${i}">
+        <div class="hs-card-top">
+          <div class="hs-company">${escapeHtml(company)}</div>
+          ${score ? `<div class="hs-score">${escapeHtml(String(score))}</div>` : ''}
+        </div>
+        <div class="hs-tag-row">
+          <span class="hs-tag urgency-${urgency}">${escapeHtml(urgency.toUpperCase())}</span>
+          ${signalTag ? `<span class="hs-tag">${escapeHtml(signalTag)}</span>` : ''}
+        </div>
+        ${pitch ? `<div class="hs-pitch">"${escapeHtml(pitch)}"</div>` : ''}
+        <div class="hs-meta">
+          ${titles ? `<strong>Target titles:</strong> ${escapeHtml(titles)}<br>` : ''}
+          ${signalKey ? `<strong>Signal key:</strong> ${escapeHtml(signalKey)}` : ''}
+        </div>
+        <div class="hs-actions">
+          <button class="hs-btn primary" onclick="hsCopyTrigger(${i}, this)">📋 Copy Trigger</button>
+          <button class="hs-btn danger" onclick="hsBlockCompany(${i}, this)">🚫 Block</button>
+        </div>
+        <div class="hs-trigger" id="hsTrig${i}" onclick="hsCopyToClipboard('${escapeAttr(triggerPhrase)}', this)">
+          <div class="hs-trigger-label">Click to copy:</div>
+          ${escapeHtml(triggerPhrase)}
+        </div>
+      </div>
+    `;
+  }).join('') + '</div>';
+}
+
+function hsCopyTrigger(idx, btn) {
+  const r = hsRecords[idx];
+  if (!r) return;
+  const trigger = r.trigger_phrase || `retrieve contacts for ${r.signal_key || r.key}`;
+  hsCopyToClipboard(trigger, btn);
+  // Also reveal the trigger box so they can re-copy
+  const trigEl = document.getElementById('hsTrig' + idx);
+  if (trigEl) trigEl.classList.add('show');
+}
+
+function hsCopyToClipboard(text, btn) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      if (btn) {
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied';
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+      }
+    }).catch(err => {
+      console.error('[HS] Clipboard error:', err);
+      alert('Copy failed — manually copy: ' + text);
+    });
+  } else {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = '✓ Copied';
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    }
+  }
+}
+
+async function hsBlockCompany(idx, btn) {
+  const r = hsRecords[idx];
+  if (!r) return;
+  const company = r.company_name;
+  if (!confirm(`Block ${company} and remove from pipeline?\n\nAdds to elevate_excluded_companies datastore.`)) return;
+  btn.disabled = true;
+  btn.textContent = 'Blocking…';
+  try {
+    const res = await fetch(HS_BLOCK_COMPANY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_name: company, signal_key: r.signal_key || r.key, reason: 'Manual block from dashboard' })
+    });
+    if (!res.ok) throw new Error('Block failed: ' + res.status);
+    btn.textContent = '✓ Blocked';
+    // Remove from local list
+    hsRecords.splice(idx, 1);
+    setTimeout(() => renderHiringSignals(), 800);
+  } catch (e) {
+    console.error('[HS] Block error:', e);
+    btn.disabled = false;
+    btn.textContent = '🚫 Block';
+    alert('Block failed: ' + e.message);
+  }
+}
+
+// Called from queue cards (lead_source = hiring_signals)
+async function hsDraftEmail(queueKey, btn, cardEl) {
+  if (!queueKey) return;
+  // Check cache first
+  if (hsDrafts[queueKey]) {
+    hsShowDraftPreview(cardEl, hsDrafts[queueKey]);
+    return;
+  }
+  const previewEl = cardEl ? cardEl.querySelector('.hs-draft-preview') : null;
+  if (previewEl) {
+    previewEl.classList.add('has-draft');
+    previewEl.innerHTML = '<div class="hs-draft-loading">Drafting email with Claude…</div>';
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Drafting…';
+  }
+  try {
+    const url = `${HS_DRAFT_EMAIL}?queue_key=${encodeURIComponent(queueKey)}`;
+    const res = await fetch(url, { method: 'GET' });
+    if (!res.ok) throw new Error('Draft failed: ' + res.status);
+    const text = await res.text();
+    let draft;
+    try { draft = JSON.parse(text); } catch(e) {
+      // Drafter may return SUBJECT:\nBODY: format
+      const subjectMatch = text.match(/SUBJECT:\s*(.+)/i);
+      const bodyMatch = text.match(/BODY:\s*([\s\S]+)/i);
+      draft = {
+        subject: subjectMatch ? subjectMatch[1].trim() : 'Quick question',
+        body: bodyMatch ? bodyMatch[1].trim() : text
+      };
+    }
+    hsDrafts[queueKey] = draft;
+    hsShowDraftPreview(cardEl, draft);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '✉ Draft ready';
+    }
+  } catch (e) {
+    console.error('[HS] Draft error:', e);
+    if (previewEl) previewEl.innerHTML = '<div class="hs-draft-loading">Error: ' + e.message + '</div>';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '✉ Draft Email';
+    }
+  }
+}
+
+function hsShowDraftPreview(cardEl, draft) {
+  if (!cardEl) return;
+  const previewEl = cardEl.querySelector('.hs-draft-preview');
+  if (!previewEl) return;
+  previewEl.classList.add('has-draft');
+  previewEl.innerHTML = `
+    <div class="hs-draft-subject">Subject: ${escapeHtml(draft.subject || '')}</div>
+    <div class="hs-draft-body">${escapeHtml(draft.body || '').replace(/\\n/g, '\n')}</div>
+  `;
+}
+
+async function hsSendOutlook(queueKey, btn) {
+  if (!queueKey) return;
+  if (!confirm('Send this email via Outlook now?')) return;
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  try {
+    const url = `${HS_SEND_OUTLOOK}?queue_key=${encodeURIComponent(queueKey)}`;
+    const res = await fetch(url, { method: 'GET' });
+    if (!res.ok) throw new Error('Send failed: ' + res.status);
+    btn.textContent = '✓ Sent';
+    btn.classList.add('sent');
+  } catch (e) {
+    console.error('[HS] Send error:', e);
+    btn.disabled = false;
+    btn.textContent = 'Send via Outlook';
+    alert('Send failed: ' + e.message);
+  }
+}
 
 async function initQueue() {
   const list = document.getElementById('queueList');
@@ -863,7 +1165,11 @@ function renderQueue() {
     const signalClass = signal === 'high' ? 'contact-signal-high' : (signal === 'low' ? 'contact-signal-low' : 'contact-signal-medium');
     const signalLabel = c.buying_signal ? c.buying_signal.toUpperCase() + ' SIGNAL' : '';
     const approved = c._approved;
-    const cardClass = isClient ? 'is-client' : (approved ? 'approved' : 'declined');
+    const isHiringSignal = (c.lead_source || '').toLowerCase() === 'hiring_signals';
+    const queueKey = c.key || '';
+    const emailSent = (c.email_status || '').toLowerCase() === 'sent';
+    let cardClass = isClient ? 'is-client' : (approved ? 'approved' : 'declined');
+    if (isHiringSignal) cardClass += ' hs-amber-card';
     return `
       <div class="contact-card ${cardClass}" data-idx="${i}">
         <div class="contact-card-row">
@@ -871,6 +1177,7 @@ function renderQueue() {
           <div class="contact-info">
             <div class="contact-name">
               ${escapeHtml(name)}
+              ${isHiringSignal ? '<span class="hs-source-badge">HIRING SIGNAL</span>' : ''}
               ${isClient ? '<span class="contact-client-badge">ACTIVE CLIENT</span>' : ''}
               ${!isClient && inRCRM ? '<span class="contact-rcrm-badge">IN RCRM</span>' : ''}
               ${!isClient && !inRCRM ? '<span class="contact-new-badge">NEW</span>' : ''}
@@ -899,7 +1206,18 @@ function renderQueue() {
           ${(inRCRM || isClient) && c.rcrm_owner ? `<div class="contact-meta-item"><strong>Owner:</strong> ${escapeHtml(c.rcrm_owner)}</div>` : ''}
           ${(inRCRM || isClient) && !c.last_communication ? `<div class="contact-meta-item" style="color:#f59e0b;"><strong>In RCRM</strong> — No prior contact logged</div>` : ''}
           ${inSequence && activeSequenceName ? `<div class="contact-meta-item" style="color:#7c3aed;"><strong>Active Sequence:</strong> ${escapeHtml(activeSequenceName)}</div>` : ''}
+          ${isHiringSignal && c.signal_tag ? `<div class="contact-meta-item" style="color:#92400e;"><strong>Signal:</strong> ${escapeHtml(c.signal_tag)}</div>` : ''}
+          ${isHiringSignal && c.pitch_angle ? `<div class="contact-meta-item" style="color:#92400e;"><strong>Pitch:</strong> ${escapeHtml(c.pitch_angle)}</div>` : ''}
         </div>
+        ${isHiringSignal ? `
+        <div class="hs-actions" style="margin-top:10px; position:relative;">
+          <button class="hs-btn primary" onmouseenter="hsDraftEmail('${escapeAttr(queueKey)}', this, this.closest('.contact-card'))" onclick="hsDraftEmail('${escapeAttr(queueKey)}', this, this.closest('.contact-card'))">${c.email_draft_body ? '✉ Draft ready' : '✉ Draft Email'}</button>
+          <button class="hs-btn ${emailSent ? 'sent' : ''}" ${emailSent ? 'disabled' : ''} onclick="hsSendOutlook('${escapeAttr(queueKey)}', this)">${emailSent ? '✓ Sent ' + (c.sent_at || '') : 'Send via Outlook'}</button>
+          <div class="hs-draft-preview ${c.email_draft_body ? 'has-draft' : ''}">
+            ${c.email_draft_subject ? `<div class="hs-draft-subject">Subject: ${escapeHtml(c.email_draft_subject)}</div>` : ''}
+            ${c.email_draft_body ? `<div class="hs-draft-body">${escapeHtml(c.email_draft_body)}</div>` : '<div class="hs-draft-loading">Hover to draft email…</div>'}
+          </div>
+        </div>` : ''}
         ${c.about_company ? `<div class="about-company-box">📋 ${escapeHtml(c.about_company)}</div>` : `
         <div class="about-company-missing">
           <span style="flex:1">No company info — enrichment pending</span>
