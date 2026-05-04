@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0504-HS-V2 -->
+<!-- ELEVATE-2026-0504-HS-V4 -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -131,19 +131,21 @@
   .hs-toggle-btn:hover { background:#fef3c7; }
   .hs-empty { padding:14px; text-align:center; color:#666; font-size:12px; background:#fafafa; border-radius:6px; }
 
-  /* Strip mode (default) — horizontal scroll */
-  .hs-strip { display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding-bottom:6px; scroll-snap-type:x mandatory; }
-  .hs-strip::-webkit-scrollbar { height:6px; }
-  .hs-strip::-webkit-scrollbar-track { background:#fafafa; border-radius:3px; }
-  .hs-strip::-webkit-scrollbar-thumb { background:#fde68a; border-radius:3px; }
-  .hs-strip::-webkit-scrollbar-thumb:hover { background:#f59e0b; }
+  /* Strip mode (default) — horizontal scroll, scrollbar always visible */
+  .hs-strip { display:flex; gap:10px; overflow-x:scroll; overflow-y:hidden; padding-bottom:10px; scroll-snap-type:x mandatory; align-items:stretch; }
+  .hs-strip::-webkit-scrollbar { height:10px; -webkit-appearance:none; }
+  .hs-strip::-webkit-scrollbar-track { background:#fef3c7; border-radius:5px; border:1px solid #fde68a; }
+  .hs-strip::-webkit-scrollbar-thumb { background:#f59e0b; border-radius:5px; border:1px solid #d97706; }
+  .hs-strip::-webkit-scrollbar-thumb:hover { background:#d97706; }
+  /* Firefox */
+  .hs-strip { scrollbar-width:auto; scrollbar-color:#f59e0b #fef3c7; }
   .hs-strip .hs-card { flex:0 0 300px; scroll-snap-align:start; }
 
   /* Expanded mode — grid */
-  .hs-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:10px; }
+  .hs-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:10px; align-items:stretch; }
 
   /* Card */
-  .hs-card { background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px 14px; transition:all 0.15s; }
+  .hs-card { background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px 14px; transition:all 0.15s; display:flex; flex-direction:column; }
   .hs-card:hover { border-color:#f59e0b; box-shadow:0 2px 8px rgba(245,158,11,0.18); }
   .hs-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:6px; }
   .hs-company { font-weight:700; color:var(--light-text); font-size:13px; line-height:1.3; }
@@ -152,9 +154,9 @@
   .hs-tag { background:#fff; border:1px solid #fde68a; color:#92400e; font-size:10px; font-weight:600; padding:2px 7px; border-radius:9px; }
   .hs-tag.urgent { background:#fee2e2; border-color:#fecaca; color:#991b1b; }
   .hs-pitch { font-size:11px; color:#444; line-height:1.4; margin-bottom:6px; font-style:italic; }
-  .hs-meta { font-size:10px; color:#666; margin-bottom:8px; line-height:1.4; }
+  .hs-meta { font-size:10px; color:#666; margin-bottom:8px; line-height:1.4; flex:1; }
   .hs-meta strong { color:#444; font-weight:600; }
-  .hs-actions { display:flex; gap:6px; padding-top:8px; border-top:1px solid #fde68a; }
+  .hs-actions { display:flex; gap:6px; padding-top:8px; border-top:1px solid #fde68a; margin-top:auto; }
   .hs-btn { background:#f59e0b; color:#fff; border:none; font-size:11px; font-weight:600; padding:7px 10px; border-radius:5px; cursor:pointer; transition:all 0.15s; flex:1; text-align:center; }
   .hs-btn:hover:not(:disabled) { background:#d97706; }
   .hs-btn:disabled { opacity:0.6; cursor:not-allowed; }
@@ -536,7 +538,6 @@
         </div>
         <div class="hs-header-left">
           <span class="hs-count" id="hsCount">0 IMMEDIATE</span>
-          <button class="hs-toggle-btn" id="hsToggleBtn" onclick="hsToggleView()">⊞ Expand</button>
         </div>
       </div>
       <div id="hsContainer" class="hs-strip">
@@ -950,8 +951,8 @@ function hsRender() {
   // Sort by score desc
   const sorted = [...immediate].sort((a, b) => (b.score || 0) - (a.score || 0));
 
-  // Set container class based on view mode
-  container.className = hsViewMode === 'strip' ? 'hs-strip' : 'hs-grid';
+  // Always strip mode (horizontal scroll)
+  container.className = 'hs-strip';
 
   container.innerHTML = sorted.map((r, i) => {
     const company = r.company_name || 'Unknown';
@@ -985,10 +986,7 @@ function hsRender() {
 }
 
 function hsToggleView() {
-  hsViewMode = hsViewMode === 'strip' ? 'grid' : 'strip';
-  const btn = document.getElementById('hsToggleBtn');
-  if (btn) btn.textContent = hsViewMode === 'strip' ? '⊞ Expand' : '☰ Collapse';
-  hsRender();
+  // Removed in V4 — always strip mode
 }
 
 async function hsEnrichContacts(signalKey, btn) {
@@ -998,6 +996,22 @@ async function hsEnrichContacts(signalKey, btn) {
   const orig = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Enriching…';
+
+  // ═══ PREVIEW MODE: skip the real fetch, just simulate success ═══
+  // Remove this block when HS_ENRICH_CONTACTS webhook is live
+  const isPreview = HS_ENRICH_CONTACTS.includes('REPLACE_');
+  if (isPreview) {
+    setTimeout(() => {
+      btn.textContent = '✓ Enriched';
+      btn.classList.add('enriched');
+      setTimeout(() => {
+        hsRecords = hsRecords.filter(r => (r.signal_key || r.key) !== signalKey);
+        hsRender();
+      }, 600);
+    }, 500);
+    return;
+  }
+  // ═══ END PREVIEW MODE ═══
 
   try {
     const res = await fetch(HS_ENRICH_CONTACTS, {
@@ -1010,12 +1024,10 @@ async function hsEnrichContacts(signalKey, btn) {
     btn.textContent = '✓ Enriched';
     btn.classList.add('enriched');
 
-    // Refresh the queue after a brief delay so new contacts show up
+    // Remove from list and refresh queue
     setTimeout(() => {
-      // Remove this signal from the local list (it's been processed)
       hsRecords = hsRecords.filter(r => (r.signal_key || r.key) !== signalKey);
       hsRender();
-      // Reload queue to pick up new contacts
       initQueue();
     }, 1500);
   } catch (e) {
@@ -1030,6 +1042,18 @@ async function hsBlockCompany(signalKey, company, btn) {
   if (!confirm(`Block "${company}" and remove from pipeline?`)) return;
   btn.disabled = true;
   btn.textContent = '…';
+
+  // ═══ PREVIEW MODE: skip real fetch ═══
+  const isPreview = HS_BLOCK_COMPANY.includes('REPLACE_');
+  if (isPreview) {
+    setTimeout(() => {
+      hsRecords = hsRecords.filter(r => (r.signal_key || r.key) !== signalKey);
+      hsRender();
+    }, 400);
+    return;
+  }
+  // ═══ END PREVIEW MODE ═══
+
   try {
     await fetch(HS_BLOCK_COMPANY, {
       method: 'POST',
