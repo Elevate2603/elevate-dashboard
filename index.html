@@ -380,6 +380,11 @@
   .queue-actions { display: flex; gap: 8px; }
   .btn-approve { background: rgba(46,204,113,0.15); border: 1px solid rgba(46,204,113,0.4); color: #2ecc71; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; cursor: pointer; }
   .btn-approve:hover { background: rgba(46,204,113,0.3); }
+  .btn-enrich { background: rgba(200,130,10,0.15); border: 1px solid rgba(200,130,10,0.5); color: #C8820A; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; cursor: pointer; letter-spacing: 0.03em; }
+  .btn-enrich:hover { background: rgba(200,130,10,0.3); }
+  .btn-enrich:disabled { opacity: 0.5; cursor: wait; }
+  .about-company-box { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-top: 10px; font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+  .about-company-missing { display:flex; align-items:center; gap:10px; margin-top:10px; padding: 8px 12px; background: rgba(200,130,10,0.05); border: 1px dashed rgba(200,130,10,0.3); border-radius: 6px; font-size: 12px; color: #888; }
   .btn-skip { background: var(--dark4); border: 1px solid var(--border); color: #888; font-size: 11px; padding: 4px 12px; border-radius: 20px; cursor: pointer; }
   .btn-skip:hover { border-color: #666; color: #bbb; }
 
@@ -782,6 +787,7 @@ function showTab(name, btn) {
 // ═══════════════════════════════════════════
 // Queue URLs defined in constants block below
 const APPROVAL_WEBHOOK = 'https://hook.us2.make.com/aq8yfoqv8itfhrewo1k6iib7u6rq4gm1';
+const ENRICH_WEBHOOK = 'PENDING_WEBHOOK_URL'; // Replace after activating Queue Enrich Updater in Make
 let queueContacts = [];
 
 async function initQueue() {
@@ -894,6 +900,11 @@ function renderQueue() {
           ${(inRCRM || isClient) && !c.last_communication ? `<div class="contact-meta-item" style="color:#f59e0b;"><strong>In RCRM</strong> — No prior contact logged</div>` : ''}
           ${inSequence && activeSequenceName ? `<div class="contact-meta-item" style="color:#7c3aed;"><strong>Active Sequence:</strong> ${escapeHtml(activeSequenceName)}</div>` : ''}
         </div>
+        ${c.about_company ? `<div class="about-company-box">📋 ${escapeHtml(c.about_company)}</div>` : `
+        <div class="about-company-missing">
+          <span style="flex:1">No company info — enrichment pending</span>
+          <button class="btn-enrich" id="enrichBtn${i}" onclick="enrichContact(${i})">⚡ Enrich Now</button>
+        </div>`}
       </div>`;
   }).join('');
   renderQueueStats(queueContacts);
@@ -997,6 +1008,44 @@ async function submitOne(idx) {
     btn.textContent = '✕ Network error — retry';
     btn.disabled = false;
     console.error('[ApprovalSingle] Network error for ' + c.contact_name + ':', e);
+  }
+}
+
+async function enrichContact(idx) {
+  const c = queueContacts[idx];
+  if (!c) return;
+  const btn = document.getElementById('enrichBtn' + idx);
+  if (!btn || btn.disabled) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Enriching…';
+
+  try {
+    const res = await fetch(ENRICH_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: c.key,
+        company_name: c.company_name || '',
+        company_industry: c.company_industry || '',
+        company_website: c.company_website || '',
+        employee_count: c.employee_count || '',
+        contact_city: c.contact_city || '',
+        contact_state: c.contact_state || '',
+        contact_country: c.contact_country || ''
+      })
+    });
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    // Mark locally as enriched — full refresh will show updated data
+    queueContacts[idx].about_company = '✓ Enriched — reload dashboard to see full company info';
+    renderQueue();
+    btn.textContent = '✓ Done';
+  } catch(e) {
+    console.error('[Enrich] Error:', e);
+    btn.disabled = false;
+    btn.textContent = '✕ Failed — retry';
   }
 }
 
