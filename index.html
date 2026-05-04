@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0504-HIRING-SIGNALS-PREVIEW -->
+<!-- ELEVATE-2026-0504-HS-V2 -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -119,48 +119,66 @@
   .queue-result.err { background:#ffebee; color:#c62828; border:1px solid #ef9a9a; }
   .queue-loading { text-align:center; padding:60px 20px; color:#666; font-size:14px; }
 
-  /* ═══════════════════════ HIRING SIGNALS SECTION ═══════════════════════ */
-  .hs-section { background:#fff; border:1px solid var(--light-border); border-left:4px solid #f59e0b; border-radius:10px; padding:18px 20px; margin-bottom:20px; }
-  .hs-section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px; }
-  .hs-section-title { font-size:15px; font-weight:700; color:var(--light-text); display:flex; align-items:center; gap:8px; }
-  .hs-section-title::before { content:'⚡'; color:#f59e0b; font-size:18px; }
-  .hs-section-sub { font-size:12px; color:#666; }
+  /* ═══════════════════════ HIRING SIGNALS ═══════════════════════ */
+  .hs-section { background:#fff; border:1px solid var(--light-border); border-left:4px solid #f59e0b; border-radius:10px; padding:14px 16px; margin-bottom:16px; transition:all 0.2s; }
+  .hs-header { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+  .hs-header-left { display:flex; align-items:center; gap:10px; }
+  .hs-title { font-size:14px; font-weight:700; color:var(--light-text); display:flex; align-items:center; gap:6px; }
+  .hs-title::before { content:'⚡'; color:#f59e0b; font-size:16px; }
+  .hs-sub { font-size:11px; color:#666; }
   .hs-count { background:#fef3c7; color:#92400e; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; letter-spacing:0.05em; }
-  .hs-empty { padding:20px; text-align:center; color:#666; font-size:13px; background:#fafafa; border-radius:8px; }
-  .hs-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:12px; }
-  .hs-card { background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:14px 16px; transition:all 0.15s; position:relative; }
-  .hs-card:hover { border-color:#f59e0b; box-shadow:0 2px 8px rgba(245,158,11,0.15); }
-  .hs-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:8px; }
-  .hs-company { font-weight:700; color:var(--light-text); font-size:14px; line-height:1.3; }
-  .hs-score { background:#f59e0b; color:#fff; font-size:11px; font-weight:700; padding:3px 8px; border-radius:10px; flex-shrink:0; }
-  .hs-tag-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
-  .hs-tag { background:#fff; border:1px solid #fde68a; color:#92400e; font-size:10px; font-weight:600; padding:2px 8px; border-radius:10px; letter-spacing:0.02em; }
-  .hs-tag.urgency-immediate { background:#fee2e2; border-color:#fecaca; color:#991b1b; }
-  .hs-tag.urgency-pipeline { background:#fef3c7; border-color:#fde68a; color:#92400e; }
-  .hs-tag.urgency-watch { background:#e5e7eb; border-color:#d1d5db; color:#374151; }
-  .hs-pitch { font-size:12px; color:#444; line-height:1.5; margin-bottom:8px; font-style:italic; }
-  .hs-meta { font-size:11px; color:#666; margin-bottom:10px; line-height:1.5; }
+  .hs-toggle-btn { background:#fff; border:1px solid #fde68a; color:#92400e; font-size:11px; font-weight:600; padding:5px 10px; border-radius:5px; cursor:pointer; }
+  .hs-toggle-btn:hover { background:#fef3c7; }
+  .hs-empty { padding:14px; text-align:center; color:#666; font-size:12px; background:#fafafa; border-radius:6px; }
+
+  /* Strip mode (default) — horizontal scroll */
+  .hs-strip { display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding-bottom:6px; scroll-snap-type:x mandatory; }
+  .hs-strip::-webkit-scrollbar { height:6px; }
+  .hs-strip::-webkit-scrollbar-track { background:#fafafa; border-radius:3px; }
+  .hs-strip::-webkit-scrollbar-thumb { background:#fde68a; border-radius:3px; }
+  .hs-strip::-webkit-scrollbar-thumb:hover { background:#f59e0b; }
+  .hs-strip .hs-card { flex:0 0 300px; scroll-snap-align:start; }
+
+  /* Expanded mode — grid */
+  .hs-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:10px; }
+
+  /* Card */
+  .hs-card { background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px 14px; transition:all 0.15s; }
+  .hs-card:hover { border-color:#f59e0b; box-shadow:0 2px 8px rgba(245,158,11,0.18); }
+  .hs-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:6px; }
+  .hs-company { font-weight:700; color:var(--light-text); font-size:13px; line-height:1.3; }
+  .hs-score { background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:3px 8px; border-radius:10px; flex-shrink:0; white-space:nowrap; }
+  .hs-tag-row { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:6px; }
+  .hs-tag { background:#fff; border:1px solid #fde68a; color:#92400e; font-size:10px; font-weight:600; padding:2px 7px; border-radius:9px; }
+  .hs-tag.urgent { background:#fee2e2; border-color:#fecaca; color:#991b1b; }
+  .hs-pitch { font-size:11px; color:#444; line-height:1.4; margin-bottom:6px; font-style:italic; }
+  .hs-meta { font-size:10px; color:#666; margin-bottom:8px; line-height:1.4; }
   .hs-meta strong { color:#444; font-weight:600; }
-  .hs-actions { display:flex; gap:6px; flex-wrap:wrap; padding-top:10px; border-top:1px solid #fde68a; }
-  .hs-btn { background:#fff; border:1px solid #fde68a; color:#92400e; font-size:11px; font-weight:600; padding:6px 10px; border-radius:5px; cursor:pointer; transition:all 0.15s; flex:1; min-width:90px; text-align:center; }
-  .hs-btn:hover:not(:disabled) { background:#f59e0b; color:#fff; border-color:#f59e0b; }
-  .hs-btn:disabled { opacity:0.5; cursor:not-allowed; }
-  .hs-btn.primary { background:#f59e0b; color:#fff; border-color:#f59e0b; }
-  .hs-btn.primary:hover:not(:disabled) { background:#d97706; border-color:#d97706; }
-  .hs-btn.danger { color:#991b1b; border-color:#fecaca; }
-  .hs-btn.danger:hover:not(:disabled) { background:#dc2626; color:#fff; border-color:#dc2626; }
-  .hs-btn.sent { background:#10b981; color:#fff; border-color:#10b981; }
-  .hs-trigger { display:none; background:#1c1c1f; color:#fbbf24; font-family:'Courier New', monospace; font-size:11px; padding:8px 10px; border-radius:5px; margin-top:8px; cursor:pointer; word-break:break-all; }
-  .hs-trigger.show { display:block; }
-  .hs-trigger:hover { background:#000; }
-  .hs-trigger-label { font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px; }
+  .hs-actions { display:flex; gap:6px; padding-top:8px; border-top:1px solid #fde68a; }
+  .hs-btn { background:#f59e0b; color:#fff; border:none; font-size:11px; font-weight:600; padding:7px 10px; border-radius:5px; cursor:pointer; transition:all 0.15s; flex:1; text-align:center; }
+  .hs-btn:hover:not(:disabled) { background:#d97706; }
+  .hs-btn:disabled { opacity:0.6; cursor:not-allowed; }
+  .hs-btn.secondary { background:#fff; color:#991b1b; border:1px solid #fecaca; flex:0 0 auto; padding:7px 12px; }
+  .hs-btn.secondary:hover:not(:disabled) { background:#fee2e2; }
+  .hs-btn.enriched { background:#10b981; }
+
+  /* Amber theme on queue cards (for hiring_signals lead_source) */
+  .hs-amber-card { background:#fffbeb !important; border:1px solid #fde68a !important; border-left:4px solid #f59e0b !important; }
+  .hs-source-badge { background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+
+  /* Draft email tooltip on queue cards */
+  .hs-queue-actions { display:flex; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid #fde68a; position:relative; }
+  .hs-queue-btn { background:#f59e0b; color:#fff; border:none; font-size:12px; font-weight:600; padding:8px 14px; border-radius:5px; cursor:pointer; flex:1; transition:all 0.15s; }
+  .hs-queue-btn:hover:not(:disabled) { background:#d97706; }
+  .hs-queue-btn:disabled { opacity:0.6; cursor:not-allowed; }
+  .hs-queue-btn.sent { background:#10b981; }
+  .hs-queue-btn.outline { background:#fff; color:#92400e; border:1px solid #fde68a; }
+  .hs-queue-btn.outline:hover:not(:disabled) { background:#fef3c7; }
   .hs-draft-preview { display:none; position:absolute; bottom:calc(100% + 8px); left:0; right:0; background:#1c1c1f; color:#e8e8e8; border:1px solid #f59e0b; border-radius:8px; padding:14px; box-shadow:0 8px 24px rgba(0,0,0,0.3); z-index:50; font-size:12px; line-height:1.5; max-height:300px; overflow-y:auto; }
-  .hs-card:hover .hs-draft-preview.has-draft { display:block; }
+  .hs-queue-actions:hover .hs-draft-preview.has-draft { display:block; }
   .hs-draft-subject { font-weight:700; color:#f59e0b; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #333; }
   .hs-draft-body { white-space:pre-wrap; font-family:'Segoe UI', system-ui, sans-serif; }
   .hs-draft-loading { color:#999; font-style:italic; }
-  .hs-amber-card { background:#fffbeb !important; border:1px solid #fde68a !important; border-left:4px solid #f59e0b !important; }
-  .hs-source-badge { background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
 
   /* ═══════════════════════ SALES INTEL TAB ═══════════════════════ */
   #tabSales {
@@ -507,16 +525,21 @@
       </div>
     </div>
 
-    <!-- ══════════ HIRING SIGNALS — Companies Awaiting Retrieval ══════════ -->
+    <!-- HIRING SIGNALS — Immediate action only -->
     <div class="hs-section" id="hsSection" style="display:none;">
-      <div class="hs-section-header">
-        <div>
-          <div class="hs-section-title">Hiring Signals — Companies Awaiting Retrieval</div>
-          <div class="hs-section-sub">Approved BD signals waiting on contact retrieval. Copy the trigger phrase and run it in Claude.</div>
+      <div class="hs-header">
+        <div class="hs-header-left">
+          <div>
+            <div class="hs-title">Hiring Signals — Take Action Now</div>
+            <div class="hs-sub">Immediate-priority signals. Click Enrich Contacts to pull contacts into queue.</div>
+          </div>
         </div>
-        <span class="hs-count" id="hsCount">0 PENDING</span>
+        <div class="hs-header-left">
+          <span class="hs-count" id="hsCount">0 IMMEDIATE</span>
+          <button class="hs-toggle-btn" id="hsToggleBtn" onclick="hsToggleView()">⊞ Expand</button>
+        </div>
       </div>
-      <div id="hsList">
+      <div id="hsContainer" class="hs-strip">
         <div class="hs-empty">Loading hiring signals…</div>
       </div>
     </div>
@@ -850,66 +873,37 @@ const ENRICH_WEBHOOK = 'https://hook.us2.make.com/9et4dubq18kst3vibqkiunmhjrt4ng
 let queueContacts = [];
 
 // ═══════════════════════════════════════════
-// HIRING SIGNALS — Awaiting Retrieval + Email Drafting
+// HIRING SIGNALS
 // ═══════════════════════════════════════════
-const HS_PENDING_FETCH  = 'https://hook.us2.make.com/REPLACE_pending_retrieval_fetch';
-const HS_DRAFT_EMAIL    = 'https://hook.us2.make.com/0xpttva4xkzzq9bo3gafpb4r2ytwunyj';
-const HS_SEND_OUTLOOK   = 'https://hook.us2.make.com/gxwjwb3suti31c9ujqh84wx7597nfttt';
-const HS_BLOCK_COMPANY  = 'https://hook.us2.make.com/REPLACE_block_company';
+const HS_PENDING_FETCH = 'https://hook.us2.make.com/REPLACE_pending_retrieval_fetch';
+const HS_ENRICH_CONTACTS = 'https://hook.us2.make.com/REPLACE_enrich_zoominfo';
+const HS_DRAFT_EMAIL = 'https://hook.us2.make.com/0xpttva4xkzzq9bo3gafpb4r2ytwunyj';
+const HS_SEND_OUTLOOK = 'https://hook.us2.make.com/gxwjwb3suti31c9ujqh84wx7597nfttt';
+const HS_BLOCK_COMPANY = 'https://hook.us2.make.com/REPLACE_block_company';
 
 let hsRecords = [];
-let hsDrafts = {}; // cache: queue_key -> {subject, body}
+let hsViewMode = 'strip'; // 'strip' or 'grid'
+let hsDrafts = {};
 
 async function loadHiringSignals() {
   const section = document.getElementById('hsSection');
-  const list = document.getElementById('hsList');
-  if (!section || !list) return;
+  const container = document.getElementById('hsContainer');
+  if (!section || !container) return;
 
-  // ═══ PREVIEW MODE: hardcoded mock data so you can see the UI ═══
+  // ═══ PREVIEW MODE: hardcoded mock data ═══
   // Remove this block when HS_PENDING_FETCH webhook is live
-  hsRecords = [
-    {
-      key: 'queue_signal-003_stellantis',
-      signal_key: 'signal-003',
-      company_name: 'Stellantis Windsor Assembly',
-      signal_tag: 'Q3 Changeover Window',
-      pitch_angle: 'Q3 changeover ramp coming. Pre-source skilled trades before posting hits.',
-      target_titles: 'Plant Manager, HR Manager, Production Supervisor',
-      urgency: 'immediate',
-      score: 92,
-      trigger_phrase: 'retrieve contacts for signal-003'
-    },
-    {
-      key: 'queue_signal-007_formet',
-      signal_key: 'signal-007',
-      company_name: 'Formet Industries — Strathroy',
-      signal_tag: 'Leadership Change — New Plant Manager',
-      pitch_angle: 'New PM reassessing all vendors. 30-day window before staffing relationships lock in.',
-      target_titles: 'Plant Manager, HR Director',
-      urgency: 'immediate',
-      score: 87,
-      trigger_phrase: 'retrieve contacts for signal-007'
-    },
-    {
-      key: 'queue_signal-012_essexauto',
-      signal_key: 'signal-012',
-      company_name: 'Essex Autoparts — Windsor',
-      signal_tag: 'QM Role Unfilled 28+ Days',
-      pitch_angle: 'Adecco on site failing to fill. Direct alternative pitch — quality containment expertise.',
-      target_titles: 'HR Manager, Quality Manager',
-      urgency: 'pipeline',
-      score: 74,
-      trigger_phrase: 'retrieve contacts for signal-012'
-    }
+  const mockData = [
+    { signal_key: 'signal-003', company_name: 'Stellantis Windsor Assembly', signal_tag: 'Q3 Changeover Window', pitch_angle: 'Q3 changeover ramp coming. Pre-source skilled trades before posting hits.', target_titles: 'Plant Manager, HR Manager', urgency: 'immediate', score: 92 },
+    { signal_key: 'signal-007', company_name: 'Formet Industries — Strathroy', signal_tag: 'Leadership Change — New Plant Manager', pitch_angle: 'New PM reassessing all vendors. 30-day window before staffing relationships lock in.', target_titles: 'Plant Manager, HR Director', urgency: 'immediate', score: 87 },
+    { signal_key: 'signal-012', company_name: 'Essex Autoparts — Windsor', signal_tag: 'QM Role Unfilled 28+ Days', pitch_angle: 'Adecco failing on site. Direct alternative — quality containment expertise.', target_titles: 'HR Manager, Quality Manager', urgency: 'immediate', score: 78 },
+    { signal_key: 'signal-018', company_name: 'NextStar Energy — Windsor', signal_tag: 'Line 3 Q3 Commissioning', pitch_angle: 'Line 3 going live. 15-25 quality containment roles needed.', target_titles: 'HR Manager, Quality Manager, Operations Manager', urgency: 'immediate', score: 95 },
+    // Pipeline examples — should be filtered out, won't appear:
+    { signal_key: 'signal-021', company_name: 'Magna Windsor', signal_tag: 'EV Tooling Phase 2 (Jul)', pitch_angle: 'Future expansion. Build relationship now.', target_titles: 'Plant Manager', urgency: 'pipeline', score: 64 }
   ];
-  section.style.display = 'block';
-  renderHiringSignals();
+  hsRecords = mockData;
+  hsRender();
   return;
   // ═══ END PREVIEW MODE ═══
-
-  // Show section as loading (will hide if no records)
-  section.style.display = 'block';
-  list.innerHTML = '<div class="hs-empty">Loading hiring signals…</div>';
 
   try {
     const res = await fetch(HS_PENDING_FETCH, { method: 'GET' });
@@ -917,7 +911,7 @@ async function loadHiringSignals() {
     const text = await res.text();
     let json;
     try { json = JSON.parse(text); } catch(e) {
-      console.warn('[HS] Response not JSON, hiding section. Raw:', text.slice(0, 200));
+      console.warn('[HS] Response not JSON, hiding section');
       section.style.display = 'none';
       return;
     }
@@ -926,132 +920,128 @@ async function loadHiringSignals() {
       const row = (r && r.aggregate) ? r.aggregate : r;
       const d = (row && row.data) ? row.data : row;
       return { ...d, key: (row && row.key) || (d && d.key) || '' };
-    }).filter(r => r && (r.company_name || r.signal_key));
-
+    }).filter(r => r && r.company_name);
     hsRecords = records;
-    renderHiringSignals();
-
-    if (!records.length) {
-      // Hide entirely if nothing pending — don't clutter the queue
-      section.style.display = 'none';
-    }
+    hsRender();
   } catch (e) {
     console.error('[HS] loadHiringSignals error:', e);
-    // Hide on error — don't block the queue
     section.style.display = 'none';
   }
 }
 
-function renderHiringSignals() {
-  const list = document.getElementById('hsList');
+function hsRender() {
+  const section = document.getElementById('hsSection');
+  const container = document.getElementById('hsContainer');
   const count = document.getElementById('hsCount');
-  if (!list) return;
+  if (!section || !container) return;
 
-  if (count) count.textContent = `${hsRecords.length} PENDING`;
+  // FILTER: only show IMMEDIATE urgency in this section
+  const immediate = hsRecords.filter(r => (r.urgency || '').toLowerCase() === 'immediate');
 
-  if (!hsRecords.length) {
-    list.innerHTML = '<div class="hs-empty">No hiring signals awaiting retrieval.</div>';
+  if (count) count.textContent = `${immediate.length} IMMEDIATE`;
+
+  // Hide entirely if nothing immediate to act on
+  if (!immediate.length) {
+    section.style.display = 'none';
     return;
   }
+  section.style.display = 'block';
 
-  list.innerHTML = '<div class="hs-grid">' + hsRecords.map((r, i) => {
-    const company = r.company_name || 'Unknown company';
+  // Sort by score desc
+  const sorted = [...immediate].sort((a, b) => (b.score || 0) - (a.score || 0));
+
+  // Set container class based on view mode
+  container.className = hsViewMode === 'strip' ? 'hs-strip' : 'hs-grid';
+
+  container.innerHTML = sorted.map((r, i) => {
+    const company = r.company_name || 'Unknown';
     const signalKey = r.signal_key || r.key || '';
     const signalTag = r.signal_tag || '';
     const pitch = r.pitch_angle || '';
     const titles = r.target_titles || '';
-    const urgency = (r.urgency || 'pipeline').toLowerCase();
     const score = r.score || '';
-    const triggerPhrase = r.trigger_phrase || `retrieve contacts for ${signalKey}`;
 
     return `
-      <div class="hs-card" data-idx="${i}">
+      <div class="hs-card" data-key="${escapeAttr(signalKey)}">
         <div class="hs-card-top">
           <div class="hs-company">${escapeHtml(company)}</div>
-          ${score ? `<div class="hs-score">${escapeHtml(String(score))}</div>` : ''}
+          ${score ? `<div class="hs-score">Lead Score: ${escapeHtml(String(score))}</div>` : ''}
         </div>
         <div class="hs-tag-row">
-          <span class="hs-tag urgency-${urgency}">${escapeHtml(urgency.toUpperCase())}</span>
+          <span class="hs-tag urgent">IMMEDIATE</span>
           ${signalTag ? `<span class="hs-tag">${escapeHtml(signalTag)}</span>` : ''}
         </div>
         ${pitch ? `<div class="hs-pitch">"${escapeHtml(pitch)}"</div>` : ''}
         <div class="hs-meta">
-          ${titles ? `<strong>Target titles:</strong> ${escapeHtml(titles)}<br>` : ''}
-          ${signalKey ? `<strong>Signal key:</strong> ${escapeHtml(signalKey)}` : ''}
+          ${titles ? `<strong>Target titles:</strong> ${escapeHtml(titles)}` : ''}
         </div>
         <div class="hs-actions">
-          <button class="hs-btn primary" onclick="hsCopyTrigger(${i}, this)">📋 Copy Trigger</button>
-          <button class="hs-btn danger" onclick="hsBlockCompany(${i}, this)">🚫 Block</button>
-        </div>
-        <div class="hs-trigger" id="hsTrig${i}" onclick="hsCopyToClipboard('${escapeAttr(triggerPhrase)}', this)">
-          <div class="hs-trigger-label">Click to copy:</div>
-          ${escapeHtml(triggerPhrase)}
+          <button class="hs-btn" onclick="hsEnrichContacts('${escapeAttr(signalKey)}', this)">⚡ Enrich Contacts</button>
+          <button class="hs-btn secondary" onclick="hsBlockCompany('${escapeAttr(signalKey)}', '${escapeAttr(company)}', this)" title="Block this company">🚫</button>
         </div>
       </div>
     `;
-  }).join('') + '</div>';
+  }).join('');
 }
 
-function hsCopyTrigger(idx, btn) {
-  const r = hsRecords[idx];
-  if (!r) return;
-  const trigger = r.trigger_phrase || `retrieve contacts for ${r.signal_key || r.key}`;
-  hsCopyToClipboard(trigger, btn);
-  // Also reveal the trigger box so they can re-copy
-  const trigEl = document.getElementById('hsTrig' + idx);
-  if (trigEl) trigEl.classList.add('show');
+function hsToggleView() {
+  hsViewMode = hsViewMode === 'strip' ? 'grid' : 'strip';
+  const btn = document.getElementById('hsToggleBtn');
+  if (btn) btn.textContent = hsViewMode === 'strip' ? '⊞ Expand' : '☰ Collapse';
+  hsRender();
 }
 
-function hsCopyToClipboard(text, btn) {
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(() => {
-      if (btn) {
-        const orig = btn.textContent;
-        btn.textContent = '✓ Copied';
-        setTimeout(() => { btn.textContent = orig; }, 1500);
-      }
-    }).catch(err => {
-      console.error('[HS] Clipboard error:', err);
-      alert('Copy failed — manually copy: ' + text);
+async function hsEnrichContacts(signalKey, btn) {
+  if (!signalKey) return;
+  if (!confirm('Enrich contacts for this signal?\n\nThis will pull HR Manager, Plant Manager, etc. from ZoomInfo and add them to the Approval Queue below.')) return;
+
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Enriching…';
+
+  try {
+    const res = await fetch(HS_ENRICH_CONTACTS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signal_key: signalKey })
     });
-  } else {
-    // Fallback
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy'); } catch(e) {}
-    document.body.removeChild(ta);
-    if (btn) {
-      const orig = btn.textContent;
-      btn.textContent = '✓ Copied';
-      setTimeout(() => { btn.textContent = orig; }, 1500);
-    }
+    if (!res.ok) throw new Error('Enrich failed: ' + res.status);
+
+    btn.textContent = '✓ Enriched';
+    btn.classList.add('enriched');
+
+    // Refresh the queue after a brief delay so new contacts show up
+    setTimeout(() => {
+      // Remove this signal from the local list (it's been processed)
+      hsRecords = hsRecords.filter(r => (r.signal_key || r.key) !== signalKey);
+      hsRender();
+      // Reload queue to pick up new contacts
+      initQueue();
+    }, 1500);
+  } catch (e) {
+    console.error('[HS] Enrich error:', e);
+    btn.disabled = false;
+    btn.textContent = orig;
+    alert('Enrichment failed: ' + e.message + '\n\nCheck Make scenario logs.');
   }
 }
 
-async function hsBlockCompany(idx, btn) {
-  const r = hsRecords[idx];
-  if (!r) return;
-  const company = r.company_name;
-  if (!confirm(`Block ${company} and remove from pipeline?\n\nAdds to elevate_excluded_companies datastore.`)) return;
+async function hsBlockCompany(signalKey, company, btn) {
+  if (!confirm(`Block "${company}" and remove from pipeline?`)) return;
   btn.disabled = true;
-  btn.textContent = 'Blocking…';
+  btn.textContent = '…';
   try {
-    const res = await fetch(HS_BLOCK_COMPANY, {
+    await fetch(HS_BLOCK_COMPANY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company_name: company, signal_key: r.signal_key || r.key, reason: 'Manual block from dashboard' })
+      body: JSON.stringify({ company_name: company, signal_key: signalKey, reason: 'Blocked from dashboard' })
     });
-    if (!res.ok) throw new Error('Block failed: ' + res.status);
-    btn.textContent = '✓ Blocked';
-    // Remove from local list
-    hsRecords.splice(idx, 1);
-    setTimeout(() => renderHiringSignals(), 800);
+    hsRecords = hsRecords.filter(r => (r.signal_key || r.key) !== signalKey);
+    hsRender();
   } catch (e) {
     console.error('[HS] Block error:', e);
     btn.disabled = false;
-    btn.textContent = '🚫 Block';
+    btn.textContent = '🚫';
     alert('Block failed: ' + e.message);
   }
 }
@@ -1059,7 +1049,6 @@ async function hsBlockCompany(idx, btn) {
 // Called from queue cards (lead_source = hiring_signals)
 async function hsDraftEmail(queueKey, btn, cardEl) {
   if (!queueKey) return;
-  // Check cache first
   if (hsDrafts[queueKey]) {
     hsShowDraftPreview(cardEl, hsDrafts[queueKey]);
     return;
@@ -1069,10 +1058,7 @@ async function hsDraftEmail(queueKey, btn, cardEl) {
     previewEl.classList.add('has-draft');
     previewEl.innerHTML = '<div class="hs-draft-loading">Drafting email with Claude…</div>';
   }
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Drafting…';
-  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Drafting…'; }
   try {
     const url = `${HS_DRAFT_EMAIL}?queue_key=${encodeURIComponent(queueKey)}`;
     const res = await fetch(url, { method: 'GET' });
@@ -1080,27 +1066,17 @@ async function hsDraftEmail(queueKey, btn, cardEl) {
     const text = await res.text();
     let draft;
     try { draft = JSON.parse(text); } catch(e) {
-      // Drafter may return SUBJECT:\nBODY: format
       const subjectMatch = text.match(/SUBJECT:\s*(.+)/i);
       const bodyMatch = text.match(/BODY:\s*([\s\S]+)/i);
-      draft = {
-        subject: subjectMatch ? subjectMatch[1].trim() : 'Quick question',
-        body: bodyMatch ? bodyMatch[1].trim() : text
-      };
+      draft = { subject: subjectMatch ? subjectMatch[1].trim() : 'Quick question', body: bodyMatch ? bodyMatch[1].trim() : text };
     }
     hsDrafts[queueKey] = draft;
     hsShowDraftPreview(cardEl, draft);
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = '✉ Draft ready';
-    }
+    if (btn) { btn.disabled = false; btn.textContent = '✉ Draft ready'; }
   } catch (e) {
     console.error('[HS] Draft error:', e);
     if (previewEl) previewEl.innerHTML = '<div class="hs-draft-loading">Error: ' + e.message + '</div>';
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = '✉ Draft Email';
-    }
+    if (btn) { btn.disabled = false; btn.textContent = '✉ Draft Email'; }
   }
 }
 
@@ -1166,66 +1142,52 @@ async function initQueue() {
 
     console.log('[Queue Fetch] contacts extracted:', contacts.length);
 
+    // ═══ PREVIEW MODE: prepare mock hiring_signals contact ═══
+    // Remove this helper when real hiring_signals contacts flow through
+    function hsMockContact() {
+      return {
+        key: 'mock_hs_001',
+        lead_source: 'hiring_signals',
+        contact_name: 'Mike Tremblay',
+        contact_title: 'Plant Manager',
+        company_name: 'Stellantis Windsor Assembly',
+        company_industry: 'Automotive Tier 1',
+        employee_count: '4500',
+        contact_city: 'Windsor',
+        contact_state: 'ON',
+        contact_linkedin: 'https://www.linkedin.com/in/example',
+        persona: 'Operations Decision Maker',
+        signal_tag: 'Q3 Changeover Window — Skilled Trades Surge',
+        pitch_angle: 'Q3 changeover ramp coming. Pre-source skilled trades before posting hits.',
+        contact_exists_in_rcrm: false,
+        is_client: false,
+        buying_signal: 'high',
+        email_draft_subject: 'Quick question about your Q3 trades ramp',
+        email_draft_body: 'Hi Mike,\n\nNoticed Stellantis Windsor is heading into changeover season in 6-8 weeks. Most plants in the corridor are scrambling for skilled trades right when the line goes down.\n\nElevate has pre-sourced trades benches we can deploy on short notice for changeover work — no agency markup games.\n\nWorth a 15-minute call next week?\n\nTravis',
+        email_status: '',
+        _approved: true
+      };
+    }
+    // ═══ END PREVIEW MODE ═══
+
     if (!contacts.length) {
-      // ═══ PREVIEW MODE: still show mock card even if queue empty ═══
-      queueContacts = [];
-      injectMockHiringSignalContact();
+      // PREVIEW: show mock card even if queue is empty
+      queueContacts = [hsMockContact()];
       renderQueue();
       if (toolbar) toolbar.style.display = 'flex';
       return;
-      // ═══ END PREVIEW MODE ═══
-      // list.innerHTML = '<div class="empty-queue"><p>No contacts pending approval.</p><small>New contacts will appear here after the ZoomInfo intake pipeline runs.</small></div>';
-      // renderQueueStats([]);
-      // return;
     }
 
     // Default: approve non-clients, decline clients (clients shouldn't be re-contacted)
     queueContacts = contacts.map(c => ({ ...c, _approved: !c.is_client }));
-
-    // ═══ PREVIEW MODE: prepend mock hiring_signals contact ═══
-    // Remove this block when real hiring_signals contacts are flowing through
-    injectMockHiringSignalContact();
-    // ═══ END PREVIEW MODE ═══
-
+    // PREVIEW: prepend mock hiring_signals contact
+    queueContacts.unshift(hsMockContact());
     renderQueue();
     if (toolbar) toolbar.style.display = 'flex';
   } catch (e) {
     console.error('initQueue error:', e);
-    // Even on error, show mock card so you can see the UI
-    queueContacts = [];
-    injectMockHiringSignalContact();
-    renderQueue();
-    if (toolbar) toolbar.style.display = 'flex';
-    return;
-    // (Original error UI disabled in preview mode)
-    // list.innerHTML = '<div class="empty-queue"><p>Could not load queue.</p><small>' + (e.message || 'Unknown error') + ' — check that Queue Fetch scenario is active in Make.</small></div>';
+    list.innerHTML = '<div class="empty-queue"><p>Could not load queue.</p><small>' + (e.message || 'Unknown error') + ' — check that Queue Fetch scenario is active in Make.</small></div>';
   }
-}
-
-// PREVIEW HELPER — remove with the rest of preview mode
-function injectMockHiringSignalContact() {
-  queueContacts.unshift({
-    key: 'mock_hs_001',
-    lead_source: 'hiring_signals',
-    contact_name: 'Mike Tremblay',
-    contact_title: 'Plant Manager',
-    company_name: 'Stellantis Windsor Assembly',
-    company_industry: 'Automotive Tier 1',
-    employee_count: '4500',
-    contact_city: 'Windsor',
-    contact_state: 'ON',
-    contact_linkedin: 'https://www.linkedin.com/in/example',
-    persona: 'Operations Decision Maker',
-    signal_tag: 'Q3 Changeover Window — Skilled Trades Surge',
-    pitch_angle: 'Q3 changeover ramp coming. Pre-source skilled trades before posting hits.',
-    contact_exists_in_rcrm: false,
-    is_client: false,
-    buying_signal: 'high',
-    email_draft_subject: 'Quick question about your Q3 trades ramp',
-    email_draft_body: 'Hi Mike,\n\nNoticed Stellantis Windsor is heading into changeover season in 6-8 weeks. Most plants in the corridor are scrambling for skilled trades right when the line goes down.\n\nElevate has pre-sourced trades benches we can deploy on short notice for changeover work — no agency markup games.\n\nWorth a 15-minute call next week?\n\nTravis',
-    email_status: '',
-    _approved: true
-  });
 }
 
 function renderQueue() {
@@ -1298,12 +1260,12 @@ function renderQueue() {
           ${isHiringSignal && c.pitch_angle ? `<div class="contact-meta-item" style="color:#92400e;"><strong>Pitch:</strong> ${escapeHtml(c.pitch_angle)}</div>` : ''}
         </div>
         ${isHiringSignal ? `
-        <div class="hs-actions" style="margin-top:10px; position:relative;">
-          <button class="hs-btn primary" onmouseenter="hsDraftEmail('${escapeAttr(queueKey)}', this, this.closest('.contact-card'))" onclick="hsDraftEmail('${escapeAttr(queueKey)}', this, this.closest('.contact-card'))">${c.email_draft_body ? '✉ Draft ready' : '✉ Draft Email'}</button>
-          <button class="hs-btn ${emailSent ? 'sent' : ''}" ${emailSent ? 'disabled' : ''} onclick="hsSendOutlook('${escapeAttr(queueKey)}', this)">${emailSent ? '✓ Sent ' + (c.sent_at || '') : 'Send via Outlook'}</button>
+        <div class="hs-queue-actions">
+          <button class="hs-queue-btn outline" onmouseenter="hsDraftEmail('${escapeAttr(queueKey)}', this, this.closest('.contact-card'))" onclick="hsDraftEmail('${escapeAttr(queueKey)}', this, this.closest('.contact-card'))">${c.email_draft_body ? '✉ Draft ready (hover to view)' : '✉ Draft Email'}</button>
+          <button class="hs-queue-btn ${emailSent ? 'sent' : ''}" ${emailSent ? 'disabled' : ''} onclick="hsSendOutlook('${escapeAttr(queueKey)}', this)">${emailSent ? '✓ Sent' : 'Send via Outlook'}</button>
           <div class="hs-draft-preview ${c.email_draft_body ? 'has-draft' : ''}">
             ${c.email_draft_subject ? `<div class="hs-draft-subject">Subject: ${escapeHtml(c.email_draft_subject)}</div>` : ''}
-            ${c.email_draft_body ? `<div class="hs-draft-body">${escapeHtml(c.email_draft_body)}</div>` : '<div class="hs-draft-loading">Hover to draft email…</div>'}
+            ${c.email_draft_body ? `<div class="hs-draft-body">${escapeHtml(c.email_draft_body)}</div>` : '<div class="hs-draft-loading">Hover Draft Email to generate…</div>'}
           </div>
         </div>` : ''}
         ${c.about_company ? `<div class="about-company-box">📋 ${escapeHtml(c.about_company)}</div>` : `
