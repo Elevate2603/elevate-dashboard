@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0504-HS-V6-LIVE -->
+<!-- ELEVATE-2026-0504-HS-V7 -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -976,7 +976,6 @@ function hsToggleView() {
 
 async function hsEnrichContacts(signalKey, btn) {
   if (!signalKey) return;
-  if (!confirm('Enrich contacts for this signal?\n\nThis will pull HR Manager, Plant Manager, etc. from ZoomInfo and add them to the Approval Queue below.')) return;
 
   const orig = btn.textContent;
   btn.disabled = true;
