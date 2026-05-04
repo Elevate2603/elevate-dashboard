@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0504-HS-V4 -->
+<!-- ELEVATE-2026-0504-HS-V5-LIVE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -876,11 +876,11 @@ let queueContacts = [];
 // ═══════════════════════════════════════════
 // HIRING SIGNALS
 // ═══════════════════════════════════════════
-const HS_PENDING_FETCH = 'https://hook.us2.make.com/REPLACE_pending_retrieval_fetch';
-const HS_ENRICH_CONTACTS = 'https://hook.us2.make.com/REPLACE_enrich_zoominfo';
+const HS_PENDING_FETCH = 'https://hook.us2.make.com/u5omv41orexphg4nxldq6f3vvxp67ygu';
+const HS_ENRICH_CONTACTS = 'https://hook.us2.make.com/iqkiwyns3ty8wogwt76iv4ege8r1oy92';
 const HS_DRAFT_EMAIL = 'https://hook.us2.make.com/0xpttva4xkzzq9bo3gafpb4r2ytwunyj';
 const HS_SEND_OUTLOOK = 'https://hook.us2.make.com/gxwjwb3suti31c9ujqh84wx7597nfttt';
-const HS_BLOCK_COMPANY = 'https://hook.us2.make.com/REPLACE_block_company';
+const HS_BLOCK_COMPANY = 'https://hook.us2.make.com/5swlieiof69o7wyvasx1nnhrk1no2y1v';
 
 let hsRecords = [];
 let hsViewMode = 'strip'; // 'strip' or 'grid'
@@ -890,21 +890,6 @@ async function loadHiringSignals() {
   const section = document.getElementById('hsSection');
   const container = document.getElementById('hsContainer');
   if (!section || !container) return;
-
-  // ═══ PREVIEW MODE: hardcoded mock data ═══
-  // Remove this block when HS_PENDING_FETCH webhook is live
-  const mockData = [
-    { signal_key: 'signal-003', company_name: 'Stellantis Windsor Assembly', signal_tag: 'Q3 Changeover Window', pitch_angle: 'Q3 changeover ramp coming. Pre-source skilled trades before posting hits.', target_titles: 'Plant Manager, HR Manager', urgency: 'immediate', score: 92 },
-    { signal_key: 'signal-007', company_name: 'Formet Industries — Strathroy', signal_tag: 'Leadership Change — New Plant Manager', pitch_angle: 'New PM reassessing all vendors. 30-day window before staffing relationships lock in.', target_titles: 'Plant Manager, HR Director', urgency: 'immediate', score: 87 },
-    { signal_key: 'signal-012', company_name: 'Essex Autoparts — Windsor', signal_tag: 'QM Role Unfilled 28+ Days', pitch_angle: 'Adecco failing on site. Direct alternative — quality containment expertise.', target_titles: 'HR Manager, Quality Manager', urgency: 'immediate', score: 78 },
-    { signal_key: 'signal-018', company_name: 'NextStar Energy — Windsor', signal_tag: 'Line 3 Q3 Commissioning', pitch_angle: 'Line 3 going live. 15-25 quality containment roles needed.', target_titles: 'HR Manager, Quality Manager, Operations Manager', urgency: 'immediate', score: 95 },
-    // Pipeline examples — should be filtered out, won't appear:
-    { signal_key: 'signal-021', company_name: 'Magna Windsor', signal_tag: 'EV Tooling Phase 2 (Jul)', pitch_angle: 'Future expansion. Build relationship now.', target_titles: 'Plant Manager', urgency: 'pipeline', score: 64 }
-  ];
-  hsRecords = mockData;
-  hsRender();
-  return;
-  // ═══ END PREVIEW MODE ═══
 
   try {
     const res = await fetch(HS_PENDING_FETCH, { method: 'GET' });
@@ -1166,46 +1151,14 @@ async function initQueue() {
 
     console.log('[Queue Fetch] contacts extracted:', contacts.length);
 
-    // ═══ PREVIEW MODE: prepare mock hiring_signals contact ═══
-    // Remove this helper when real hiring_signals contacts flow through
-    function hsMockContact() {
-      return {
-        key: 'mock_hs_001',
-        lead_source: 'hiring_signals',
-        contact_name: 'Mike Tremblay',
-        contact_title: 'Plant Manager',
-        company_name: 'Stellantis Windsor Assembly',
-        company_industry: 'Automotive Tier 1',
-        employee_count: '4500',
-        contact_city: 'Windsor',
-        contact_state: 'ON',
-        contact_linkedin: 'https://www.linkedin.com/in/example',
-        persona: 'Operations Decision Maker',
-        signal_tag: 'Q3 Changeover Window — Skilled Trades Surge',
-        pitch_angle: 'Q3 changeover ramp coming. Pre-source skilled trades before posting hits.',
-        contact_exists_in_rcrm: false,
-        is_client: false,
-        buying_signal: 'high',
-        email_draft_subject: 'Quick question about your Q3 trades ramp',
-        email_draft_body: 'Hi Mike,\n\nNoticed Stellantis Windsor is heading into changeover season in 6-8 weeks. Most plants in the corridor are scrambling for skilled trades right when the line goes down.\n\nElevate has pre-sourced trades benches we can deploy on short notice for changeover work — no agency markup games.\n\nWorth a 15-minute call next week?\n\nTravis',
-        email_status: '',
-        _approved: true
-      };
-    }
-    // ═══ END PREVIEW MODE ═══
-
     if (!contacts.length) {
-      // PREVIEW: show mock card even if queue is empty
-      queueContacts = [hsMockContact()];
-      renderQueue();
+      list.innerHTML = '<div class="empty-queue"><p>Queue is empty.</p><small>Click Enrich on a Hiring Signal above to populate.</small></div>';
       if (toolbar) toolbar.style.display = 'flex';
       return;
     }
 
     // Default: approve non-clients, decline clients (clients shouldn't be re-contacted)
     queueContacts = contacts.map(c => ({ ...c, _approved: !c.is_client }));
-    // PREVIEW: prepend mock hiring_signals contact
-    queueContacts.unshift(hsMockContact());
     renderQueue();
     if (toolbar) toolbar.style.display = 'flex';
   } catch (e) {
