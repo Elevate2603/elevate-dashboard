@@ -86,7 +86,7 @@
 
 [CONFIRMED] Dashboard has 5 tabs: Approval Queue, Sales Intelligence, AI Sourcing, CSV Import, Settings | tags: dashboard, architecture
 [CONFIRMED] buildPayload(c) is the SINGLE source of truth for dashboard → Approval Handler payload — must be called by both submitOne() and submitQueue() | tags: dashboard, critical, pattern
-[CONFIRMED] buildPayload must include all 22 fields: key, decision, sequence_id, contact_slug, contact_email, contact_name, contact_title, contact_phone, contact_mobile, contact_linkedin, contact_city, contact_state, contact_country, company_name, company_industry, company_website, company_address, employee_count, annual_revenue, persona, sequence_name, data_collection_source | tags: dashboard, critical, payload
+[CONFIRMED] buildPayload includes 25 fields as of build ELEVATE-2026-0520-B: the 22 spec fields (key, decision, sequence_id, contact_slug, contact_email, contact_name, contact_title, contact_phone, contact_mobile, contact_linkedin, contact_city, contact_state, contact_country, company_name, company_industry, company_website, company_address, employee_count, annual_revenue, persona, sequence_name, data_collection_source) plus 3 extras (company_linkedin, buying_signal, about_company). CLAUDE.md still lists 22 — extras are in code but not yet promoted to spec | tags: dashboard, critical, payload
 [WARNING] Divergent inline payloads in submitOne() vs submitQueue() is the root cause pattern when fields don't reach RCRM — always check buildPayload first before debugging downstream scenarios | tags: dashboard, critical, debugging
 [CONFIRMED] Sales Intelligence tab calls Anthropic API directly using model claude-sonnet-4-6 with web search tool | tags: dashboard, anthropic, ai
 [WARNING] Anthropic API key is hardcoded in live index.html — security debt, needs Netlify function proxy | tags: dashboard, security, tech-debt
@@ -132,7 +132,7 @@
 ## Historical Debug Lessons
 
 [CONFIRMED] 2026-04-30: Rob Davidson and similar contacts came through with no phone/LinkedIn/website because buildPayload was missing 10 fields — divergent inline payloads in submitOne vs submitQueue | tags: history, debugging, dashboard
-[CONFIRMED] 2026-05-20: buildPayload(c) shared function patched into index.html with all 22 fields, called by both submitOne() and submitQueue() | tags: history, dashboard, fix
+[CONFIRMED] 2026-05-20: buildPayload(c) shared function actually shipped in commit d68bf01 (build ELEVATE-2026-0520-B-BUILDPAYLOAD25) with 25 fields, called by both submitOne() and submitQueue(), deploy verified via live HTML fetch from elevate-sales-nav.netlify.app. NOTE: an earlier handoff claimed this was patched same-day but the function was never actually present in index.html — both call sites had divergent inline payload objects in sync by coincidence only. The structural fix landed today | tags: history, dashboard, fix
 [CONFIRMED] Scenario A null-email filter added at Module 3 to block ZoomInfo records with no email | tags: history, scenario-a, fix
 [CONFIRMED] Scenario A Module 18 uses only {{21.data.slug}} from create response — broken ifempty fallback removed | tags: history, scenario-a, fix
 [CONFIRMED] Scenario C Module 99 (UpdateRecord for decision audit) must be at position 2 immediately after webhook, not at end of flow, due to bundle propagation rules | tags: history, scenario-c, architecture
