@@ -38,8 +38,13 @@ The dashboard is a single `index.html` file with 5 tabs:
 
 `buildPayload(c)` in `index.html` builds the JSON body sent to the Approval Handler webhook. It MUST be called by both `submitOne()` and `submitQueue()` — divergent inline payloads were the root cause of contacts coming through with missing phone/LinkedIn/city/etc.
 
-The 22 fields buildPayload must include:
+The 25 fields buildPayload must include — 22 core spec fields plus 3 extras carried in current builds:
+
+**Core 22 (required):**
 `key`, `decision`, `sequence_id`, `contact_slug`, `contact_email`, `contact_name`, `contact_title`, `contact_phone`, `contact_mobile`, `contact_linkedin`, `contact_city`, `contact_state`, `contact_country`, `company_name`, `company_industry`, `company_website`, `company_address`, `employee_count`, `annual_revenue`, `persona`, `sequence_name`, `data_collection_source`
+
+**Extras (3, currently shipped in build ELEVATE-2026-0520-B-BUILDPAYLOAD25):**
+`company_linkedin`, `buying_signal`, `about_company`
 
 When debugging "field X didn't reach RCRM," verify buildPayload first before touching downstream scenarios.
 
