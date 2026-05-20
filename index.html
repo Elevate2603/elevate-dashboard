@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0504-HS-V7 -->
+<!-- ELEVATE-2026-0520-A-PAYLOAD24 -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1314,11 +1314,24 @@ async function submitOne(idx) {
     contact_email: c.contact_email || '',
     contact_name: c.contact_name || '',
     contact_title: c.contact_title || '',
+    contact_phone: c.contact_phone || '',
+    contact_mobile: c.contact_mobile || '',
+    contact_linkedin: c.contact_linkedin || '',
+    contact_city: c.contact_city || '',
+    contact_state: c.contact_state || '',
+    contact_country: c.contact_country || '',
     company_name: c.company_name || '',
     company_industry: c.company_industry || '',
+    company_address: c.company_address || '',
+    company_website: c.company_website || '',
+    company_linkedin: c.company_linkedin || '',
     employee_count: c.employee_count || '',
+    annual_revenue: c.annual_revenue || '',
     persona: c.persona || '',
-    sequence_name: c.sequence_name || ''
+    sequence_name: c.sequence_name || '',
+    data_collection_source: c.data_collection_source || '',
+    buying_signal: c.buying_signal || '',
+    about_company: c.about_company || ''
   };
 
   btn.disabled = true;
@@ -1414,11 +1427,24 @@ async function submitQueue() {
       contact_email: c.contact_email || '',
       contact_name: c.contact_name || '',
       contact_title: c.contact_title || '',
+      contact_phone: c.contact_phone || '',
+      contact_mobile: c.contact_mobile || '',
+      contact_linkedin: c.contact_linkedin || '',
+      contact_city: c.contact_city || '',
+      contact_state: c.contact_state || '',
+      contact_country: c.contact_country || '',
       company_name: c.company_name || '',
       company_industry: c.company_industry || '',
+      company_address: c.company_address || '',
+      company_website: c.company_website || '',
+      company_linkedin: c.company_linkedin || '',
       employee_count: c.employee_count || '',
+      annual_revenue: c.annual_revenue || '',
       persona: c.persona || '',
-      sequence_name: c.sequence_name || ''
+      sequence_name: c.sequence_name || '',
+      data_collection_source: c.data_collection_source || '',
+      buying_signal: c.buying_signal || '',
+      about_company: c.about_company || ''
     };
     try {
       const resp = await fetch(APPROVAL_WEBHOOK, {
