@@ -7,14 +7,15 @@
 - Pre-populated CLAUDE.md with full project context from prior chat sessions: hosting, scenario IDs, datastore IDs, RCRM custom fields, webhook URLs, branding, conventions, known issues
 - Pre-populated SCRIBE_EXPORT.md with verified knowledge atoms accumulated over the past months of build work
 - Travis transitioning from web chat to Claude Code CLI workflow for code/deploy work, will continue using web chat for Make/RCRM/ZoomInfo MCP work
-- Discovered buildPayload(c) shared function was never actually shipped — both submitOne() and submitQueue() had divergent inline payloads, in sync by coincidence only. Extracted real buildPayload(c) with all 25 fields. Verified decision logic character-for-character identical. Committed d68bf01, pushed, deploying as build ELEVATE-2026-0520-B-BUILDPAYLOAD25.
+- Discovered buildPayload(c) shared function was never actually shipped — both submitOne() and submitQueue() had divergent inline payloads, in sync by coincidence only. Extracted real buildPayload(c) with all 25 fields. Verified decision logic character-for-character identical. Committed d68bf01, pushed, deployed live as build ELEVATE-2026-0520-B-BUILDPAYLOAD25.
+- Verified deploy live: fetched served HTML from elevate-sales-nav.netlify.app, confirmed new build token at line 2, `function buildPayload(c)` defined, both submitOne() and submitQueue() call it, zero surviving `const payload = {` inline objects anywhere in served file. End-to-end RCRM field population still pending — first live approval after this deploy will be the behavioral test.
 
 ### Current State
 
 **Working:**
 - ZoomInfo Intake → Staging → Queue → Dashboard → Approval → RCRM pipeline is mechanically functional end-to-end
-- buildPayload(c) shared function patched into index.html on 2026-05-20, includes all 22 required fields
-- Both submitOne() and submitQueue() call buildPayload(c)
+- buildPayload(c) shared function extracted into index.html on 2026-05-20 (build ELEVATE-2026-0520-B-BUILDPAYLOAD25), includes all 22 required fields plus 3 extras (company_linkedin, buying_signal, about_company) = 25 total
+- Both submitOne() and submitQueue() call buildPayload(c) — verified live in served HTML
 - Netlify auto-deploys from main branch within ~30 seconds of push
 - Core scenarios healthy: ZoomInfo Intake (4732316), Staging-to-Queue (4990696), Hiring Signals Auto Pull (4991665), Market Intel Engine (4688813), Morning BD Email (4669709), Approval Handler (4667221), Queue Fetch (4734116)
 
@@ -27,7 +28,7 @@
 
 ### Next Steps
 
-1. [~] ~~Verify Rob Davidson approval end-to-end after the 2026-05-20 buildPayload patch deploy~~ — SUPERSEDED 2026-05-20: Rob no longer in queue. Verified instead by static code inspection + structural fix. Confirmed buildPayload(c) shared function was missing entirely (despite earlier handoff claim), extracted it, both submitOne() and submitQueue() now call it. Next live approval will exercise the patch end-to-end.
+1. [~] ~~Verify Rob Davidson approval end-to-end after the 2026-05-20 buildPayload patch deploy~~ — SUPERSEDED 2026-05-20: Rob no longer in queue. Verified instead by static code inspection + structural fix + live HTML fetch. Confirmed buildPayload(c) shared function was missing entirely (despite earlier handoff claim), extracted it, both submitOne() and submitQueue() now call it, deployment confirmed live at elevate-sales-nav.netlify.app. Next live approval will exercise the patch end-to-end into RCRM.
 2. [ ] Add ZoomInfo company enrich module to Staging-to-Queue (4990696) between GetRecord and AddRecord steps
 3. [ ] Confirm elevate-zi-bridge.zip is deployed to Netlify (app.netlify.com/projects/elevate-zi-bridge/deploys)
 4. [ ] Backfill decision for the 880 existing queue cards with empty company data — leave or one-time enrichment script
