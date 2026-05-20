@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0520-A-PAYLOAD24 -->
+<!-- ELEVATE-2026-0520-B-BUILDPAYLOAD25 -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1297,16 +1297,12 @@ function bulkDecline() {
   renderQueue();
 }
 
-async function submitOne(idx) {
-  const c = queueContacts[idx];
-  if (!c) return;
-  const btn = document.getElementById('sendBtn' + idx);
-  const card = document.querySelector(`.contact-card[data-idx="${idx}"]`);
-  if (!btn || !card) return;
-  if (btn.disabled) return;
-
+// Single source of truth for the Approval Handler webhook payload.
+// MUST be called by both submitOne() and submitQueue() — divergent inline
+// payloads were the root cause of contacts missing phone/LinkedIn/city/etc.
+function buildPayload(c) {
   const decision = c._approved && !c.is_client ? 'approve' : 'decline';
-  const payload = {
+  return {
     key: c.key || '',
     decision: decision,
     sequence_id: c.sequence_id || '',
@@ -1333,6 +1329,18 @@ async function submitOne(idx) {
     buying_signal: c.buying_signal || '',
     about_company: c.about_company || ''
   };
+}
+
+async function submitOne(idx) {
+  const c = queueContacts[idx];
+  if (!c) return;
+  const btn = document.getElementById('sendBtn' + idx);
+  const card = document.querySelector(`.contact-card[data-idx="${idx}"]`);
+  if (!btn || !card) return;
+  if (btn.disabled) return;
+
+  const payload = buildPayload(c);
+  const decision = payload.decision;
 
   btn.disabled = true;
   btn.classList.add('sending');
@@ -1418,34 +1426,8 @@ async function submitQueue() {
   console.log('[Approval] Submitting ' + queueContacts.length + ' decisions to ' + APPROVAL_WEBHOOK);
   for (const c of queueContacts) {
     if (c._submitted) { skipped++; continue; }
-    const decision = c._approved && !c.is_client ? 'approve' : 'decline';
-    const payload = {
-      key: c.key || '',
-      decision: decision,
-      sequence_id: c.sequence_id || '',
-      contact_slug: c.rcrm_contact_id || '',
-      contact_email: c.contact_email || '',
-      contact_name: c.contact_name || '',
-      contact_title: c.contact_title || '',
-      contact_phone: c.contact_phone || '',
-      contact_mobile: c.contact_mobile || '',
-      contact_linkedin: c.contact_linkedin || '',
-      contact_city: c.contact_city || '',
-      contact_state: c.contact_state || '',
-      contact_country: c.contact_country || '',
-      company_name: c.company_name || '',
-      company_industry: c.company_industry || '',
-      company_address: c.company_address || '',
-      company_website: c.company_website || '',
-      company_linkedin: c.company_linkedin || '',
-      employee_count: c.employee_count || '',
-      annual_revenue: c.annual_revenue || '',
-      persona: c.persona || '',
-      sequence_name: c.sequence_name || '',
-      data_collection_source: c.data_collection_source || '',
-      buying_signal: c.buying_signal || '',
-      about_company: c.about_company || ''
-    };
+    const payload = buildPayload(c);
+    const decision = payload.decision;
     try {
       const resp = await fetch(APPROVAL_WEBHOOK, {
         method: 'POST',
