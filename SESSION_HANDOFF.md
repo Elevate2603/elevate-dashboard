@@ -1,5 +1,307 @@
 # Session Handoff
 
+## Pre-Flight Lock: Troy English / Ross Video — Controlled Live Test
+
+### Status
+
+**Pre-execution. Path prediction LOCKED.** No approval triggered. This section is the controlled test plan with the specific record's expected behavior pinned down.
+
+### Record Under Test
+
+Queue key: **`zi_91406862_9699846110`**
+
+| Field | Value | RCRM destination | Wave fix verification surface |
+|---|---|---|---|
+| contact_name | "Troy English" | first_name="Troy", last_name="English" | n/a |
+| contact_email | "tenglish@rossvideo.com" | Module 11 email field | Wave 4 filter passes (non-empty) |
+| contact_title | "Chief Technology Officer" | Module 11 designation | n/a |
+| contact_phone | "(613) 228-1198 ext. 4202" | Module 11 contact_number + custom_field[1] | n/a |
+| contact_mobile | "(613) 884-5994" | Module 11 custom_field[2] | n/a |
+| contact_linkedin | "https://www.linkedin.com/in/troyenglish" | Module 11 linkedin (sanitized http://) | n/a |
+| contact_city | "Ottawa" | Module 11 city + Module 31 via ifempty fallback | Wave 3 fallback (no company_city) |
+| contact_state | "Ontario" | Module 11 state + Module 31 via ifempty fallback | Wave 3 fallback |
+| contact_country | "Canada" | Module 11 country + Module 31 via ifempty fallback | Wave 3 fallback |
+| company_name | "Ross Video" | Module 31 company_name + Module 11 current_organization | Wave 1 dedup search target |
+| company_industry | "Telecommunication Equipment" | Module 31 industry_id via 20.industry_id switch | **Not in switch table → 913 fallback (Wave 1)** |
+| company_website | empty | Module 31 website | Backlog gap, accepted empty |
+| company_linkedin | empty | Module 31 linkedin | Backlog gap |
+| company_address | empty | Module 31 address + Module 11 address | Backlog gap |
+| company_city/state/country | all empty | Module 31 via ifempty fallback → contact_city/state/country | Wave 3 fallback active |
+| employee_count | "1800" | Module 31 custom_field[1] | n/a |
+| annual_revenue | empty | Module 31 custom_field[2] | Backlog gap |
+| buying_signal | empty | Module 31 custom_field[12] | Backlog gap |
+| about_company | empty | Module 31 about_company | Backlog gap |
+| persona | empty | Module 5 prompt (note-gen only) | n/a |
+| sequence_id | **empty** | Module 2 enroll filter | **enroll SKIPPED** |
+| sequence_name | empty | Module 5 prompt | n/a |
+| data_collection_source | "zoominfo_intent" | Module 11 custom_field[5] | **Wave 2 verification — must write "zoominfo_intent", NOT "ZoomInfo"** |
+| decision (current) | "pending" | Module 99 → "approved" + Module 100 deletes | n/a |
+
+### Pre-Flight Curl Results
+
+**Check 1 — Contact lookup by email:**
+```
+GET /v1/contacts/search?email=tenglish@rossvideo.com&exact_search=1
+→ 200, BARE []
+```
+No existing RCRM contact. Module 36 returns empty, Module 37 sets `resolved_slug = ""`. Route A determined.
+
+**Check 2 — Company lookup by name:**
+```
+GET /v1/companies/search?company_name=Ross%20Video&exact_search=1
+→ 200, BARE []
+```
+No existing RCRM company. Module 33 returns empty, Module 34 sets `existing_company_slug = ""`. Module 31 will fire. Route A1 determined.
+
+**Check 3 — Wave 4 filter gate:**
+- decision=="approve" → TRUE
+- contact_email!="" ("tenglish@rossvideo.com") → TRUE
+- Module 102 router PASSES, both conditions met.
+
+### Locked Path Prediction
+
+**Route A1** (new contact + new company).
+
+### Expected Operations Count
+
+| Module | Filter | Fires? | Ops |
+|---|---|---|---|
+| 1 webhook | (none — always for triggers) | yes | 1 |
+| 20 SetVariables | (none) | yes | 1 |
+| 99 Update queue record | `key != ""` | yes (key present) | 1 |
+| 100 Delete queue record | `key != ""` | yes | 1 |
+| 36 GET contact search | `decision == "approve"` | yes | 1 |
+| 37 SetVariables resolved_slug | (none) | yes | 1 |
+| 102 Router | `decision=="approve" AND contact_email!=""` | yes (both true) | 0 (router) |
+| 33 GET company search | `resolved_slug=="" AND company_name!=""` | yes | 1 |
+| 34 SetVariables existing_company_slug | (none) | yes | 1 |
+| 31 POST /v1/companies | `existing_company_slug==""` | yes (Ross Video new) | 1 |
+| 35 SetVariables resolved_company_slug | (none) | yes | 1 |
+| 11 POST /v1/contacts | (none) | yes | 1 |
+| 38 SetVariables final_slug | (none) | yes | 1 |
+| 2 POST /v1/contacts/{slug}/enroll | `final_slug!="" AND decision=="approve" AND sequence_id!=""` | **no (sequence_id empty)** | 0 |
+| 5 POST Anthropic note | `final_slug!="" AND decision=="approve"` | yes | 1 |
+| 13 SetVariables claude_note | (none) | yes | 1 |
+| 4 POST /v1/notes | `final_slug!="" AND decision=="approve" AND claude_note!=""` | yes | 1 |
+
+**Total expected: 15 operations.**
+
+### Expected RCRM Side-Effects (in order)
+
+1. `GET /v1/contacts/search?email=tenglish@rossvideo.com&exact_search=1` → `[]` (read)
+2. `GET /v1/companies/search?company_name=Ross%20Video&exact_search=1` → `[]` (read)
+3. `POST /v1/companies` → returns 200/201 with `{data: {slug: <NEW_COMPANY_SLUG>, ...}}` — Ross Video record created
+4. `POST /v1/contacts` → returns 200/201 with `{data: {slug: <NEW_CONTACT_SLUG>, ...}}` — Troy English record created, attached to NEW_COMPANY_SLUG
+5. `POST /v1/messages` (Anthropic) → returns note text
+6. `POST /v1/notes` → creates note record attached to NEW_CONTACT_SLUG
+
+NO enroll call (sequence_id empty).
+
+### Expected RCRM Field Values
+
+**New company record (NEW_COMPANY_SLUG):**
+
+| RCRM field | Expected value | Source |
+|---|---|---|
+| company_name | "Ross Video" | `1.company_name` |
+| about_company | "" | `20.sanitized_about` (empty input → empty output) |
+| website | "" | `1.company_website` (queue empty) |
+| linkedin | "" | `1.company_linkedin` (queue empty) |
+| city | "Ottawa" | `ifempty(1.company_city; 1.contact_city)` → contact_city used (Wave 3 fallback) |
+| state | "Ontario" | `ifempty(1.company_state; 1.contact_state)` → contact_state |
+| country | "Canada" | `ifempty(1.company_country; 1.contact_country)` → contact_country |
+| address | "" | `1.company_address` (queue empty) |
+| industry_id | **913** | `20.industry_id` switch — "Telecommunication Equipment" NOT in 12-entry list → 913 Manufacturing fallback (**Wave 1 verification**) |
+| custom_fields[1] (Employees) | "1800" | `1.employee_count` |
+| custom_fields[2] (Revenue) | "" | `1.annual_revenue` (empty) |
+| custom_fields[12] (Buying Signal) | "" | `1.buying_signal` (empty) |
+| created_on | ≈ approval timestamp ±5 sec | RCRM-side |
+
+**New contact record (NEW_CONTACT_SLUG):**
+
+| RCRM field | Expected value | Source |
+|---|---|---|
+| first_name | "Troy" | first token of "Troy English" |
+| last_name | "English" | last token of "Troy English" |
+| email | "tenglish@rossvideo.com" | `1.contact_email` |
+| contact_number | "(613) 228-1198 ext. 4202" | `1.contact_phone` |
+| designation | "Chief Technology Officer" | `1.contact_title` |
+| linkedin | "http://www.linkedin.com/in/troyenglish" | `20.linkedin_url` = replace(https://→http://) |
+| city | "Ottawa" | `1.contact_city` |
+| state | "Ontario" | `1.contact_state` |
+| country | "Canada" | `1.contact_country` |
+| address | "" | `1.company_address` (queue empty — contact inherits empty company address, acceptable) |
+| current_organization | "Ross Video" | `1.company_name` |
+| company_slug | NEW_COMPANY_SLUG (from step 3) | `35.resolved_company_slug` |
+| stage_id (or stage.id) | 142468 | literal |
+| custom_fields[1] (Office Direct Line) | "(613) 228-1198 ext. 4202" | `1.contact_phone` (same as contact_number) |
+| custom_fields[2] (Mobile) | "(613) 884-5994" | `1.contact_mobile` |
+| custom_fields[5] (Data Source) | **"zoominfo_intent"** | `1.data_collection_source` (**Wave 2 verification — NOT literal "ZoomInfo"**) |
+| created_on | ≈ approval timestamp ±5 sec | RCRM-side |
+
+**Note record:**
+
+| RCRM field | Expected value |
+|---|---|
+| note_type_id | 195663 |
+| description | Anthropic-generated 1-2 sentence note referencing "Troy English", "Chief Technology Officer", "Ross Video", "Telecommunication Equipment", "1800 employees", "{{1.sequence_name}}" (which is empty — note will read "Sequence assigned: ") |
+| related_to_type | "contact" |
+| related_to | NEW_CONTACT_SLUG |
+| created_on | within ±10 sec of approval |
+
+### Expected Queue State Delta
+
+- Pre-approval: `zi_91406862_9699846110` exists in datastore 86836 with `decision: "pending"`.
+- Post-approval (Module 99): `decision: "approved"`, `processed_at: <timestamp>`.
+- Post-approval (Module 100): record DELETED from datastore.
+- Queue total: 1,071 → 1,070.
+
+### Expected Dedup-Baseline Delta
+
+Pre-approval baseline counts (these will be re-verified post-approval to detect any duplicate-creation regression):
+- `GET /v1/companies/search?company_name=Ross%20Video&exact_search=1` → **0 records** (current)
+- Post-approval expected: **1 record** (the new Ross Video company)
+- No other company name baseline relevant for this test.
+
+### Pass/Fail Conditions
+
+**PASS** requires ALL of:
+1. Make execution `status == 1`.
+2. Make execution `operations == 15`.
+3. `allDlqCount` on scenario unchanged (still 0).
+4. New RCRM contact found by email lookup; all fields above match expected.
+5. New RCRM company found by name lookup; all fields above match expected.
+6. `industry_id == 913` on the new company (**Wave 1 verification**).
+7. `custom_fields[5].value == "zoominfo_intent"` on the new contact (**Wave 2 verification**).
+8. `city == "Ottawa"` on the new company (**Wave 3 ifempty fallback verification**).
+9. Anthropic note exists, `note_type_id == 195663`, dated within ±10 sec of approval.
+10. Queue record `zi_91406862_9699846110` is gone from datastore 86836.
+11. Ross Video exact-match count goes from 0 to 1 (not 2 — no duplicate creation).
+
+**FAIL** if ANY:
+- Execution status != 1.
+- Ops count != 15 (could indicate filter regression — e.g., 16 if enroll fired despite empty sequence_id; 14 if a fix-related module didn't fire).
+- `industry_id == 0` on the new company (Wave 1 regression).
+- `custom_fields[5].value == "ZoomInfo"` literal on the new contact (Wave 2 regression).
+- `city == ""` on the new company (Wave 3 fallback regression).
+- More than 1 Ross Video company appears post-approval (dedup regression — wouldn't apply here since it's Route A1 new-create, but worth checking for sanity).
+- DLQ entry.
+
+**PARTIAL PASS** (note but don't roll back):
+- Anthropic note text contains "{{" — IML didn't interpolate. Note record is wrong but RCRM contact/company are correct. Investigate Module 5/13/4 separately.
+- Empty fields in RCRM that the queue had empty (e.g., website, address). Pre-existing backlog gap, not a regression.
+
+### Rollback Indicators
+
+In addition to FAIL criteria:
+1. `isinvalid:true` toggled on 4667221 after the approval.
+2. Module 102 filter visibly skipped despite contact_email being non-empty.
+3. Module 31 fired despite an existing Ross Video appearing in RCRM (suggests dedup regression — not applicable to A1 test but watch for it).
+4. RCRM endpoint behavior changed (e.g., `/v1/companies/search` now returns wrapped for unknown name).
+5. Token rejection (HTTP 401 on any RCRM call).
+6. Rate limit hit (HTTP 429 on any RCRM call).
+
+### Post-Approval Validation Sequence
+
+After Travis clicks Submit Individually and reports the approval timestamp, Claude executes:
+
+1. **`executions_list(4667221)`** filtered to events after the approval timestamp. Locate the new execution.
+2. Capture `imtId`, `status`, `operations`, `duration`, `dlqCount`.
+3. **`scenarios_get(4667221)`** — verify `isinvalid:false`, `isActive:true`, `lastEdit` unchanged from 2026-05-21T19:51:21.573Z (no surprise blueprint drift).
+4. **`GET /v1/contacts/search?email=tenglish@rossvideo.com&exact_search=1`** — verify the new contact appears. Capture `data[0].slug` as `NEW_CONTACT_SLUG`.
+5. **`GET /v1/contacts/{NEW_CONTACT_SLUG}`** — read every field per the Contact field table above. Cross-check.
+6. Extract `company_slug` (or embedded company object) from the contact GET → `NEW_COMPANY_SLUG`.
+7. **`GET /v1/companies/{NEW_COMPANY_SLUG}`** — read every field per the Company field table above. Cross-check `industry_id`, `city`, etc.
+8. **`GET /v1/companies/search?company_name=Ross%20Video&exact_search=1`** — verify count is exactly 1.
+9. **Notes lookup** via the contact response's embedded notes array, OR a separate notes-list endpoint (TBD). Verify one new note at the expected timestamp.
+10. **`data-store-records_list(86836)`** — confirm `zi_91406862_9699846110` is absent.
+11. Compile PASS/FAIL verdict against the conditions above. Append a "Live Test Result" section to SESSION_HANDOFF.md.
+
+### Recording Template
+
+```
+=== CONTROLLED LIVE TEST: zi_91406862_9699846110 (Troy English / Ross Video) ===
+Approval timestamp (UTC): <fill>
+
+EXECUTION:
+  imtId: <fill>
+  status: <expected 1> | observed: <fill>
+  operations: 15 expected | observed: <fill>
+  dlqCount: 0 expected | observed: <fill>
+  duration: <fill>
+
+CONTACT VERIFICATION (slug: <NEW_CONTACT_SLUG>):
+  first_name: "Troy" | observed: <fill>
+  last_name: "English" | observed: <fill>
+  email: "tenglish@rossvideo.com" | observed: <fill>
+  contact_number: "(613) 228-1198 ext. 4202" | observed: <fill>
+  designation: "Chief Technology Officer" | observed: <fill>
+  linkedin: "http://www.linkedin.com/in/troyenglish" | observed: <fill>
+  city: "Ottawa" | observed: <fill>
+  state: "Ontario" | observed: <fill>
+  country: "Canada" | observed: <fill>
+  address: "" | observed: <fill>
+  current_organization: "Ross Video" | observed: <fill>
+  company_slug: <NEW_COMPANY_SLUG> | observed: <fill>
+  stage_id: 142468 | observed: <fill>
+  custom_fields[1] (Office Direct Line): "(613) 228-1198 ext. 4202" | observed: <fill>
+  custom_fields[2] (Mobile): "(613) 884-5994" | observed: <fill>
+  *** custom_fields[5] (Data Source): "zoominfo_intent" | observed: <fill>  ← WAVE 2 ***
+
+COMPANY VERIFICATION (slug: <NEW_COMPANY_SLUG>):
+  company_name: "Ross Video" | observed: <fill>
+  website: "" | observed: <fill>
+  linkedin: "" | observed: <fill>
+  *** industry_id: 913 (Manufacturing fallback) | observed: <fill>  ← WAVE 1 ***
+  address: "" | observed: <fill>
+  *** city: "Ottawa" (ifempty → contact) | observed: <fill>  ← WAVE 3 ***
+  *** state: "Ontario" (ifempty → contact) | observed: <fill>  ← WAVE 3 ***
+  *** country: "Canada" (ifempty → contact) | observed: <fill>  ← WAVE 3 ***
+  about_company: "" | observed: <fill>
+  custom_fields[1] (Employees): "1800" | observed: <fill>
+  custom_fields[2] (Revenue): "" | observed: <fill>
+  custom_fields[12] (Buying Signal): "" | observed: <fill>
+  created_on: ≈ approval ±5s | observed: <fill>
+
+NOTE VERIFICATION:
+  found: yes/no
+  note_type_id: 195663 | observed: <fill>
+  created_on within ±10s of approval: yes/no
+  description excerpt: <fill — Anthropic-generated text>
+
+DEDUP CHECK:
+  Pre-approval Ross Video count: 0
+  Post-approval Ross Video count: 1 expected | observed: <fill>
+
+QUEUE:
+  Pre-approval record present: yes
+  Post-approval record present: no expected | observed: <fill>
+  Total count delta: -1 expected | observed: <fill>
+
+VERDICT: <PASS | FAIL | PARTIAL PASS>
+Anomalies: <list>
+Rollback triggered: yes/no
+```
+
+### Workflow
+
+1. [x] Travis names the target → `zi_91406862_9699846110` (Troy English / Ross Video). DONE.
+2. [x] Claude pre-flights and locks path prediction → **Route A1, 15 ops**. DONE (this section).
+3. [ ] Travis clicks Submit Individually in the dashboard.
+4. [ ] Travis reports the approval click timestamp (UTC) to Claude.
+5. [ ] Claude runs the 11-step Post-Approval Validation Sequence.
+6. [ ] Claude appends "Live Test Result" section with verdict.
+7. [ ] On FAIL or any Rollback Indicator: Claude reports specifics, does NOT roll back, awaits Travis decision.
+
+### Notes
+
+- This test does NOT exercise Module 2 (enroll) because the queue record has no `sequence_id`. Enrollment validation deferred to a future test with a card that includes a sequence assignment.
+- This test does NOT exercise dedup (Module 33's GET fix) on the company side because Ross Video has 0 existing records. A second test with a Route A2 candidate (e.g., Town of Oakville with 1 existing record) would exercise that path.
+- This test DOES exercise: Wave 1 (industry_id fallback to 913), Wave 2 (data_collection_source variable), Wave 3 (ifempty fallback for city/state/country), Wave 4 (Module 102 passing on valid email).
+- Total RCRM ops cost: 4 writes (2 search reads + 2 creates + 1 note) + 1 Anthropic call. Within rate limit.
+
+---
+
 ## Wave 4 Applied: 2026-05-21 — Module 102 email-required filter (prevention only)
 
 ### What Was Done
