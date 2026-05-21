@@ -1,5 +1,79 @@
 # Session Handoff
 
+## Wave 5 Applied: 2026-05-21 — data_collection_source dropdown mapping
+
+### What Was Done
+
+Single `scenarios_update` push on 4667221 with two coordinated changes:
+
+**Module 20 SetVariables — added 6th variable:**
+```
+{"name": "mapped_data_source", "value": "{{switch(1.data_collection_source; \"zoominfo_intent\"; \"ZoomInfo\"; \"hiring_signals\"; \"ZoomInfo\"; \"ZoomInfo\")}}"}
+```
+
+**Module 11 jsonStringBodyContent — `custom_fields[5].value`:**
+- Before: `{{1.data_collection_source}}`
+- After: `{{20.mapped_data_source}}`
+
+Push outcome: `isinvalid:false`, `isActive:true`, `lastEdit:2026-05-21T20:45:45.519Z`. usedPackages unchanged. DLQ 0. Pre-edit state saved to `.backups/wave5_pre_dropdown_map.20260521T204427Z.json`.
+
+### Semantics
+
+Whatever the queue stores in `data_collection_source` (currently always `"zoominfo_intent"` per Staging-to-Queue Module 4 hardcoded mapper), Module 20 maps it through the switch to a value RCRM accepts:
+- `"zoominfo_intent"` → `"ZoomInfo"` (explicit map)
+- `"hiring_signals"` → `"ZoomInfo"` (explicit map — until Travis configures a "Hiring Signal" option in RCRM admin)
+- anything else → `"ZoomInfo"` (default fallback)
+
+All paths currently resolve to `"ZoomInfo"`. The switch architecture is forward-compatible: when Travis adds more dropdown options in RCRM (e.g., "Hiring Signal", "Manual", "Web Form"), update Module 20's keys to map correctly via a follow-up scenarios_update.
+
+### Empirical Validation Status
+
+**Blueprint change: verified live.** Both Module 20 and Module 11 contain the expected IML.
+
+**Behavioral validation: NOT YET RUN.** The Wave 5 fix produces `"ZoomInfo"` as the value sent to RCRM's contact custom_field 5. We have STRONG indirect evidence that "ZoomInfo" is an accepted dropdown option:
+- Existing RCRM contact Katie Martinovich (slug `17793113029170054787rLZ`, created 2026-05-20T21:08:22Z) has `custom_fields[5].value = "ZoomInfo"` per a GET we already ran.
+- Pre-Wave-2 Module 11 hardcoded `"value": "ZoomInfo"` and that worked successfully across many prior executions (status:1, contacts created).
+
+**The conclusive test requires a fresh contact POST.** Two options:
+
+| | Action | What it produces |
+|---|---|---|
+| **A** | Re-run the curl bypass for Troy English (same payload as before — data_collection_source still says "zoominfo_intent" in the queue payload, but Module 20 now maps it to "ZoomInfo" before Module 11 uses it). | Wave 5 verified end-to-end. Troy English contact created in RCRM. Orphan Ross Video gets a contact attached (incidental remediation of yesterday's failed test). |
+| **B** | Skip the fresh test. Trust indirect evidence + blueprint inspection. | Wave 5 is staged but not exercised. Next time a real approval flows through (after dashboard fix or via curl), if it succeeds the fix is validated. |
+| **C** | Pick a different queue card to validate with (avoid Troy English / Ross Video). | New test, new ops budget, doesn't touch the orphan. |
+
+Travis to choose A / B / C.
+
+### Wave Status After Wave 5
+
+| Wave | Surface | Status |
+|---|---|---|
+| 1 (industry_id 0→913) | Module 20 switch default | ✓ Live + verified (Ross Video has 913) |
+| 2 (data_collection_source variable) | Module 11 IML | Superseded by Wave 5; Module 11 now reads `{{20.mapped_data_source}}` |
+| 3 (city/state/country ifempty) | Module 31 body | ✓ Live + verified behaviorally |
+| 4 (Module 102 email filter) | Module 102 conditions | ✓ Live + verified via pre-flight |
+| 5 (data_source dropdown mapping) | Module 20 + Module 11 | ✓ Live; behavioral validation pending |
+
+### Decisions Made
+
+- **Used a switch in Module 20** rather than an inline `if` in Module 11's body. Reasons: the switch is forward-compatible for adding more queue→dropdown mappings, keeps the dropdown logic visible in one place, and Module 11's body is already complex enough.
+- **Default fallback to "ZoomInfo"** for any unrecognized data_collection_source. Worst case is mis-attributed source, not a failed contact create. Net upgrade vs the previous "any value→422" behavior.
+- **Did NOT re-run the curl bypass yet.** Wave 4's pattern was: deploy → re-validate. But that re-validation was non-destructive (curl GET checks against RCRM). Wave 5's re-validation requires a POST to /v1/contacts, which creates a real record. Pausing to confirm Travis's intent.
+- **No upstream change.** Did not touch Staging-to-Queue Module 4 mapper (which still writes `"zoominfo_intent"` to queue records). The Module 20 layer absorbs this so backward compatibility with existing queue values is maintained.
+
+### Next Steps
+
+1. [ ] Travis: choose validation path A / B / C above.
+2. [ ] If A or C: re-fetch and check post-execution state (Module 11 succeeds, contact created, custom_field 5 = "ZoomInfo" in RCRM).
+3. [ ] (Existing) Dashboard click-handler problem still unresolved — extension issue requires Travis-side action.
+4. [ ] (Pre-existing) 1,070 backlog queue records, mostly stale or missing fields.
+
+### Blockers
+
+Unchanged.
+
+---
+
 ## Live Test Result: 2026-05-21 — Troy English / Ross Video (curl bypass)
 
 ### What Was Done
