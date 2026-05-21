@@ -1,6 +1,249 @@
 # Session Handoff
 
-## Current Session: 2026-05-21 (late evening — Wave 3 complete: Issue 1.3 landed end-to-end)
+## Current Session: 2026-05-21 (late evening — Module 33 GET fix deployed; dedup verified end-to-end)
+
+### What Was Done
+
+Applied the Module 33 GET-with-exact_search fix that the earlier empirical audit recommended. Single `scenarios_update` push on 4667221. Pre-edit Module 33 config saved to `.backups/module_33_pre_get_fix.20260521T172329Z.json`.
+
+### Change Applied
+
+| Aspect | Pre-fix (live since 2026-04-07) | Post-fix (live since 2026-05-21T17:24:51.028Z) |
+|---|---|---|
+| Method | POST | GET |
+| URL | `https://api.recruitcrm.io/v1/companies/search` | `https://api.recruitcrm.io/v1/companies/search?company_name={{encodeURL(1.company_name)}}&exact_search=1` |
+| Body | jsonStringBodyContent: `{"company_name": "{{1.company_name}}"}` | (none — GET has no body) |
+| Headers | Authorization, Content-Type | Authorization, Accept |
+| `contentType`, `inputMethod`, `jsonStringBodyContent` | json, jsonString, the body string | removed |
+| Effective behavior | HTTP 404 every call → Module 34 never finds a match → Module 31 always creates | HTTP 200 with wrapped object on match, bare `[]` on no-match → Module 34 resolves to first slug or empty → Module 31 creates only when nothing matches |
+
+Module 33 now mirrors the working pattern from Module 36 (contact search) one-to-one, modulo URL.
+
+### Post-Deploy Verification (end-to-end dedup behavior)
+
+Three live curl scenarios against the production endpoint, each simulating exactly what Module 33 now sends:
+
+**V1 — known multi-record duplicate (`Stellantis`, 18 existing records):**
+- Response: WRAPPED `{current_page:1, data:[...18 records...]}`
+- `33.data.data[1].slug` resolves to `17780808284210054787dBD` (first match)
+- Module 34 captures non-empty `existing_company_slug`
+- Module 31 filter `existing_company_slug == ""` FAILS → no create
+- Module 35 → Module 11 → contact attached to existing slug
+- **Outcome: future Stellantis approvals will NOT create a 19th duplicate. They will attach the contact to the existing first-by-creation Stellantis record.**
+
+**V2 — nonexistent company (`AcmeNonexistentCorp987`):**
+- Response: BARE `[]`
+- `33.data.data[1].slug` resolves to empty (`.data` on array is undefined)
+- Module 34 captures empty `existing_company_slug`
+- Module 31 filter PASSES → create new company
+- **Outcome: brand-new companies are created normally. No regression.**
+
+**V3 — URL-encoded special chars (`React Tool & Mold`, ampersand encoded as `%26`):**
+- Response: WRAPPED, 1 match
+- Same wrapped-path semantics as V1
+- **Outcome: company names with `&`, spaces, etc. work correctly via `encodeURL()`.**
+
+### Module 34 Regression Check
+
+Module 34 reads `{{33.data.data[1].slug}}` — unchanged from pre-fix. The same IML resolves correctly across all three Module 33 response shapes:
+
+| Module 33 response | `33.data` resolves to | `33.data.data[1].slug` resolves to | Module 34 captures |
+|---|---|---|---|
+| WRAPPED with matches (new GET success) | `{current_page, data:[...]}` (parsed object) | first match's slug | non-empty slug |
+| BARE empty array `[]` (new GET no-match) | `[]` (parsed array) | undefined (arrays have no `.data`) | empty string |
+| 404 error object (old POST, now obsolete) | `{error:true, errorCode:404,...}` | undefined | empty string |
+
+No regression possible — Module 34's logic was already correct; only Module 33's input was wrong. The IML pattern handles all three response shapes deterministically. The same applies to Module 35's downstream `{{if(34.existing_company_slug; 34.existing_company_slug; 31.data.slug)}}` resolution.
+
+### Scenario State (post-deploy)
+
+- Approval Handler 4667221: `lastEdit:2026-05-21T17:24:51.028Z`, `isinvalid:false`, `isActive:true`. `usedPackages` count 23 unchanged (one HTTP module — Module 33 — swapped POST for GET, no count change).
+- All other modules in Route A and Route B unchanged.
+
+### Rollback Steps
+
+Rollback is reversible via a single `scenarios_update` that restores Module 33 to the pre-fix POST form. The pre-edit Module 33 config is saved at `.backups/module_33_pre_get_fix.20260521T172329Z.json`.
+
+To roll back (only if a regression is empirically confirmed by execution-level inspection in Make UI — do NOT roll back on speculation):
+
+1. Take a fresh snapshot of the current 4667221 blueprint via `scenarios_get(4667221)` and save it to `.backups/` with a new timestamp (preserves the GET form for later re-apply if rollback turns out to be wrong).
+2. Open `.backups/module_33_pre_get_fix.20260521T172329Z.json`. The `module` field is the literal Module 33 object as it was before the fix.
+3. Re-fetch the current full blueprint, replace the Route A Module 33 entry with the pre-fix object, push via `scenarios_update`.
+4. Verify with `scenarios_get`: Module 33 should show `method:"post"`, `url:"https://api.recruitcrm.io/v1/companies/search"`, body restored.
+5. Note: rollback restores the broken behavior (404 on every call → silent duplicate creation). Document the rollback reason in `SESSION_HANDOFF.md` so future Claude/Travis sessions don't re-apply the same fix without addressing the regression that caused rollback.
+
+Rollback would **not** undo the new duplicates created by the GET fix's behavior (none expected — the fix prevents new duplicates rather than introducing them). Rollback would NOT undo Module 34, 35, 31 — they are unchanged.
+
+### Cumulative Today
+
+16 remediation changes applied. The Module 33 GET fix completes the prevention-logic side of duplicate handling. The 18+ Stellantis records and 3+ Cargojet records that already exist are NOT addressed by this fix — see separate cleanup section below.
+
+### Decisions Made
+
+- **Mirrored Module 36's structure exactly for Module 33.** Both are now `method:get`, `url` with `?...&exact_search=1`, `Authorization + Accept` headers, no body, no `Content-Type`. Consistent pattern reduces future cognitive overhead.
+- **Did NOT add `lower()` to the company_name URL.** The search endpoint is empirically case-insensitive (verified in the 30-test audit). Adding `lower()` would be cosmetic and adds an extra IML function call per execution. Module 36 has `lower()` because contact emails benefit from normalization at the storage-comparison layer; company_name search doesn't gain anything.
+- **Kept `stopOnHttpError: false` on Module 33.** With the new GET form there are no expected HTTP errors (no-match returns 200 + bare `[]`, not 404). The flag is now defensive rather than load-bearing.
+- **Did NOT touch Module 33's filter conditions.** The filter (`resolved_slug == "" AND company_name != ""`) gates whether Module 33 runs at all and is correct independently of the search shape.
+
+### Blockers
+
+Unchanged. ZoomInfo PKI down. Credential rotations pending.
+
+---
+
+## Duplicate Cleanup (separate from prevention)
+
+This section is intentionally separate from the Module 33 prevention fix above. The cleanup of existing duplicates is a distinct problem with a distinct solution surface — neither caused by the fix nor solved by it.
+
+### Observed Duplicate Counts (production RCRM, sampled 2026-05-21)
+
+From the first 100 records of `GET /v1/companies` and from targeted `GET /v1/companies/search?company_name=X&exact_search=1` queries:
+
+- **Stellantis: 18 exact-match records** (`company_name == "Stellantis"`). Additional substring matches (e.g., `Stellantis Canada`, `Stellantis Detroit`) would push the total above 18 if they exist.
+- **Cargojet: at least 3 exact-match records** visible in the first 100 of `/v1/companies`.
+- **Other near-certain duplicates** observable in the first-100 sample without targeted querying: multiple `Stellantis` entries with identical `website == "stellantis.com"`. Likely many more across the broader company set; not enumerated here without running the same search on every known Elevate target company.
+
+### Cause (already addressed)
+
+All observed duplicates were created by Module 33's broken POST form returning HTTP 404 on every execution since the scenario was created on 2026-04-07. The new GET form (deployed 2026-05-21T17:24:51.028Z) prevents future duplicates but does not retroactively merge existing ones.
+
+### Cleanup Options
+
+**Option A — RCRM admin UI manual merge (recommended for now):**
+- Travis or Roxanne uses RCRM's web UI to navigate to the duplicate set, select records, and use the built-in "merge" action.
+- Pros: zero risk of data loss, RCRM-side native semantics handle related contacts/notes/jobs cleanly, no automation effort.
+- Cons: tedious for 18+ records per company; scales poorly if many companies have duplicates.
+- Estimated effort: ~5 minutes per company set, ~1.5 hours for the visible 18 Stellantis + 3 Cargojet plus a few more.
+
+**Option B — Scripted cleanup via RCRM API:**
+- Build a one-shot script that: (i) runs `GET /v1/companies/search?company_name=X&exact_search=1` for each known target, (ii) picks the oldest-created (lowest `id`) as the canonical record, (iii) for each other slug, reassigns its contacts to the canonical slug (RCRM endpoint TBD — needs empirical verification), (iv) deletes the now-orphaned duplicate.
+- Pros: scalable, repeatable, auditable via a log.
+- Cons: requires empirical verification of contact-reassignment and company-delete endpoints (not done in this session). Risk of data loss if any duplicate has notes/jobs not attached to canonical. Should be staged: dry-run first against a single test pair, then small batch, then full set.
+- Estimated effort: 2-4 hours to build + verify + run. Not recommended until Option A has cleared the easy cases or unless the duplicate count grows past manual viability.
+
+**Option C — Accept the duplicates, prevent new ones:**
+- Do nothing. The new GET fix means future approvals attach to the first-by-creation record of each duplicate set. The remaining duplicates are orphan records — no new contacts will be attached to them.
+- Pros: zero effort, zero risk.
+- Cons: RCRM company-list and reporting views will show the duplicate clutter indefinitely. Search-driven workflows in RCRM UI may surface a duplicate to a user who then attaches a note/job to the "wrong" copy.
+
+### Recommendation
+
+**Option A for the 4-5 visible duplicate sets (Stellantis, Cargojet, possibly Mejuri/Sunnybrook/Region of Durham — verify each).** Defer Option B unless the duplicate count is found to be substantially larger than 18 + 3 + a handful. Option C is acceptable as a transitional stance only — RCRM's company list will show clutter, and reports will double-count headcount/revenue.
+
+**Out of scope of this audit cycle:** Option B implementation, dry-run testing, or actual execution. Travis to choose path and timing.
+
+### Validation After Cleanup
+
+After any cleanup (manual or scripted), re-run `GET /v1/companies/search?company_name=Stellantis&exact_search=1` and confirm `data.length == 1`. This is the same query Module 33 will issue on future approvals; if cleanup leaves exactly one canonical record, future approvals will deterministically attach to it.
+
+---
+
+## Previous Session: 2026-05-21 (late evening — RCRM /v1/companies/search empirical audit)
+
+### What Was Done
+
+Ran 30 read-only curl tests against `https://api.recruitcrm.io/v1/companies/search` using the existing production Bearer to determine **observed** behavior. Goal: validate the safest production implementation for Module 33 (Approval Handler company search / dedup) before drafting any blueprint change. No mutations, no creates, no deletes — strictly read endpoints (`GET /v1/companies` to pick test targets, plus search variants).
+
+### Critical Production Defect Discovered
+
+**Module 33's current POST form has been returning HTTP 404 on EVERY execution since the scenario was created.** Confirmed by testing the exact production body shape:
+
+- `POST /v1/companies/search` body `{"company_name": "Stellantis"}` → `HTTP 404` with body `{"error":true,"errorCode":404,"errorMessage":"Company doesn't exist"}`
+- Same 404 for empty body `{}`, `{"name": "X"}`, `{"website": "X"}`, `{"linkedin": "X"}` — every POST shape tested.
+
+Module 33's downstream consumer (Module 34) reads `33.data.data[1].slug`. On the 404 response shape `{error:true, errorCode:404, errorMessage:...}`, `data.data` is undefined → `existing_company_slug = ""`. Module 31's filter `existing_company_slug == ""` is therefore ALWAYS true → Module 31 ALWAYS creates a new company.
+
+**Empirical proof of the impact:** `GET /v1/companies/search?company_name=Stellantis&exact_search=1` returns **18 exact-match Stellantis records** in production RCRM. `GET ?company_name=Stellantis` (substring mode) returns 34. Same pattern for Cargojet (3 visible in the first page of `/v1/companies`). The deduplication has been silently disabled since the scenario was created on 2026-04-07. Every new-contact approval through Route A has been generating a duplicate company record.
+
+### Validated Findings (observed only)
+
+| Aspect | Observed |
+|---|---|
+| Accepted method | `GET` only. `POST /v1/companies/search` returns 404 for all body shapes tested. |
+| Accepted query parameter | `company_name=X` only. `name=X`, `website=X`, `linkedin=X` all return `HTTP 400 UNSUPPORTED_SEARCH`. Multi-field also 400. |
+| Optional flag | `exact_search=1`. Without it, substring match. With it, strict equality (case-insensitive, whitespace-trimmed). |
+| Case sensitivity | Insensitive in both modes. `Stellantis`, `stellantis`, `STELLANTIS` all return identical 18 records (exact) / 34 records (substring). |
+| Whitespace | Both leading and trailing spaces are trimmed. `"%20Stellantis"` and `"Stellantis%20&exact_search=1"` both behave like `Stellantis`. |
+| Substring behavior | `Stellan` returns 34 (matches `Stellantis`, `Stellantis Canada`, etc.). `S` alone returns 100 records (likely page-truncated). |
+| Exact behavior | `Stellan&exact_search=1` returns empty array. `Stellantis Canada&exact_search=1` returns empty array — exact mode requires the full field value to match, not just the leading word. |
+| Successful-response shape | `{"current_page":1,"data":[...company-objects...]}` — wrapped, paginated. `data` is the array of matches. |
+| Empty-response shape | Bare `[]` — JUST an empty array, no wrapper. Critical: response shape changes between has-results (wrapped object) and no-results (bare array). |
+| Page parameter | `?page=2` accepted but for the 34-Stellantis result set returned `[]` — appears to be 1 page only. Per-page size observed = 100 max. |
+| Special chars | `&` in name (e.g., `React Tool & Mold`) works with URL-encoded `%26`. Returned 1 exact match. |
+| Make IML compatibility | Wrapped response → `33.data.data[1].slug` resolves to first match's slug (correct). Bare-array empty → `data` property on array is undefined → resolves to empty (correct). 404 error shape → `data.data` undefined → empty (correct). All three paths produce the right behavior for Module 34's downstream filter. |
+
+### Match Behavior Summary
+
+- **Exact match (`&exact_search=1`)**: matches `lower(trim(company_name_in_db)) == lower(trim(query))`. Found 18 records for `Stellantis` (proves duplicates exist; proves search finds all of them).
+- **Partial/substring (no flag)**: matches `lower(company_name_in_db).contains(lower(query))`. Found 34 for `Stellantis`, 100 for `S` (probable truncation).
+- **No anchoring**: `Stellan` matches `Stellantis` (prefix), `WeStellantisCo` would presumably match too (substring anywhere).
+
+### Duplicate Detection Implications
+
+1. **Current production has produced multi-record duplicates already.** 18 `Stellantis`, 3+ `Cargojet`, and likely many more across the company set. The audit data was visible in the first 100 records of `GET /v1/companies` alone.
+2. **The endpoint can find these duplicates.** `GET ?company_name=Stellantis&exact_search=1` returned all 18 in one call.
+3. **The endpoint cannot find duplicates by website or LinkedIn URL.** Those parameters are unsupported (HTTP 400). RCRM's NATIVE dedup at company-create time (per public help docs) checks website+linkedin, but we cannot proactively check those via search.
+4. **Name-typo duplicates will still bypass dedup** even with the fix. `Stellantis Inc` and `Stellantis` would not match in exact mode. Substring mode helps but creates false positives (`Stellantis` substring-matches the wrong sister-company). The fundamental tradeoff: strict-exact (misses typos, no false positives) vs substring (catches typos, risks wrong-company association).
+5. **The existing 18+ duplicates won't auto-resolve** with any search-side fix. They need manual merge in RCRM admin (or a separate cleanup script using PUT/PATCH endpoints — out of scope of this audit).
+
+### Safest Production Implementation Strategy
+
+Use `GET` with `exact_search=1`. Specifically, Module 33 becomes:
+
+```
+method: GET
+url:    https://api.recruitcrm.io/v1/companies/search?company_name={{encodeURL(1.company_name)}}&exact_search=1
+headers:
+  Authorization: Bearer <token>
+  Accept: application/json
+(no jsonStringBodyContent, no Content-Type)
+```
+
+Downstream consumer Module 34 already reads `{{33.data.data[1].slug}}` — works correctly across all three response shapes (wrapped-with-results, bare-empty-array, error). No change needed to Module 34, 35, 31.
+
+**Why strict exact (no fallback to substring)**:
+
+- **Worst-case for exact**: misses typo duplicates → creates a NEW duplicate. Damage = 1 extra company record per typo, no wrong-company association.
+- **Worst-case for substring fallback**: matches a sister-company (e.g., approving a contact at `Stellantis Detroit` finds an existing `Stellantis` and attaches the contact to the wrong company). Damage = misattributed contact, harder to detect than a duplicate.
+- Elevate's data is high-quality on company_name (ZoomInfo-sourced names are consistent), so typo rate is low. The 18 `Stellantis` duplicates exist because Module 33 was returning 404 not because of name typos.
+
+**Why no website/linkedin fallback**:
+
+- The search endpoint **explicitly rejects** website/linkedin params with HTTP 400. No way to use them.
+- RCRM's native create-time dedup on website+linkedin (per their help docs) is a separate safety net that fires INSIDE `POST /v1/companies` — we don't have to implement it. If a duplicate company has the same website as an inbound record, RCRM may auto-merge or reject. This is unverified empirically (would require a POST test, which is destructive); deferred.
+
+### Recommendation
+
+Apply the Module 33 GET-with-exact_search fix. Risk profile: low (matches the proven-working Module 36 contact-search pattern). Reversible by re-pushing the prior POST blueprint (saved in `.backups/`). 
+
+**Not recommended** in this same patch: any attempt to clean up the existing 18+ Stellantis duplicates. That requires either manual RCRM admin merges or a separate dedicated cleanup scenario. Out of scope for the audit-driven remediation.
+
+### Decisions Made
+
+- **No POST forms remained worth testing.** Once `{"company_name":...}`, `{"name":...}`, `{"website":...}`, `{"linkedin":...}`, and empty body all returned 404 with identical error messages, additional POST tests would add no information. Conclusion: `/v1/companies/search` does not accept POST.
+- **Did not test the same patterns against `/v1/contacts/search`.** The contact-search endpoint has been working in production (`GET /v1/contacts/search?email=X&exact_search=1` per Module 36). No reason to disturb a working endpoint.
+- **Did not POST to `/v1/companies` to test RCRM's native website+linkedin dedup behavior.** That would be a write operation; verifying it would create test records that may not auto-clean. Defer until a dedicated dummy-company test is authorized.
+- **Did not implement the Module 33 fix in this turn.** The user asked for the empirical audit and documentation only. Recommendation drafted; implementation gated on explicit go-ahead.
+
+### Cumulative Today
+
+15 remediation changes applied + 1 critical defect discovered (Module 33 broken since 2026-04-07). Next push would be the Module 33 GET conversion.
+
+### Next Steps
+
+1. [ ] Confirm with Travis: apply Module 33 fix? (single scenarios_update on 4667221, body change from POST/jsonStringBodyContent to GET-with-URL).
+2. [ ] After fix lands: validate by approving a known-duplicate contact (any pending Stellantis card in the queue). Module 33 should now find existing slug; Module 31 should be FILTERED OUT (not fire); Module 11 should attach the new contact to the existing company.
+3. [ ] Travis decision: handle the 18 Stellantis + 3 Cargojet + likely many more existing duplicates? Manual RCRM merge vs scripted cleanup vs accept.
+4. [ ] Travis credential rotations (unchanged).
+5. [ ] Phase 2 ZI bridge gated by ZoomInfo PKI restoration.
+
+### Blockers
+
+Unchanged. ZoomInfo PKI down. Credential rotations pending.
+
+---
+
+## Previous Session: 2026-05-21 (late evening — Wave 3 complete: Issue 1.3 landed end-to-end)
 
 ### What Was Done
 
