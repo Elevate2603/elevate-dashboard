@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0521-A-BUILDPAYLOAD28 -->
+<!-- ELEVATE-2026-0521-B-DEFENSIVE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -825,6 +825,23 @@
 </div><!-- /app -->
 
 <script>
+// ═══════════════════════════════════════════
+// DEFENSIVE: isolate browser-extension errors
+// Third-party scripts (Grammarly, LanguageTool, etc.) sometimes throw
+// uncaught runtime errors that disrupt our click handlers. Suppress
+// errors whose filename is not from our origin so they cannot break
+// the dashboard's event loop.
+// ═══════════════════════════════════════════
+window.addEventListener('error', function(e) {
+  var fn = e.filename || '';
+  if (fn && fn.indexOf(window.location.origin) === -1 && fn.indexOf('netlify.app') === -1) {
+    console.warn('[Defensive] Suppressed third-party script error:', fn, '—', e.message);
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    return true;
+  }
+}, true);
+
 // ═══════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════
