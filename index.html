@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0521-B-DEFENSIVE -->
+<!-- ELEVATE-2026-0521-C-PERSONAMAP -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1314,15 +1314,51 @@ function bulkDecline() {
   renderQueue();
 }
 
+// Title → persona → sequence mapping. Mirrors Staging-to-Queue (4990696)
+// Module 6 IML so older queue cards without persona/sequence_id still get
+// mapped at submit time.
+const PERSONA_RULES = [
+  { persona: 'HR/TA',               match: ['hr manager','hr director','human resources','talent acquisition','recruiter'] },
+  { persona: 'Plant Manager',       match: ['plant manager','facility manager','site manager'] },
+  { persona: 'Quality Manager',     match: ['quality manager','qa manager','qc manager','quality director'] },
+  { persona: 'Production Manager',  match: ['production manager','shift supervisor','production lead'] },
+  { persona: 'Engineering Manager', match: ['engineering manager','maintenance manager'] },
+  { persona: 'Operations',          match: ['operations manager','operations director','vp of operations'] },
+  { persona: 'C-Suite/VP',          match: ['coo','ceo','cfo','chief','president','vice president','vp'] }
+];
+const PERSONA_SEQUENCE = {
+  'HR/TA':               { id: '15307', name: 'HR / Talent Acquisition' },
+  'Plant Manager':       { id: '15310', name: 'Plant Manager' },
+  'Quality Manager':     { id: '15311', name: 'Quality Manager' },
+  'Production Manager':  { id: '15321', name: 'Production Manager' },
+  'Engineering Manager': { id: '15322', name: 'Engineering Manager' },
+  'Operations':          { id: '15323', name: 'Operations' },
+  'C-Suite/VP':          { id: '15324', name: 'C-Suite / VP' },
+  'General':             { id: '15325', name: 'General' }
+};
+function derivePersona(title) {
+  const t = (title || '').toLowerCase();
+  if (!t) return 'General';
+  for (const rule of PERSONA_RULES) {
+    if (rule.match.some(needle => t.indexOf(needle) !== -1)) return rule.persona;
+  }
+  return 'General';
+}
+
 // Single source of truth for the Approval Handler webhook payload.
 // MUST be called by both submitOne() and submitQueue() — divergent inline
 // payloads were the root cause of contacts missing phone/LinkedIn/city/etc.
 function buildPayload(c) {
   const decision = c._approved && !c.is_client ? 'approve' : 'decline';
+  const persona = c.persona || derivePersona(c.contact_title);
+  const seqMap = PERSONA_SEQUENCE[persona] || PERSONA_SEQUENCE['General'];
+  const hasEmail = !!(c.contact_email && String(c.contact_email).trim());
+  const sequence_id = c.sequence_id || (hasEmail ? seqMap.id : '');
+  const sequence_name = c.sequence_name || (hasEmail ? seqMap.name : 'No Email - Manually Prospect');
   return {
     key: c.key || '',
     decision: decision,
-    sequence_id: c.sequence_id || '',
+    sequence_id: sequence_id,
     contact_slug: c.rcrm_contact_id || '',
     contact_email: c.contact_email || '',
     contact_name: c.contact_name || '',
@@ -1343,8 +1379,8 @@ function buildPayload(c) {
     company_linkedin: c.company_linkedin || '',
     employee_count: c.employee_count || '',
     annual_revenue: c.annual_revenue || '',
-    persona: c.persona || '',
-    sequence_name: c.sequence_name || '',
+    persona: persona,
+    sequence_name: sequence_name,
     data_collection_source: c.data_collection_source || '',
     buying_signal: c.buying_signal || '',
     about_company: c.about_company || ''
