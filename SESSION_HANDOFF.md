@@ -1,6 +1,74 @@
 # Session Handoff
 
-## Current Session: 2026-05-20 — Approval Handler Redesign (design phase)
+## Current Session: 2026-05-21 — Make → RCRM Pipeline Audit + Staging-to-Queue Fix Applied
+
+### What Was Done
+
+Full audit of the Make → RCRM workflow via Make MCP (now available from Claude Code). Pulled blueprints for Approval Handler (4667221), Staging-to-Queue (4990696), ZoomInfo Intake (4732316), and Queue Enrich Updater (4952511). Inspected `elevate_daily_queue` (86836) records, `elevate_company_staging` (94078) records and datastructure (347903), and queue datastructure (319927). Cross-checked field flow from ZoomInfo webhook → staging → queue → dashboard → Approval Handler → RCRM.
+
+**Root cause identified for "RCRM gets incomplete company data on approval":**
+
+The previous-session theory (create-then-edit in Approval Handler) is NOT what is actually breaking. The real cause is **Staging-to-Queue (4990696) Module 4 silently dropped 3 enrichment fields when copying staging records into the queue**:
+
+- `company_website` — present in staging datastructure 347903, written by ZoomInfo Intake Module 30, but NOT in the queue AddRecord mapper
+- `company_street/city/state` (no `company_address` concatenation) — same
+- `annual_revenue` — same
+
+Result: every ZoomInfo-source queue card was born with empty website/address/revenue, regardless of what ZoomInfo returned. Dashboard `buildPayload(c)` then sent empty strings, and the Approval Handler wrote empty fields to RCRM. The dashboard and Approval Handler were never the problem for these three fields.
+
+**Fix applied (2026-05-21 14:44 UTC):** Patched scenario 4990696 Module 4 mapper via `scenarios_update`. Added `company_website`, `company_address` (concatenated from `1.company_street + ", " + 1.company_city + ", " + 1.company_state` wrapped in `trim()`), and `annual_revenue`. Verified post-update: `isinvalid: false`, scenario still active, blueprint persisted. Next 6am daily run (2026-05-22 10:00 UTC) will start producing complete queue rows.
+
+**Other audit findings — documented, not yet fixed:**
+
+1. **Leaked credentials in Approval Handler blueprint.** Both the RCRM Bearer token (`UL0jSyOX...xNzAzMDk4ODc1`) and the Anthropic API key (`sk-ant-api03-gonL2j1e...Cx7a6AAA`) are embedded directly in HTTP module headers (Modules 36, 33, 31, 11, 3, 2, 5, 4, 43, 44, 45, 47 of scenario 4667221, and in Queue Enrich Updater 4952511 Module 2). Anyone with Make team access or `scenarios_get` API can extract them. Rotation required, then migrate to Make-managed connection or env vars.
+2. **Contact-search uses GET, not POST** (Module 36). Current URL: `GET /v1/contacts/search?email={{encodeURL(1.contact_email)}}&exact_search=1`. SCRIBE_EXPORT.md line 62-63 says POST with body is required and the GET form returns unfiltered lists. The current GET appears to be working — `exact_search=1` may be a documented RCRM extension that filters server-side. Defer flipping until a test contact confirms whether GET is producing false matches.
+3. **`industry_id` switch defaults to `0`** (Module 20). When the ZoomInfo `Industry` string does not match the hardcoded `Manufacturing / Transportation / Automotive / …` list, Module 31 ends up POSTing `"industry_id": 0` to RCRM. Effect on RCRM unverified — may store as "no industry" silently or reject the field. Better default: omit the field, or fall back to 913 (Manufacturing) as a safe Elevate-default.
+4. **Module 3 / Module 43 redundant stage update.** Module 11 already creates the contact with `stage_id: 142468`. Module 3 (new-contact path) then re-POSTs the same `stage_id` plus `linkedin`. Module 43 (existing-contact path) is the only existing-contact update and only touches `stage_id` + `linkedin` — no gap-fill of phone/mobile/title/email even when RCRM is empty. The "linkedin overwrite on existing contact" violates the "RCRM is source of truth once Travis touches a record" rule (SCRIBE_EXPORT.md line 70-71 spirit).
+5. **`elevate_company_staging` datastructure (347903) does not declare `company_country`, `company_phone`, `company_zipcode`, `zi_contact_id`** even though ZoomInfo Intake Module 30 writes them. The values are stored on the records but not exposed by SearchRecord output bundle, so they cannot be read in downstream modules without a datastructure update. Blocks any future enrichment that needs `zi_contact_id`.
+6. **`elevate_daily_queue` datastructure (319927) does not have `zi_company_id` or `zi_contact_id` columns.** Adding the just-in-time ZI enrichment path proposed in PROPOSED_SCENARIO_CHANGES.md will require schema updates first.
+7. **`elevate_company_staging` is currently empty (0 records).** ZoomInfo Intake hasn't fired recently — consistent with the PKI connection issue (CLAUDE.md Known Issue #3). The Staging-to-Queue patch will only show effect once ZoomInfo resumes sending bundles OR a manual CSV import populates staging.
+8. **Signals-source queue cards (e.g., `signal-003_robert_hogan`) have empty `company_industry` and `company_website`** even with a real Stellantis contact. The signals pipeline writes records without enriching company fields. Separate issue from the ZoomInfo path — out of scope for this fix but a follow-up.
+
+**Approval Handler executions:** All recent runs (last 50) finished with status=1 (success) at the Make level. The "incomplete RCRM record" defect was not failing — it was succeeding with empty fields. Make's success metric measures HTTP 2xx responses, not field completeness.
+
+### Current State
+
+- Staging-to-Queue (4990696) updated and verified: `isinvalid:false`, `lastEdit: 2026-05-21T14:44:36.063Z`. Next scheduled run 2026-05-22 10:00 UTC.
+- Approval Handler (4667221) unchanged from prior session — known defects documented above are deferred.
+- Dashboard `buildPayload(c)` and rendering unchanged — already reads the right fields, no patch needed.
+- ZoomInfo PKI still unstable (no recent staging writes). Manual CSV import still the interim path.
+
+### Next Steps
+
+1. [ ] After next 6am daily run (2026-05-22), inspect a fresh ZoomInfo-source queue record and confirm `company_website`, `company_address`, `annual_revenue` are populated.
+2. [ ] After an actual approval of a freshly-populated card, inspect the resulting RCRM company record and confirm all six fields land.
+3. [ ] Rotate the RCRM Bearer token and Anthropic API key visible in scenario 4667221 / 4952511 blueprints. Migrate to Make-managed connections.
+4. [ ] Fix `industry_id` default — change Module 20 default from 0 to either an empty string with Module 31 conditional, or a safe-default 913 (Manufacturing). Re-test approval.
+5. [ ] Add `zi_company_id` / `zi_contact_id` columns to queue datastructure 319927, and `company_country / phone / zipcode / zi_contact_id` to staging datastructure 347903. Unblocks Phase 2 enrichment.
+6. [ ] Apply gap-fill pattern to Module 43 (existing-contact path) — read existing RCRM contact first, only update empty fields. Stop overwriting `linkedin`.
+7. [ ] Phase 2: build `netlify/functions/zi-enrich.js` per PROPOSED_SCENARIO_CHANGES.md Section 7, after ZoomInfo private key rotation.
+8. [ ] Investigate why signals-source queue cards have empty `company_industry` — likely the Signals scenarios need a parallel "carry-through enrichment" patch.
+
+### Decisions Made
+
+- **Fix the cause, not the symptom.** Patching Staging-to-Queue is upstream of the Approval Handler and resolves the empty-field problem for every NEW ZoomInfo-source card without touching the working approval flow. The complex Approval Handler redesign in PROPOSED_SCENARIO_CHANGES.md is no longer the critical path — it becomes a future Phase 2 optimization (decline-zero-touches, single-call writes) rather than a defect fix.
+- **Don't flip the contact search GET → POST today.** SCRIBE says POST is correct, but the live GET with `exact_search=1` has been succeeding for months. Flip only after a confirmed false-positive match in production.
+- **Don't touch jsonStringBodyContent modules in 4667221.** Per platform gotcha, modifying jsonStringBodyContent with `{{var}}` triggers `isinvalid:true` and requires manual Save in Make UI. The Module 20 mapper change for industry_id default is doable, but coordinated with Module 31 body changes is not. Defer all 4667221 blueprint edits to a session where Travis is at the Make UI for the manual Save.
+- **No index.html or commit churn.** `buildPayload(c)` was already correct; the field path it produces is honored end-to-end on the receiving side.
+
+### Blockers
+
+- ZoomInfo PKI still down — no fresh ZI bundles arriving, so the Staging-to-Queue patch can't be validated against new live data until either PKI resolves or CSV import is run.
+- The two leaked API keys (RCRM, Anthropic) need rotation. Until done, anyone exporting blueprints via Make MCP `scenarios_get` can read them.
+
+### Notes for Next Session
+
+- The new MCP tool surface (Make + ZoomInfo + RCRM via the deferred-tools mechanism) lets Claude Code do the audit-and-fix work end-to-end that previously required the web chat. The "cannot edit Make scenarios from Claude Code" note in prior handoffs is now obsolete.
+- `scenarios_update` accepted a blueprint with a `{{trim(1.company_street + ", " + 1.company_city + ", " + 1.company_state)}}` IML expression in a Datastore Add Record mapper without triggering `isinvalid:true`. That confirms the "isinvalid trigger" rule is specific to `jsonStringBodyContent` in HTTP modules, not to IML expressions everywhere. Useful for future patches.
+
+---
+
+## Previous Session: 2026-05-20 — Approval Handler Redesign (design phase)
 
 ### What Was Done
 
