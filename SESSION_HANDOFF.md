@@ -1,6 +1,114 @@
 # Session Handoff
 
-## Wave 5/6 Cycle: 2026-05-21 — dropdown mapping deployed, Route A2 IML bug exposed and fixed
+## Wave 6 Failure + Real Root Cause: 2026-05-21 21:37 — bundle propagation, not IML
+
+### Result of Michael Besic Re-Run (Test 2)
+
+Execution `bc9d52e3f20949fab0b3cbdbccb69e0c` at 21:37:17.878Z. Same outcome as Test 1: **status:1, 8 ops, 508ms**. No Michael Besic contact in RCRM. Town of Oakville count still 1.
+
+### Diagnosis Reversed
+
+The Wave 6 hypothesis (Make's `if()` eagerly evaluates all arguments → dead reference to `31.data.slug` errors → Module 35 fails) was WRONG. Wave 6 changed `if()` to `ifempty()` and the result was identical — same 8-op signature, same failure point. This rules out eager evaluation as the cause.
+
+**Real root cause (already documented in CLAUDE.md Known Issues #7 / Make Operation Gotchas):**
+
+> "Bundle propagation: if any filter blocks a bundle at any point, ALL downstream modules stop regardless of their own filter conditions"
+
+When Module 31's filter (`existing_company_slug == ""`) blocks (Route A2 — Town of Oakville exists), the bundle propagation stops at that point. Modules 35, 11, 38, 5, 13, 4 all skip — not because of their own filters, but because no bundle reaches them.
+
+I missed this gotcha during Wave 6 diagnosis. Reading too narrowly into "Module 35 errored" when the actual symptom is "Module 35 never received a bundle because Module 31's filter halted the chain."
+
+### Wave 6 Impact
+
+The `ifempty` change is **functionally a null change** in current behavior:
+- Route A1: Module 31 fires, ifempty returns `31.data.slug` correctly (same as original `if()`).
+- Route A2: Module 35 never fires regardless of which IML function is used.
+
+No regression. No improvement. The change can stay or be reverted with no observable difference today. SCRIBE updated to reverse the wrong gotcha entry.
+
+### Wave 7 Candidate — Architectural Restructure (NOT EXECUTED)
+
+The fix requires removing Module 31's filter and using a Router instead. Two branch options:
+
+**Option A — Sub-Router after Module 34 with duplicated downstream chain:**
+
+```
+Route A flow:
+  33 (company search) [filter unchanged: resolved_slug == "" AND company_name != ""]
+  34 (set existing_company_slug)
+  ROUTER (new — splits Route A into A1 and A2)
+    A1 branch: filter `existing_company_slug == ""`
+      31 (create company) [no filter now]
+      35-A1 (set resolved = 31.data.slug)
+      11, 38, 2, 5, 13, 4 (duplicated)
+    A2 branch: filter `existing_company_slug != ""`
+      35-A2 (set resolved = 34.existing_company_slug)
+      11, 38, 2, 5, 13, 4 (duplicated)
+```
+
+- Pros: Clean separation. Both branches fully execute their own chains.
+- Cons: Duplicates Modules 11, 38, 2, 5, 13, 4 across both branches. Module count grows from ~16 to ~22 in Route A. Future edits need to be applied to both branches.
+
+**Option B — Always-fire Module 31 with conditional URL:**
+
+Change Module 31's URL to use IML to switch between create vs no-op:
+- url: `{{if(34.existing_company_slug; "https://api.recruitcrm.io/v1/companies/" + 34.existing_company_slug; "https://api.recruitcrm.io/v1/companies")}}`
+- When existing, POST to /v1/companies/{slug} which RCRM treats as update.
+
+- Pros: Single-line change. No router. No duplication.
+- Cons: POSTs an UPDATE to existing company with current queue data — VIOLATES the "RCRM is source of truth once touched" rule per CLAUDE.md. Overwrites Travis-curated fields. Bad.
+
+**Option C — Skip Module 31 entirely, use Module 34 output everywhere:**
+
+Move Module 31 out of the main chain entirely. Use existing_company_slug as the company_slug if it exists, else have Module 11 fail and a later module retry. Complex, not recommended.
+
+**Recommendation: Option A.** It's the only option that preserves the "RCRM source of truth" semantics, doesn't break existing dedup, and produces a clean architecture. The duplication is mechanical and well-bounded — 6 modules across 2 branches.
+
+### Combined Wave Status
+
+| Wave | Status |
+|---|---|
+| 1 (industry_id 0→913) | ✓ Live + verified |
+| 3 (ifempty city/state/country) | ✓ Live + verified |
+| 4 (Module 102 email-required filter) | ✓ Live + verified |
+| 5 (data_source dropdown mapping) | ✓ Live; no longer producing 422 errors — fix is working |
+| 6 (Module 35 ifempty) | ✓ Live; **null change** — wrong diagnosis; harmless |
+| 7 (Module 31 filter → sub-Router, candidate) | NOT EXECUTED — requires explicit Travis go-ahead |
+
+### Test Outcomes Summary
+
+| Test | Path | Ops | Result |
+|---|---|---|---|
+| Troy English (yesterday's curl) | A1 | 12 | Wave 1 ✓ verified, Wave 11 failed (HTTP 422 dropdown) |
+| Michael Besic Test 1 (post-Wave-5) | A2 | 8 | Wave 5 verified (no 422); broken at Module 31/35 boundary |
+| Michael Besic Test 2 (post-Wave-6) | A2 | 8 | Identical to Test 1; Wave 6 had no effect |
+
+The Wave 5 fix is real — Module 11 would now succeed if it got the bundle. The blocker is one level up: Module 31's filter is halting the chain on dedup hits.
+
+### Net RCRM State
+
+- Orphan Ross Video from yesterday: unchanged
+- Michael Besic: still NOT in RCRM
+- Town of Oakville: count still 1 (no duplicate created — dedup verified again ✓)
+- 0 DLQ entries across all today's tests
+
+### Next Decision Points (Travis)
+
+1. **Wave 7 — authorize the Route A sub-router restructure** (Option A above). This is the only path to validate Wave 5 + Wave 6 end-to-end for Route A2 approvals. Without it, every existing-company approval will fail silently at the Module 31 filter.
+
+2. **Accept Route A2 as broken for now** and only approve via Route A1 (new companies) and Route B (existing contacts). Many backlog records won't fit either category.
+
+3. **Revert Wave 6** if you prefer the original `if()` IML (no observable difference but smaller diff history).
+
+4. **Investigate the ifempty/if() difference more carefully** with a known-firing Route A1 to confirm Wave 6 doesn't regress that path. (Indirect evidence: Troy English's Route A1 yesterday used `if()` and Module 35 fired correctly with the new slug. Wave 6's `ifempty` should produce the same result on Route A1, but we haven't empirically re-tested.)
+
+### Blockers
+
+Unchanged.
+
+---
+
+## Wave 5/6 Cycle: 2026-05-21 — dropdown mapping deployed, Route A2 IML bug exposed and fixed (superseded above)
 
 ### Wave 5 Result (data_collection_source dropdown mapping)
 
