@@ -1,5 +1,82 @@
 # Session Handoff
 
+## Pre-Flight Finding: 2026-05-21 — Module 36 silent-failure on empty contact_email
+
+### Status
+
+Discovered during pre-flight for the Sonny Lim controlled live test. **NO production change applied. NO approval triggered.** Test halted before approval. Documented here as an empirical defect for Travis decision.
+
+### Defect Summary
+
+When a queue record has empty/missing `contact_email`, Module 36's `GET /v1/contacts/search?email=&exact_search=1` returns HTTP 200 with the **entire unfiltered contacts list** (100 records, RCRM's default page size). The empty `email` query param is silently ignored — no 400 UNSUPPORTED_SEARCH, no empty `[]`. Make's IML `36.data.data[1].slug` then captures the FIRST record in that unfiltered list — an unrelated existing RCRM contact.
+
+Downstream effect: Module 37's `resolved_slug` becomes non-empty (pointing at the wrong contact). Module 102 Router takes Route B (existing-contact path). Modules 43, 44, 45, 47 then act on the wrong contact: stage update, sequence enrollment, Anthropic note, and note write — all attached to whoever is first in RCRM's contacts list. The originating queue record is then deleted by Module 100.
+
+### Empirical Evidence
+
+Pre-flight curl on the Sonny Lim record (no `contact_email`):
+
+```
+GET /v1/contacts/search?email=&exact_search=1
+Authorization: Bearer <token>
+Accept: application/json
+
+→ HTTP 200
+→ {"current_page":1,"data":[
+     {"slug":"17793113029170054787rLZ","first_name":"Katie","last_name":"Martinovich",...},
+     {"slug":"17779056072340054787Ndn","first_name":"Helen","last_name":"Verity",...},
+     ...100 records total
+   ]}
+```
+
+Module 37 would have set `resolved_slug = "17793113029170054787rLZ"` (Katie Martinovich). If approval had fired, Sonny Lim's activity note + stage update would have landed on Katie Martinovich's RCRM record.
+
+### Risk Surface
+
+Sample of 100 of 1,071 queue records (random):
+- 34 have a non-empty `contact_email`
+- **66 do NOT have a non-empty `contact_email`**
+
+Projected total: **~700 of 1,071 queue records would hijack an existing RCRM contact if approved as-is.** All look "approvable" in the dashboard — there is no surface warning of the missing email.
+
+Confirmed by running the same empty-email search: the first record returned is always RCRM's most-recently-created contact (Katie Martinovich, created 2026-05-20T21:08:22Z). Different approvals on different days would silently corrupt different contacts depending on which one happens to be at the top of the unfiltered list.
+
+### What This Is NOT
+
+- **NOT a regression of any change made today.** This defect predates all Wave 1-3 work. Module 36 has had this behavior since the scenario was created on 2026-04-07.
+- **NOT a defect of Module 33 or the recent GET fix.** Module 33's empty-name behavior was tested in the 2026-05-21 empirical audit and returns bare `[]` correctly. The Module 36 contact-search endpoint has DIFFERENT empty-param behavior than Module 33's company-search — confirmed empirically:
+  - `GET /v1/contacts/search?email=&exact_search=1` → WRAPPED with 100 records (unfiltered)
+  - `GET /v1/companies/search?company_name=&exact_search=1` → bare `[]` (empty)
+  - Same query-shape pattern, different RCRM-side behavior. Cannot be explained by anything other than RCRM's endpoint implementations differing.
+- **NOT yet causing damage.** No no-email card has been approved through the post-Wave-3 pipeline. The defect was caught at pre-flight.
+
+### Safe-By-Design Operation
+
+- **Decline path is safe** for no-email records. Modules 36 / 102 / 43 / 47 are all gated on `decision == "approve"`. Decline runs only Modules 1, 20, 99, 100 (audit + delete) — no RCRM contact touched.
+- **Approving a no-email record is the trigger.** A single click on Submit Individually for any of the ~700 affected records is sufficient to corrupt an unrelated RCRM contact.
+
+### Decision Required (Travis)
+
+Three independent decisions, each scoped distinctly:
+
+1. **(Test selection)** Do not approve the Sonny Lim card. Pick a different controlled-test target with non-empty contact_email. Candidates with verified email:
+   - `zi_91406862_9699846110` Troy English at Ross Video — Route A1 (0 existing in RCRM)
+   - `zi_127828047_1251520920` Corinne Stavness at Western Forest Products — Route A1 (count unknown, not yet looked up)
+   - `zi_71091033_1827943600` Michael Besic at Town of Oakville — Route A2 (1 existing)
+   - `zi_13157331_5343614872` Christina Mitchell at Covalon — Route A2 (2 existing)
+
+2. **(Prevention — Wave 4 proposed)** Patch Module 102 (Approve Only Router) filter to also require `contact_email != ""`. Single-line change. When fired with empty email, the entire approve route is blocked; only the audit + delete run. The no-email queue records become safe to clear by approval (they'd just delete from queue without RCRM touch). **DEFERRED until Travis explicit go-ahead** — this is a Make production change.
+
+3. **(Cleanup — separate from prevention)** The ~700 no-email queue records are useless for RCRM outreach (no email = no contact create even with the Wave 4 fix applied). Either bulk-decline them (after Wave 4 is live so they don't corrupt RCRM) or direct datastore delete via `data-store-records_delete`. Scope and timing TBD. Out of the scope of this test plan.
+
+### Scribe entry (validated)
+
+To add to SCRIBE_EXPORT.md only after Travis confirms the finding:
+
+> [CONFIRMED] 2026-05-21 pre-flight: RCRM `GET /v1/contacts/search?email=&exact_search=1` (empty email param) returns HTTP 200 with the UNFILTERED contacts list (100-record default page). This contradicts the same shape for `/v1/companies/search?company_name=` which returns bare `[]` for empty param. Approval Handler Module 36 with empty `1.contact_email` therefore returns Make-side as `36.data.data[1] = the most-recently-created RCRM contact`, causing Module 37 to set resolved_slug to an unrelated person's slug. ~66% of the 1,071-record backlog (Sample N=100) carries no contact_email and would trigger this silent corruption if approved | tags: rcrm, scenario-c, silent-defect, latent-hazard
+
+---
+
 ## Controlled Live Test Plan: 2026-05-21 — Single Approval, Production Validation
 
 ### Status
