@@ -1,6 +1,155 @@
 # Session Handoff
 
-## Current Session: 2026-05-21 (late evening — Module 33 GET fix deployed; dedup verified end-to-end)
+## Current Session: 2026-05-21 (end of day — Stabilization & Monitoring Baseline)
+
+### Mode
+
+Stabilization. No production changes from here forward unless one of the following is empirically observed:
+- New defect surfaces (RCRM record incomplete, execution failures, etc.)
+- Regression detected against the 16 changes applied today
+- Validation check below fails
+
+### Baseline Snapshot (read-only, no mutations)
+
+Captured 2026-05-21 ~17:30 UTC, ~5 minutes after the final Module 33 GET fix push (17:24:51 UTC).
+
+**Make scenario state:**
+
+| Scenario | ID | `lastEdit` (UTC) | `isinvalid` | `isActive` | Next scheduled |
+|---|---|---|---|---|---|
+| Approval Handler | 4667221 | 2026-05-21T17:24:51.028Z | false | true | webhook-triggered, n/a |
+| Staging-to-Queue | 4990696 | 2026-05-21T16:53:18.247Z | false | true | 2026-05-22T10:00:00Z |
+| Queue Fetch | 4734116 | 2026-04-20T16:39:45.542Z (unchanged this cycle) | false | true | webhook-triggered, n/a |
+
+**Datastores:**
+
+| Datastore | ID | Records | Size / Max | Schema fields |
+|---|---|---|---|---|
+| elevate_daily_queue | 86836 | 1,071 | 289,904 / 1,048,576 bytes | 53 (datastructure 319927) |
+| elevate_company_staging | 94078 | 0 | (empty) | 24 (datastructure 347903) |
+
+**Approval Handler execution baseline (post-fix activity):**
+
+- Last execution before any of today's edits: 2026-05-20T21:08:20.938Z, 13 ops, status 1
+- Total today (2026-05-21): 1 execution at 17:29:22.063Z, 2 ops, status 1, 249ms duration. Operation count (2) and duration (~250ms) match the historical pattern for webhooks where Module 99's `key != ""` filter blocks downstream — likely a test ping or empty-key webhook arrival. **No real approvals processed since the Module 33 GET fix went live.**
+- DLQ count: 0 (`allDlqCount`)
+
+**Staging-to-Queue execution baseline:**
+
+- Last execution: 2026-05-21T10:00:01.794Z, 127 ops, status 1. This was the morning's daily run, processed before any of today's mapper changes were applied. Staging was emptied by Module 5 after processing.
+- Daily ops counts over the last 14 runs: 2506 (May 8 bulk), 118, 118, 121, 55, 46, 118, 277, 13, 10, 4, 139, 25, 127. Indicates ZoomInfo Intake has been firing (with variance) for the past two weeks — **PKI may be more stable than the prior session's "ZI Intake hasn't fired" assertion suggested, OR Travis has been running manual CSV imports.**
+
+**RCRM duplicate baseline (10 known target companies, exact-match search):**
+
+| Company | Records | Excess (= records - 1) |
+|---|---|---|
+| Stellantis | 18 | 17 |
+| Cargojet | 8 | 7 |
+| Linamar | 6 | 5 |
+| Ecobee | 3 | 2 |
+| Covalon | 2 | 1 |
+| Mejuri | 1 | 0 |
+| Sunnybrook Health Sciences Centre | 1 | 0 |
+| Town of Oakville | 1 | 0 |
+| Region of Durham | 0 | n/a (not yet in RCRM, will be created on next approval) |
+| Ross Video | 0 | n/a (not yet in RCRM) |
+
+**Total visible excess across these 10:** 32 known duplicate company records, all pre-Module-33-GET-fix artifacts. These are the floor — broader set likely contains more.
+
+**Queue sample feature audit (100 of 1,071 records):**
+
+- `company_city` populated: 0 / 100
+- `zi_company_id` populated: 0 / 100
+
+Expected — all 1,071 current queue records predate today's Staging-to-Queue mapper extensions (15:55 + 16:53 UTC). Tomorrow's 10:00 UTC daily run is the first opportunity for new queue records to carry the additional fields.
+
+**Live HTML state:**
+
+- Live URL: `https://elevate-sales-nav.netlify.app`
+- Build token: `ELEVATE-2026-0521-A-BUILDPAYLOAD28`
+- Local HEAD: matches origin/main at commit `0390b7b`
+- Build serves the 28-field `buildPayload(c)` including company_city/state/country
+
+### Monitoring Validation Checklist for Tomorrow's Cycle
+
+Each check below has a concrete pass/fail criterion. **Run as a batch after tomorrow's 10:00 UTC daily Staging-to-Queue run** — or sooner if Travis manually triggers it or runs a CSV import.
+
+**Check 1 — Staging-to-Queue mapper carry-through works.**
+
+- Read `elevate_daily_queue` records via `data-store-records_list(86836, limit:100)`.
+- For any records with `added_at >= 2026-05-22T10:00:00Z` (i.e., NEW since this monitoring point) AND `lead_source == "zoominfo_intent"`:
+  - **PASS** if at least one of those records has at least one of `company_city`, `company_state`, `company_country`, `zi_company_id`, `zi_contact_id` non-empty.
+  - **PARTIAL PASS** if ZoomInfo records exist but the new fields are all empty — could mean staging records didn't have the source fields populated (upstream Scenario A issue, not Wave 3 issue). Inspect Scenario A executions.
+  - **FAIL** if no new zoominfo_intent records appeared at all — staging didn't get fed; this is the same ZI-PKI blocker we already have.
+
+**Check 2 — Approval Handler dedup works end-to-end.**
+
+- Read Approval Handler executions via `executions_list(4667221)`. Any with `timestamp > 2026-05-21T17:24:51Z` AND `status == 1` AND `operations > 4` is a real approval (declines and test pings show 2-4 ops).
+- For each real approval:
+  - **EXPECTED ops count for new-company-new-contact approval (no existing matches):** 13 (witness: pre-fix executions like `4a7d009...` at 13 ops, `84d5f16...` at 13 ops). Pre-fix this was also 13 because Module 3 wasn't yet deleted; post-fix the count should be similar or 1 less since Module 3 is gone. Acceptable range: 11-14.
+  - **EXPECTED ops count for existing-company-new-contact approval (Module 33 finds match):** Module 31 skipped, Module 35 still runs but resolves from existing slug, Modules 11/2/5/13/4 still run. Approximate 10-12 ops. If a real approval lands at exactly 10-12 ops AND the contact came from a duplicate company (e.g., Stellantis), Module 33 dedup is working.
+  - **EXPECTED ops count for existing-contact approval (Module 36 finds existing):** Route B only — Modules 1, 20, 99, 100, 36, 37, 39, 43, 44, 45, 46, 47 = ~12 ops.
+  - **WARN** if any execution lands at 7-8 ops with `status == 1` — historical pattern was a partial-failure of Anthropic note-generation (Modules 5/45 returning unexpected shape).
+  - **FAIL** if any execution has `status != 1`, OR if DLQ count increments above 0.
+
+**Check 3 — RCRM record completeness for a freshly approved contact.**
+
+- After Travis approves a card with known company name, identify the resulting RCRM contact slug from the Approval Handler execution's response chain (not exposed via executions_get; would require Make UI inspection OR a lookup using `GET /v1/contacts/search?email={the contact's email}&exact_search=1`).
+- Read the contact via `GET /v1/contacts/{slug}`.
+- **PASS** if all of:
+  - `current_organization` matches `company_name` from the queue record
+  - `company_slug` is non-empty AND matches a real company slug
+  - `designation` matches `contact_title`
+  - `contact_number` populated when phone was provided
+  - `linkedin` populated when LinkedIn was provided
+  - `custom_fields[5].value` equals the dashboard's `data_collection_source` payload value (not literal "ZoomInfo" unless that's what dashboard sent)
+- Read the company via `GET /v1/companies/{slug}`.
+- **PASS** if all of:
+  - `company_name`, `website`, `linkedin`, `address` populated from queue data
+  - `city`, `state`, `country` either reflect company HQ (if queue record had company_city populated post-tomorrow) OR fall back to contact location (if backlog card without company_city — `ifempty()` fallback works)
+  - `industry_id` either matches the switch table or is 913 (Manufacturing fallback), NEVER 0
+  - `custom_fields[1]` = `employee_count` from queue
+  - `custom_fields[2]` = `annual_revenue` from queue
+  - `custom_fields[12]` = `buying_signal` from queue (may be empty for ZI-source cards, intentional)
+
+**Check 4 — Dedup hasn't created NEW duplicates.**
+
+- Re-run the 10-company baseline search.
+- **PASS** if no count INCREASED vs the baseline above.
+- **FAIL** if any count increased — specifically, if Stellantis went from 18 → 19, or Cargojet from 8 → 9, that means Module 33 is somehow NOT matching despite the same name.
+
+**Check 5 — Existing-contact path doesn't clobber LinkedIn.**
+
+- If any execution between now and the check is a Route B path (existing-contact, Module 39+43+44+...), pick the contact's RCRM slug, read its `linkedin` field via `GET /v1/contacts/{slug}` BEFORE and AFTER a known re-approval. The before/after comparison requires manual triggering.
+- **PASS** if `linkedin` is unchanged after re-approval (Module 43's body shouldn't be writing it anymore — verified in blueprint, just re-verify behaviorally).
+
+**Check 6 — Silent-failure signals.**
+
+- `allDlqCount` on 4667221: currently 0. ANY increase = silent failure.
+- Scenario `isinvalid` flag: currently false on both 4667221 and 4990696. ANY toggle to true = someone (Make UI auto-edit, or another API push) corrupted the blueprint.
+- Scenario `lastEdit` timestamps: currently 17:24:51 (4667221) and 16:53:18 (4990696). ANY further change without an audit entry in this handoff = unexpected drift.
+- Queue datastructure 319927 field count: 53. ANY change without an audit entry = drift.
+- Live HTML build token: `ELEVATE-2026-0521-A-BUILDPAYLOAD28`. ANY change without a corresponding git commit in our log = drift.
+
+### Validation Approach
+
+Run all 6 checks **after each meaningful production event** (Staging-to-Queue daily run, batch of dashboard approvals, or 24-hour heartbeat). Document each check's result with the observed numbers, not adjectives. Validation logs go into SESSION_HANDOFF.md under a dated heading.
+
+If a check fails: do NOT make changes immediately. First document the failure with the exact observed numbers vs expected. Then decide between (a) continued observation, (b) targeted remediation, (c) rollback. The decision is Travis's; Claude reports findings.
+
+### Decisions Made
+
+- **Do not poll RCRM at high frequency.** RCRM rate limit is 60/min; baseline takes ~10 GETs. Re-running the full check is ~15-20 GETs. At most twice per day of polling, well within budget.
+- **Do not introduce monitoring scenarios in Make.** Adding monitor scenarios would itself be a production change. Existing Make execution lists + datastore reads are sufficient.
+- **Do not call `executions_get` for detail.** The MCP returns only `{status: "SUCCESS"}` — no module-level bundles. To inspect what an execution actually did, use Make UI execution viewer. This is a known MCP limitation, not a defect.
+
+### Blockers
+
+Unchanged. ZoomInfo PKI status uncertain — daily execution counts suggest some intake activity, but staging is empty as of this snapshot. Tomorrow's 6am cycle will clarify.
+
+---
+
+## Previous Session: 2026-05-21 (late evening — Module 33 GET fix deployed; dedup verified end-to-end)
 
 ### What Was Done
 
