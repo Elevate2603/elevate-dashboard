@@ -1,5 +1,119 @@
 # Session Handoff
 
+## Live Test Result: 2026-05-21 — Troy English / Ross Video (curl bypass)
+
+### What Was Done
+
+After three failed dashboard click attempts (Travis-side browser extension was breaking the Submit Individually click handler — Grammarly-like `index.bundle.js` injection error, mitigated but not fully cured by a defensive error suppressor pushed earlier in the session), Travis authorized a curl bypass.
+
+I posted the exact 28-field buildPayload-equivalent JSON for queue record `zi_91406862_9699846110` (Troy English / Ross Video / `tenglish@rossvideo.com`) directly to `hook.us2.make.com/aq8yfoqv8itfhrewo1k6iib7u6rq4gm1`. Webhook returned HTTP 200 ("Accepted") in 163ms.
+
+### Execution Details
+
+- **imtId:** `021c01825c1642b5bc6938ce4ea5011c`
+- **Timestamp (Make UTC):** 2026-05-21T20:35:22.475Z
+- **Status:** 1 (success)
+- **Operations:** 12 (predicted 15 — note pipeline modules 5/13/4 skipped, see below)
+- **Duration:** 2032ms
+- **DLQ:** 0
+- **Transfer:** 9,748 bytes
+
+### Verdict: PARTIAL PASS
+
+| Surface | Result |
+|---|---|
+| Make pipeline execution | ✓ status:1, no DLQ |
+| Module 1+20+99+100 (audit + queue delete) | ✓ Fired. Queue record `zi_91406862_9699846110` is gone from datastore 86836 |
+| Module 36 (contact search GET) | ✓ Fired. Returned bare `[]` correctly for new email |
+| Module 102 Wave 4 filter | ✓ Passed: decision=approve AND contact_email≠"" both true |
+| Module 33 (company search GET — Wave 1 dedup) | ✓ Fired. Returned bare `[]` correctly (Ross Video didn't exist) |
+| Module 31 (POST /v1/companies) | ✓ Succeeded. Created `Ross Video` slug `17793957231420054787Ryx` |
+| **Wave 1 verification (industry_id fallback)** | ✓ **PASS.** Created company has `industry_id: 913` (Manufacturing). "Telecommunication Equipment" is not in the 12-entry switch → correctly defaulted to 913, not 0. |
+| **Wave 3 verification (ifempty city/state/country)** | ✓ **PASS** (behaviorally). Company `city="Ottawa"`, `state="Ontario"`, `country="Canada"` — read from contact_X via the new `ifempty()` IML, because queue had empty `company_city/state/country`. NOTE: for backlog cards (empty company_X), this is observationally identical to pre-Wave-3 behavior. A clean distinguishing test requires a queue card with `company_city ≠ contact_city`. |
+| Module 11 (POST /v1/contacts) | ✗ **FAILED.** RCRM returned HTTP 422: `[{"custom_field_3":"The custom dropdown field is invalid."}]`. Reproduced on manual curl. |
+| Module 5/13/4 (Anthropic note pipeline) | ✗ Skipped (final_slug empty because Module 11 failed). |
+| Module 2 (sequence enroll) | – Already going to skip (queue had no `sequence_id`). |
+| **Wave 2 verification (data_collection_source variable)** | ⚠️ **EXPOSED upstream defect.** Module 11 correctly read `{{1.data_collection_source}}` from the payload and sent `"zoominfo_intent"`. RCRM then rejected because that string isn't a valid option in the "Data Collection Source" dropdown — the only verified valid option is `"ZoomInfo"`. The Wave 2 fix was correct in intent; the value chain upstream now fails closed instead of silently. |
+
+### New Defect Discovered (empirical)
+
+**Queue value vs RCRM dropdown mismatch.** Staging-to-Queue scenario 4990696 Module 4 mapper hardcodes `data_collection_source: "zoominfo_intent"` when promoting staging records. RCRM's contact custom_field 5 ("Data Collection Source") is a **dropdown** that only accepts values matching its configured options. The only empirically-confirmed valid option is `"ZoomInfo"` (witnessed on existing Katie Martinovich contact). Sending `"zoominfo_intent"` produces 422.
+
+This defect was MASKED before Wave 2 by Module 11's hardcoded `"value": "ZoomInfo"` literal — which sent a valid value regardless of the queue payload. Wave 2 made Module 11 honest about reading from the payload, which then exposed that the payload value is wrong for this RCRM endpoint.
+
+The RCRM 422 error message labels the failing field as `custom_field_3`, but inspection shows our payload contains only custom_fields 1, 2, 5 — no field_id 3 sent. The mislabeling appears to be an RCRM-side bug; the actual rejecting field is 5 (the dropdown).
+
+### Net RCRM State After Test
+
+- **New orphan company in RCRM:** `Ross Video` slug `17793957231420054787Ryx`, created 2026-05-21T20:35:23Z. Has industry_id=913, city=Ottawa, state=Ontario, country=Canada, employee_count=1800, all other fields empty. **No contact attached.** Future ZoomInfo-source approvals for other Ross Video contacts (e.g., queue still has David Kerrivan at `dkerrivan@rossvideo.com`) will dedup-find this orphan and attach correctly.
+- **No Troy English contact** in RCRM.
+- **No note** in RCRM.
+- **Queue record deleted** (`zi_91406862_9699846110` no longer in datastore 86836).
+
+### Wave-by-Wave Verification Summary
+
+| Wave | Status |
+|---|---|
+| 1 (Module 20 industry_id default 0→913) | ✓ Verified on the created company record |
+| 2 (Module 11 data_collection_source literal→variable) | ✓ Variable is being read; ⚠️ exposed an upstream value mismatch that needs Wave 5 |
+| 3 (Module 31 city/state/country ifempty fallback) | ✓ Verified behaviorally; full distinguishing test requires non-backlog data |
+| 4 (Module 102 email-required filter) | ✓ Verified (filter passed for valid email; pre-flight earlier verified empty-email block) |
+| Module 33 GET dedup (morning Wave 1 push) | ✓ Verified (used GET correctly, returned correctly, no duplicate created) |
+| Module 3 deletion (Wave 1) | ✓ Implied verified (ops count consistent) |
+| Wave 2 Module 43 LinkedIn-not-clobbered | Not exercised (this was Route A1, not Route B) |
+
+### Decisions Made
+
+- **No remediation triggered.** Travis's instruction was to validate, not to fix new defects without explicit go-ahead. The Wave 5 candidate (dropdown value mapping) is documented below but NOT applied.
+- **No cleanup of the orphan Ross Video.** Travis explicitly said "Do not perform cleanup actions." The orphan stays. Future approvals for other Ross Video contacts will dedup to it.
+- **Did NOT trigger a retry of the contact create.** That would require either correcting the data_collection_source in the queue OR mapping the value in Module 11. Both are remediation, not validation.
+
+### Wave 5 Candidate (NOT EXECUTED — proposed for review)
+
+Three fix options, ordered by preference:
+
+**Option A (smallest blueprint change, recommended):** Update Module 20 SetVariables to compute a mapped value, e.g., add:
+```
+{"name": "mapped_data_source", "value": "{{switch(1.data_collection_source; \"zoominfo_intent\"; \"ZoomInfo\"; \"hiring_signals\"; \"ZoomInfo\"; \"ZoomInfo\")}}"}
+```
+Then update Module 11 body to read `{{20.mapped_data_source}}` instead of `{{1.data_collection_source}}`. This is a single-line addition to Module 20 plus a single-string change in Module 11. Both via scenarios_update.
+- Pros: Compact. Future-proof for adding more source-value mappings. Default fallback to "ZoomInfo" if nothing matches.
+- Cons: Still hardcodes "ZoomInfo" as the fallback — if Travis adds new dropdown options in RCRM, the switch needs updating.
+
+**Option B (fix at source):** Update Staging-to-Queue Module 4 mapper to write `"data_collection_source": "ZoomInfo"` directly (replace literal `"zoominfo_intent"`). Future queue records will then carry the correct value.
+- Pros: Cleanest semantically. Module 11 stays as-is post-Wave-2.
+- Cons: Doesn't help the existing 1,071 backlog records — they're already in the queue with the wrong value and would still fail. Would need backfill OR Option A also applied.
+
+**Option C (RCRM admin):** Travis adds `"zoominfo_intent"` (or whatever values the queue uses) as configured dropdown options in RCRM's Data Collection Source field. No Make change needed.
+- Pros: Aligns RCRM to the existing data flow. Future values would also need to be added.
+- Cons: Travis-only action; no automation. Won't survive a future RCRM admin who deletes the options.
+
+**Recommendation:** Option A as the prevention layer. Option B as a separate cleanup of the Staging-to-Queue defect. Option C is admin housekeeping — desirable but not blocking.
+
+### Cleanup Considerations (SEPARATE from prevention — Travis decides)
+
+The orphan `Ross Video` company at slug `17793957231420054787Ryx` is technically usable for future Ross Video approvals — it'll be the dedup target. Travis's options:
+
+1. **Keep it.** Wait for the next Ross Video contact approval (David Kerrivan is in the queue) to attach to it. Verifies the dedup path empirically.
+2. **Delete it.** `DELETE /v1/companies/17793957231420054787Ryx` (endpoint signature unverified — would need testing). Removes the orphan.
+3. **Manually enrich it via the RCRM admin UI.** Add website (rossvideo.com), LinkedIn, address, real industry. Then future approvals attach to a useful record.
+
+I have NOT taken any of these actions.
+
+### Next Steps Pending Travis Decision
+
+1. [ ] Authorize Wave 5 (data_collection_source mapping) — or accept that approvals will continue to fail until done.
+2. [ ] Decide on the orphan Ross Video company (keep / delete / enrich).
+3. [ ] Once Wave 5 is in: retry Troy English (different queue record needed since `zi_91406862_9699846110` is deleted) OR pick another candidate.
+4. [ ] (Out of band) Address the dashboard's Submit Individually click handler — the browser extension issue is real but per-Travis. Defensive deploy may help, but full mitigation is to disable Grammarly on this domain OR test in incognito.
+5. [ ] (Pre-existing) Address the 1,071 backlog records — most have stale or missing fields. Decide bulk-delete vs gradual.
+
+### Blockers
+
+Unchanged. ZoomInfo PKI status uncertain. Credentials still not rotated.
+
+---
+
 ## Pre-Flight Lock: Troy English / Ross Video — Controlled Live Test
 
 ### Status
