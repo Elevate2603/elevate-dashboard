@@ -2511,3 +2511,70 @@ Result: every ZoomInfo-source queue card was born with empty website/address/rev
 - Travis works on Windows, Command Prompt / PowerShell
 - Travis's preferences: take direct action (no step-by-step), show widget/preview before live file changes, run `node -c` syntax check before delivering any HTML, build correctly once, cross-reference 3+ sources before touching Make blueprints, verify current state before changing, never rebuild from scratch
 - ZoomInfo private key (PKCS#8) was leaked into a chat 2026-05-20 — needs rotation with James Gervais before deploying to any environment
+
+---
+
+## 2026-05-21 Late Session — Approval Handler Wave 7 & Wave 8 (Bundle-Propagation Architecture Fix)
+
+### Summary
+
+The Approval Handler (scenario 4667221) had two latent bundle-propagation bugs that masked each other for the entire history of the scenario. Both are now fixed and end-to-end validated against live RCRM.
+
+### Wave 7 — Route A sub-router (push at 2026-05-21T21:48:54Z)
+
+**Problem.** Original Route A was a single linear chain: `33 → 34 → 31 (filter: existing_company_slug == "") → 35 → 11 → 38 → 2 → 5 → 13 → 4`. When Module 33 found an existing company in RCRM, Module 31's filter blocked — and Make's bundle-propagation rule then halted Modules 35/11/38/2/5/13/4. Result: any "approve" for a contact whose company already existed in RCRM did NOTHING in RCRM. Silent failure. This had been masked because earlier waves had been blocked by even earlier bugs (Module 11 422s, Module 33 POST 404s, dropdown rejection, etc.).
+
+**Fix.** Inserted Module 200 (BasicRouter) after Module 34, splitting Route A into:
+- **A1** (`existing_company_slug == ""`): 31 → 35 → 11 → 38 → 2 → 5 → 13 → 4 (create new company, create contact, enroll, note)
+- **A2** (`existing_company_slug != ""`): 235 → 211 → 238 → 202 → 205 → 213 → 204 (reuse existing company slug, create contact, enroll, note)
+
+A2 modules are duplicates of A1 with new IDs and updated variable references (235.resolved_company_slug, 238.final_slug, 213.claude_note).
+
+**Validation.** Curl `WAVE7_TEST_MICHAEL_BESIC` at 21:52:51Z → 11 ops, contact 32748 created in RCRM with company_slug=`17120725928040057400PTy` (existing Town of Oakville). **A2 path worked for contact creation** but `last_note_created_on: null` — exposed the secondary defect described below.
+
+### Wave 8 — Sibling sub-routers for enroll vs note in A1, A2, and B (push at 2026-05-21T21:59:52Z)
+
+**Problem.** Same bundle-propagation rule, narrower scope. In every route, the enroll module sat mid-chain with filter `sequence_id != ""`. When the payload sent an empty sequence_id, the enroll module blocked — and Modules 5/13/4 (note chain) for A1, 205/213/204 for A2, and 45/46/47 for Route B all stopped firing. Result: any "approve" without a sequence_id silently skipped note logging.
+
+**Fix.** Inserted three sibling sub-routers, one per route:
+- **Module 250** (A1): branches into `[2: enroll]` and `[5 → 13 → 4: note]`
+- **Module 251** (A2): branches into `[202: enroll]` and `[205 → 213 → 204: note]`
+- **Module 252** (B): branches into `[44: enroll]` and `[45 → 46 → 47: note]`
+
+When enroll's filter blocks, only the enroll branch halts; the note branch fires independently from the same parent bundle.
+
+### Three-route end-to-end validation (2026-05-21 ~22:00–22:05Z)
+
+| Route | Curl test | Result |
+|---|---|---|
+| **A2** (Wave 8 test) | `wave8.test.contact@oakville.ca`, Town of Oakville, sequence_id="" | ✅ Contact 32749 created → company_slug `17120725928040057400PTy` (existing) → note logged 22:00:13Z. 14 ops. |
+| **A1** | `a1.tester.wave8@elevatewave.test`, "Wave8 A1 Test Company Inc", sequence_id="" | ✅ Contact 32750 + NEW company `17794010836640054787KMx` created → note logged 22:04:49Z. |
+| **B** | Same email as A2 test (existing contact 32749), sequence_id="" | ✅ No duplicate created. Same contact slug. `updated_on: 22:05:14Z` (Module 43 stage update). `last_note_created_on: 22:05:14Z` (note logged). |
+
+### Architectural lesson (SCRIBE'd separately)
+
+Any filter mid-chain in Make halts downstream modules in the same linear flow when it blocks — even modules whose own filters don't reference the upstream filter's predicate. **Conditional behavior must be branched via BasicRouter sub-routers, not via mid-chain filters.** Pre-existing scenarios that "looked correct" because the happy path always took the unfiltered branch may harbor identical latent bugs.
+
+### Test contact cleanup (Travis decision)
+
+Three test contacts now exist in RCRM under stage "In Outreach":
+- 32748 — Michael Besic / Town of Oakville (Wave 7 validation)
+- 32749 — Wave8 Tester / Town of Oakville (Wave 8 A2 + B validation)
+- 32750 — A1 Tester / Wave8 A1 Test Company Inc (Wave 8 A1 validation)
+- New orphan company: "Wave8 A1 Test Company Inc" (slug `17794010836640054787KMx`)
+
+All four are clearly synthetic. **Per stabilization rule "do not perform cleanup actions" — these were NOT deleted by Claude.** Travis can delete via RCRM UI or authorize Claude to do so.
+
+### Files snapshot
+
+- `.backups/wave7_pre_route_a_subrouter.20260521T214708Z.json` — pre-Wave 7 structure with rollback plan
+- `.backups/wave8_pre_enroll_note_splitter.20260521T215300Z.json` — pre-Wave 8 structure with rollback plan
+- Approval Handler 4667221 — final state `lastEdit: 2026-05-21T21:59:52.494Z`, `isinvalid: false`, `isActive: true`
+
+### Updated Next Steps (Approval Handler subset only)
+
+- ~~Route A2 bundle-propagation issue~~ — RESOLVED via Wave 7
+- ~~Note chain not firing on empty sequence_id~~ — RESOLVED via Wave 8
+- [ ] Travis decision on deleting test contacts 32748/32749/32750 + test company `17794010836640054787KMx`
+- [ ] Live queue approval test (one real card) to confirm all three paths work in production payload shape
+- [ ] Audit Staging-to-Queue (4990696) and other scenarios for the same mid-chain-filter pattern

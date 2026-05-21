@@ -154,7 +154,7 @@ The following must be set locally (in a `.env` file that is gitignored) and in a
 | `MAKE_API_TOKEN` | For Make scenario blueprint updates | make.com → profile → API tokens |
 | `NETLIFY_AUTH_TOKEN` | For CLI deploys | netlify.com → user settings |
 
-**SECURITY NOTE:** Anthropic API key was previously hardcoded in `index.html` — confirmed REMOVED as of 2026-05-21 (live HTML line 1482 = `ANTHROPIC_KEY_REMOVED` literal). Side-effect: the Sales Intelligence tab's signal-refresh feature is broken (calls Anthropic with the placeholder string). To restore: build a Netlify function proxy (`netlify/functions/anthropic-proxy.js`) that holds the key server-side in Netlify env, and update the Sales Intelligence tab to call the proxy. Remaining Anthropic key exposure is in Make scenario 4667221 blueprint headers (Modules 5, 45) — extractable via `scenarios_get`. Rotate during the Make Connections migration (Issue 2.6 of the remediation plan).
+**SECURITY NOTE:** Anthropic API key was previously hardcoded in `index.html` — confirmed REMOVED as of 2026-05-21 (live HTML line 1482 = `ANTHROPIC_KEY_REMOVED` literal). Side-effect: the Sales Intelligence tab's signal-refresh feature is broken (calls Anthropic with the placeholder string). To restore: build a Netlify function proxy (`netlify/functions/anthropic-proxy.js`) that holds the key server-side in Netlify env, and update the Sales Intelligence tab to call the proxy. Remaining Anthropic key exposure is in Make scenario 4667221 blueprint headers (Modules 5, 45, **and 205** after Wave 7/8) — extractable via `scenarios_get`. Rotate during the Make Connections migration (Issue 2.6 of the remediation plan).
 
 ## Branding
 
@@ -224,7 +224,18 @@ Format: `ELEVATE-{year}-{month}{day}-{letter}` where letter increments per same-
 
 6. **Signals subsystem error rates 46-88%** — Signals-Enrich Contacts, Email Drafter, Outlook Send, ZI Search Worker all bleeding errors. Needs systematic debug.
 
-7. **Make.com platform limitation:** `isinvalid:true` flag on scenarios only clears via manual Save in Make UI, never via API. `jsonStringBodyContent` with `{{variable}}` expressions triggers this. `scenarios_update` silently rejects identical blueprints.
+7. **Make.com platform limitation:** `isinvalid:true` flag on scenarios only clears via manual Save in Make UI, never via API. `jsonStringBodyContent` with `{{variable}}` expressions triggers this. `scenarios_update` silently rejects identical blueprints. **Update 2026-05-21:** This rule may be partially superseded — see SCRIBE_EXPORT.md line 184. Round-tripping unchanged jsonStringBodyContent (and even modifying it) via `scenarios_update` did NOT trigger `isinvalid:true` across 8+ pushes in late session. Worth re-confirming periodically.
+
+## Approval Handler Routing (post-Wave 8, 2026-05-21T21:59:52Z)
+
+Three-way route structure after webhook → Module 20 (SetVariables) → Module 36 (contact search) → Module 37 (resolved_slug) → Module 102 (BasicRouter, filter: decision=approve AND contact_email != ""):
+
+- **Route A** — contact NOT in RCRM (`resolved_slug == ""`) → Module 33 (company search) → Module 34 (existing_company_slug) → Module 200 (BasicRouter):
+  - **A1** (`existing_company_slug == ""`): Module 31 creates company → 35 → 11 → 38 → Module 250 (BasicRouter) → {2: enroll | 5 → 13 → 4: note}
+  - **A2** (`existing_company_slug != ""`): Module 235 reuses slug → 211 → 238 → Module 251 (BasicRouter) → {202: enroll | 205 → 213 → 204: note}
+- **Route B** — contact EXISTS in RCRM (`resolved_slug != ""`) → Module 39 (final_slug) → Module 43 (update stage) → Module 252 (BasicRouter) → {44: enroll | 45 → 46 → 47: note}
+
+The three Wave 8 sub-routers (250, 251, 252) prevent the enroll-module's `sequence_id != ""` filter from blocking the note chain via Make's bundle-propagation rule. Anthropic API key is embedded in headers of Modules 5, 45, **and 205** — rotate during Make Connections migration.
 
 ## Make.com Operation Gotchas (Reference)
 
