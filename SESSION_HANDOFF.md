@@ -1,5 +1,350 @@
 # Session Handoff
 
+## Controlled Live Test Plan: 2026-05-21 — Single Approval, Production Validation
+
+### Status
+
+**Pre-execution. Plan locked.** No production changes are part of this test — it exercises the existing scenarios and observes outcomes. The validation harness was drafted on the previous turn; this section supersedes it with a tighter, single-event structure.
+
+### Test Scope
+
+One queue record, one Submit Individually click, one full pipeline traversal (Approval Handler webhook → RCRM contact + company + note + sequence enrollment → queue audit-delete). Travis selects the record; Claude pre-flights it, observes the run, and reports against the criteria below.
+
+### Inputs (to be locked before approval)
+
+| Item | Source | When known |
+|---|---|---|
+| Queue key | Travis selects in dashboard | Pre-approval |
+| contact_email | Read from queue record | Pre-approval |
+| contact_name, contact_title, contact_phone, contact_mobile, contact_linkedin | Read from queue record | Pre-approval |
+| contact_city, contact_state, contact_country | Read from queue record | Pre-approval |
+| company_name, company_website, company_linkedin | Read from queue record | Pre-approval |
+| company_address, company_city, company_state, company_country | Read from queue record (latter 3 likely empty — backlog) | Pre-approval |
+| company_industry, employee_count, annual_revenue, buying_signal, about_company | Read from queue record | Pre-approval |
+| persona, sequence_id, sequence_name, data_collection_source | Read from queue record | Pre-approval |
+| Predicted path (A1 / A2 / B) | Two pre-flight curl GETs | Pre-approval |
+| Baseline RCRM company-name count | One curl GET | Pre-approval |
+| Baseline RCRM contact-by-email count | One curl GET | Pre-approval |
+| Pre-approval contact's linkedin (Route B only) | One curl GET (Route B only) | Pre-approval |
+
+### Expected Queue Behavior
+
+1. **Pre-approval state**: record exists in datastore 86836 with `decision == "pending"`, `processed_at` null. Confirmed via `data-store-records_list(86836)` filter on the key.
+2. **Module 99 fires for approve and decline**: rewrites `decision` to `"approved"` or `"declined"` and sets `processed_at`. Filter: `key != ""` (the test record obviously satisfies this).
+3. **Module 100 fires for approve and decline**: deletes the record from 86836 entirely. Same filter as Module 99.
+4. **Post-approval state**: the test record's key returns `null`/not-found on a follow-up datastore read. No partial-update remnant.
+5. **Total queue count**: decreases by exactly 1 (1,071 → 1,070). Other records untouched.
+
+### Expected Dedup Behavior
+
+Two independent dedup decisions, both gated on `decision == "approve"` (declines skip both).
+
+**Contact dedup (Module 36 — always runs for approve):**
+- HTTP call: `GET https://api.recruitcrm.io/v1/contacts/search?email={encodeURL(lower(contact_email))}&exact_search=1` with `Authorization: Bearer <token>` and `Accept: application/json`.
+- Response shape:
+  - **wrapped** `{current_page:1, data:[{slug:..., ...}, ...]}` if a contact with that email already exists.
+  - **bare** `[]` if no match.
+- Module 37 captures `resolved_slug = {{36.data.data[1].slug}}`. For wrapped → slug. For bare → empty.
+- Path branching (Module 102 router):
+  - `resolved_slug == ""` → Route A
+  - `resolved_slug != ""` → Route B
+- Pre-flight curl (run by Claude pre-approval) deterministically predicts which route fires.
+
+**Company dedup (Module 33 — Route A only, with filter `resolved_slug == "" AND company_name != ""`):**
+- HTTP call: `GET .../v1/companies/search?company_name={encodeURL(1.company_name)}&exact_search=1` with same headers.
+- Response shape: same wrapped/bare-array pattern.
+- Module 34 captures `existing_company_slug = {{33.data.data[1].slug}}`.
+- Module 31 (company create) filter: `existing_company_slug == ""`. Fires only when empty.
+- Pre-flight curl (Claude, pre-approval) deterministically predicts whether Module 31 will fire.
+- Match selection: **first** record in the response `data[]` array. RCRM's default sort returns earliest-created first (verified empirically — Stellantis slug `17780808284210054787dBD` is the first match, `created_on 2026-05-06T15:20:28Z`).
+
+### Expected Company Behavior
+
+| Path | Company operations | Resulting `company_slug` for contact attachment |
+|---|---|---|
+| A1 (new contact, new company) | Search [], then `POST /v1/companies` → 201/200 with `{data: {slug: <new>}}` | `35.resolved_company_slug = 31.data.slug` (newly created) |
+| A2 (new contact, existing company) | Search WRAPPED, no POST | `35.resolved_company_slug = 34.existing_company_slug` (first existing match) |
+| B (existing contact) | No company operations at all | n/a — contact already has company association |
+| Decline | No company operations | n/a |
+
+For Route A1 only — the new company record's `created_on` timestamp must equal the approval timestamp (±5 seconds).
+For Route A2 only — the company `created_on` must predate the approval timestamp (proves attachment to existing, not new create).
+
+### Expected Contact Behavior
+
+| Path | Contact operations |
+|---|---|
+| A1 / A2 | `POST /v1/contacts` body shape per "Field Propagation" below → 201/200 with `{data: {slug: <new>}}`. Module 38 captures `final_slug`. |
+| B | `POST /v1/contacts/<resolved_slug>` body `{stage_id: 142468}` → 200. Only stage_id update; LinkedIn intentionally NOT in body (Wave 2 fix). Module 39 captures `final_slug = 37.resolved_slug`. |
+| Decline | No contact operations. |
+
+For all approve paths — exactly one of: enroll call (`POST /v1/contacts/<final_slug>/enroll?sequence_id={x}`), Anthropic note generation, note write (`POST /v1/notes`). All three fire in sequence after the contact create/update lands.
+
+### Expected Field Propagation
+
+**Module 31 company create body (Route A1 only):**
+
+| RCRM field | Source IML | Pass criterion |
+|---|---|---|
+| `company_name` | `{{1.company_name}}` | Equals queue `company_name` |
+| `about_company` | `{{20.sanitized_about}}` (= replace(1.about_company; newline; " ")) | Equals queue `about_company` with newlines→spaces |
+| `website` | `{{1.company_website}}` | Equals queue `company_website` (empty for backlog) |
+| `linkedin` | `{{1.company_linkedin}}` | Equals queue `company_linkedin` |
+| `city` | `{{ifempty(1.company_city; 1.contact_city)}}` | If queue `company_city` empty → contact_city. Otherwise → company_city. |
+| `state` | `{{ifempty(1.company_state; 1.contact_state)}}` | Same fallback rule |
+| `country` | `{{ifempty(1.company_country; 1.contact_country)}}` | Same fallback rule |
+| `address` | `{{1.company_address}}` | Equals queue `company_address` |
+| `industry_id` | `{{20.industry_id}}` (12-entry switch, default 913) | One of the switch values OR 913. **NEVER 0.** |
+| `custom_fields[1]` Employees | `{{1.employee_count}}` | Equals queue value |
+| `custom_fields[2]` Revenue | `{{1.annual_revenue}}` | Equals queue value |
+| `custom_fields[12]` Buying Signal | `{{1.buying_signal}}` | Equals queue value (often empty) |
+
+**Module 11 contact create body (Routes A1 and A2):**
+
+| RCRM field | Source IML | Pass criterion |
+|---|---|---|
+| `first_name` | `{{20.first_name}}` = first(split(1.contact_name; space)) | First token of contact_name |
+| `last_name` | `{{20.last_name}}` = last(split(1.contact_name; space)) | Last token of contact_name |
+| `email` | `{{1.contact_email}}` | Equals queue value (case as-is, write not lowercased) |
+| `contact_number` | `{{1.contact_phone}}` | Equals queue `contact_phone` |
+| `designation` | `{{1.contact_title}}` | Equals queue value |
+| `linkedin` | `{{20.linkedin_url}}` = replace(1.contact_linkedin; "https://"; "http://") | Equals queue value with https→http normalization |
+| `city` | `{{1.contact_city}}` | Contact-side city |
+| `state` | `{{1.contact_state}}` | Contact-side state |
+| `country` | `{{1.contact_country}}` | Contact-side country |
+| `address` | `{{1.company_address}}` | Inherits company address — intentional |
+| `current_organization` | `{{1.company_name}}` | Equals queue value |
+| `company_slug` | `{{35.resolved_company_slug}}` | Equals existing OR newly-created slug |
+| `stage_id` | literal `142468` | Equals 142468 |
+| `custom_fields[1]` Phone | `{{1.contact_phone}}` | Same as contact_number |
+| `custom_fields[2]` Mobile | `{{1.contact_mobile}}` | Equals queue value |
+| `custom_fields[5]` Data Source | `{{1.data_collection_source}}` | Equals queue value. **NOT hardcoded "ZoomInfo"** unless that's the actual queue payload. |
+
+**Module 43 existing-contact update body (Route B only):**
+
+| Body content | Pass criterion |
+|---|---|
+| `{"stage_id": 142468}` | Body is EXACTLY this — no other fields. LinkedIn intentionally NOT in body (Wave 2 fix). |
+
+**Module 5/45 note generation:**
+
+- Anthropic Haiku 4.5 model.
+- Output is a 1-2 sentence note text. No specific content assertion beyond non-empty and containing "R/O" or similar recruiter shorthand.
+
+**Module 4/47 note create:**
+
+- `note_type_id: 195663` (Emailed).
+- `description`: the Anthropic output.
+- `related_to_type: "contact"`, `related_to: <final_slug>`.
+
+### Expected Fallback Behavior
+
+- **company_X fallback to contact_X**: `ifempty(1.company_X; 1.contact_X)` in Module 31. Triggers when the queue record has `company_city`/`company_state`/`company_country` empty (true for all 1,071 backlog records). After tomorrow's 6am cycle adds new records with company_X populated, the fallback won't trigger and the company HQ values will be used.
+- **industry_id fallback to 913 (Manufacturing)**: Module 20's switch returns 913 when `company_industry` is not in the 12-entry hardcoded set (Manufacturing, Transportation, Automotive, Automotive Parts, Airlines+Airports+Air Services, Logistics and Supply Chain, Construction, Oil and Energy, Food and Beverages, Machinery, Toys & Games). Triggers for industries like Building Materials, Medical Devices, Local Government, etc.
+- **Empty values from payload pass through as empty strings**: If queue has empty `company_website`, RCRM receives `"website": ""`. RCRM tolerates this — no error.
+- **Module 33 returning bare empty array vs wrapped**: Make's IML `33.data.data[1].slug` handles both — wrapped → first slug, bare → empty. No special path needed.
+- **404 from old POST is no longer reachable**: Module 33 is now GET. The legacy 404-shape `{error:true,...}` no longer applies.
+
+### Exact RCRM Fields to Verify (post-approval)
+
+**Contact record** (`GET /v1/contacts/{final_slug}`):
+
+| Field | Expected source | Hard-fail if |
+|---|---|---|
+| `slug` | == final_slug from execution capture | Mismatch |
+| `first_name` | first token of queue contact_name | Mismatch |
+| `last_name` | last token of queue contact_name | Mismatch |
+| `email` | queue contact_email (case as queue had it) | Mismatch |
+| `contact_number` | queue contact_phone | Mismatch (when queue had phone) |
+| `designation` | queue contact_title | Mismatch |
+| `linkedin` | http://-form of queue contact_linkedin | For Routes A1/A2 — mismatch. For Route B — **value changed from pre-approval state** (= Wave 2 regression). |
+| `city`, `state`, `country` | queue contact_city/state/country | Mismatch |
+| `address` | queue company_address | Mismatch |
+| `current_organization` | queue company_name | Mismatch |
+| `company.slug` (or `company_slug`) | resolved_company_slug | Mismatch |
+| `stage_id` / `stage.id` | 142468 | Not 142468 |
+| `custom_fields[].field_id==1.value` | queue contact_phone | Mismatch |
+| `custom_fields[].field_id==2.value` | queue contact_mobile | Mismatch |
+| `custom_fields[].field_id==5.value` | queue data_collection_source | **Equals literal "ZoomInfo" when queue value was different** (= Wave 2 regression) |
+
+**Company record** (`GET /v1/companies/{resolved_company_slug}`):
+
+| Field | Expected source | Hard-fail if |
+|---|---|---|
+| `slug` | == resolved_company_slug | Mismatch |
+| `company_name` | queue company_name | Mismatch |
+| `website` | queue company_website | Mismatch (when queue had website) |
+| `linkedin` | queue company_linkedin | Mismatch (when queue had it) |
+| `industry_id` | switch result OR 913 | **Equals 0** (= Wave 1 regression) |
+| `address` | queue company_address | Mismatch (when queue had it) |
+| `city`, `state`, `country` | ifempty(company_X, contact_X) | Mismatch against ifempty resolution |
+| `about_company` / `about_us` | sanitized about_company | Mismatch |
+| `custom_fields[].field_id==1.value` | queue employee_count | Mismatch |
+| `custom_fields[].field_id==2.value` | queue annual_revenue | Mismatch |
+| `custom_fields[].field_id==12.value` | queue buying_signal | Mismatch |
+| `created_on` (Route A1 only) | within ±5 seconds of approval timestamp | Outside ±5s = wrong record |
+| `created_on` (Route A2 only) | predates approval timestamp by minutes-to-weeks | Equals approval timestamp = dedup regression |
+
+**Note record** (read from contact's note list or `GET /v1/notes?related_to_slug={final_slug}`):
+
+| Field | Expected | Hard-fail if |
+|---|---|---|
+| `note_type_id` | 195663 | Not 195663 |
+| `description` | non-empty, recruiter-style text | Empty or contains "{{" (IML didn't interpolate) |
+| `related_to_type` | "contact" | Not "contact" |
+| `related_to` | final_slug | Mismatch |
+| `created_on` | within ±10 seconds of approval timestamp | Outside ±10s = wrong note |
+
+**Queue datastore** (`data-store-records_list(86836)`):
+
+| Check | Pass criterion |
+|---|---|
+| Test record's key | Not present (Module 100 deleted) |
+| Total record count | 1,070 (was 1,071) |
+
+### Pass/Fail Conditions
+
+**PASS** requires ALL of the following:
+
+1. Make execution `status == 1` (success).
+2. Make execution `operations` count matches expected for path (A1:12, A2:11, B:12, Decline:4).
+3. `allDlqCount` on scenario unchanged from 0.
+4. RCRM contact record verified against the Contact field table — every field matches OR is empty where queue was empty.
+5. RCRM company record verified against the Company field table — every field matches; `industry_id != 0`; `created_on` matches the path expectation.
+6. RCRM note record exists, dated within ±10s of approval, type 195663.
+7. Queue record deleted; total count decremented by 1.
+8. Route A2 specific: RCRM company count for the company_name UNCHANGED from baseline (no new duplicate created).
+
+**FAIL** if ANY of:
+- `status != 1`
+- `operations` count outside expected range
+- DLQ increment
+- Field-level mismatch against the verification tables
+- Route A2 dedup count increased
+
+**PARTIAL PASS** (document but do not auto-rollback):
+- All RCRM writes succeeded but the Anthropic note text contains "{{" or is empty — note generation degraded, RCRM record itself is correct.
+- Empty fields in RCRM that queue had populated, IF the gap is in a known-pending field (e.g., backlog-card website being empty — that's pre-Wave-3 behavior, not a regression).
+
+### Rollback Indicators
+
+In addition to the FAIL criteria above, ANY of the following observed during or after the test triggers documentation + Travis-decision-required before continued live approvals:
+
+1. **Execution `status != 1`** — Make-level failure.
+2. **Operation count anomaly** — wrong path executed (e.g., A2 ran 12 ops meaning Module 31 fired despite existing company).
+3. **DLQ entry created** — `allDlqCount` went from 0 to 1+.
+4. **`isinvalid:true` toggled on 4667221 or 4990696** — blueprint corrupted.
+5. **`industry_id` written as 0 to RCRM** — Wave 1 fix not active.
+6. **`custom_fields[5]` written as literal "ZoomInfo" when queue value was different** — Wave 2 fix not active.
+7. **Route B contact's `linkedin` changed after approval** — Wave 2 fix not active.
+8. **Module 33 returned bare `[]` for a company name that curl pre-flight confirmed existed** — RCRM endpoint behavior changed mid-test OR token expired OR rate-limited.
+9. **Duplicate company count increased** (Route A2 should be unchanged, not +1).
+10. **RCRM contact missing email** OR any other required field — silent data loss.
+
+### Rollback Procedure
+
+**Do not roll back any prior change unless one of the above is observed AND Travis explicitly approves the rollback.** Rollback paths are documented in the relevant prior session sections of this handoff:
+
+- Module 33 GET → POST rollback: `.backups/module_33_pre_get_fix.20260521T172329Z.json` (note: this restores the BROKEN 404-loop behavior; only roll back if the GET form is empirically failing in a worse way).
+- Module 31 / Module 11 / Module 43 / Module 20 / webhook interface / Staging-to-Queue mapper / datastructures 319927 / 347903: each has rollback steps in prior session sections + `.backups/` snapshots.
+- Dashboard `buildPayload(c)` rollback: `git revert c5af4be` → push → Netlify auto-deploys ~30s.
+
+### Post-Approval Validation Sequence
+
+Executed by Claude in this exact order:
+
+1. **Capture approval timestamp** from Travis or from the dashboard browser timestamp at click.
+2. **`executions_list(4667221)`** — find the new execution by timestamp. Record `imtId`, `status`, `operations`, `duration`, `centicredits`, `transfer`. Compare ops count to expected.
+3. **`scenarios_get(4667221)`** — verify `dlqCount` and `allDlqCount` still 0; verify `lastEdit` unchanged from 2026-05-21T17:24:51Z (no blueprint drift during test).
+4. **`GET /v1/contacts/search?email={lower(contact_email)}&exact_search=1`** — find the resulting contact. Capture `data[0].slug` as `final_slug`. For Route B this should be the SAME slug as Travis observed pre-approval; for Routes A1/A2 it should be NEW.
+5. **`GET /v1/contacts/{final_slug}`** — read full contact record. Verify against the Contact field table.
+6. **Extract `company_slug` from the contact response** (field name may be `company.slug`, `company_slug`, or embedded company object — RCRM's contact response format determines this). Capture as `resolved_company_slug`.
+7. **`GET /v1/companies/{resolved_company_slug}`** — read full company record. Verify against the Company field table, including `created_on` predates-or-matches approval timestamp.
+8. **`GET /v1/companies/search?company_name={x}&exact_search=1`** — re-run the dedup count. Compare to the baseline captured pre-approval. For A2: count UNCHANGED. For A1: count incremented by 1.
+9. **Inspect the contact's notes** — either via the contact GET response's embedded notes (if present) or via a separate notes-list endpoint (signature TBD). Confirm one new note dated within ±10s of approval.
+10. **`data-store-records_list(86836, limit:100)`** — confirm test record's key is gone. Total count decremented to 1,070.
+11. **Compile PASS/FAIL verdict** with the field-by-field results in the Post-Execution Recording Template (below). Append to SESSION_HANDOFF.md as a new section directly after this plan.
+
+### Post-Execution Recording Template
+
+```
+=== CONTROLLED LIVE TEST: <queue_key> ===
+Approval timestamp: <UTC>
+Pre-flight predictions:
+  Route: <A1 | A2 | B>
+  Expected ops: <N>
+  Baseline company count: <N>
+  Baseline contact slug (Route B only): <slug>
+  Baseline contact linkedin (Route B only): <value>
+
+EXECUTION:
+  imtId: <id>
+  status: <1 expected>
+  operations: <observed> (expected: <expected>)
+  duration: <ms>
+  dlqCount: 0 (expected: 0)
+
+CONTACT (slug: <final_slug>):
+  first_name: <expected> | <observed> | <MATCH|MISMATCH>
+  last_name:  <expected> | <observed> | <MATCH|MISMATCH>
+  email:      <expected> | <observed> | <MATCH|MISMATCH>
+  designation: ...
+  contact_number: ...
+  linkedin: ...
+  city: ... | state: ... | country: ...
+  address: ...
+  current_organization: ...
+  company_slug: <expected resolved_company_slug> | <observed>
+  stage_id: 142468 | <observed>
+  custom_fields[1]: <expected> | <observed>
+  custom_fields[2]: <expected> | <observed>
+  custom_fields[5]: <expected non-ZoomInfo unless queue said ZoomInfo> | <observed>
+
+COMPANY (slug: <resolved_company_slug>):
+  company_name: ...
+  website: ...
+  linkedin: ...
+  industry_id: <expected non-zero> | <observed>
+  address: ...
+  city / state / country: <ifempty-resolved> | <observed>
+  about_company: ...
+  custom_fields[1]/[2]/[12]: ...
+  created_on: <expected within±5s of approval (A1) OR predates approval (A2)> | <observed>
+
+NOTE:
+  found: yes/no
+  note_type_id: 195663 | <observed>
+  created_on within ±10s of approval: yes/no
+  description excerpt: <first 80 chars>
+
+DEDUP CHECK (Route A2 only):
+  Pre-approval company count: <N>
+  Post-approval company count: <N>
+  Delta: <0 expected>
+
+QUEUE:
+  Test record key found pre-approval: yes
+  Test record key found post-approval: no (expected: no)
+  Total count delta: -1 (expected: -1)
+
+VERDICT: <PASS | FAIL | PARTIAL PASS>
+Anomalies: <list any deviation>
+Rollback triggered: <yes | no>
+```
+
+### Workflow
+
+1. [ ] Travis: name the queue key (or contact_email + company_name pair).
+2. [ ] Claude: fetch the queue record, run the two pre-flight curls, lock in the path prediction + ops count + baseline counts + (Route B) pre-approval linkedin value.
+3. [ ] Claude: report pre-flight expectations back to Travis with the exact predicted ops count and the company/contact slugs that should be touched.
+4. [ ] Travis: click Submit Individually in the dashboard.
+5. [ ] Travis: report the approval click timestamp (UTC) to Claude.
+6. [ ] Claude: run the 11-step Post-Approval Validation Sequence.
+7. [ ] Claude: fill in the Post-Execution Recording Template and append a "Live Test Result" section to SESSION_HANDOFF.md with the verdict.
+8. [ ] On FAIL or any Rollback Indicator: Claude reports the specific failure, does NOT roll back unilaterally, awaits Travis decision.
+
+---
+
 ## Current Session: 2026-05-21 (end of day — Stabilization & Monitoring Baseline)
 
 ### Mode
