@@ -38,13 +38,15 @@ The dashboard is a single `index.html` file with 5 tabs:
 
 `buildPayload(c)` in `index.html` builds the JSON body sent to the Approval Handler webhook. It MUST be called by both `submitOne()` and `submitQueue()` — divergent inline payloads were the root cause of contacts coming through with missing phone/LinkedIn/city/etc.
 
-The 25 fields buildPayload must include — 22 core spec fields plus 3 extras carried in current builds:
+The 28 fields buildPayload must include — 22 core spec fields plus 6 extras carried in current builds:
 
 **Core 22 (required):**
 `key`, `decision`, `sequence_id`, `contact_slug`, `contact_email`, `contact_name`, `contact_title`, `contact_phone`, `contact_mobile`, `contact_linkedin`, `contact_city`, `contact_state`, `contact_country`, `company_name`, `company_industry`, `company_website`, `company_address`, `employee_count`, `annual_revenue`, `persona`, `sequence_name`, `data_collection_source`
 
-**Extras (3, currently shipped in build ELEVATE-2026-0520-B-BUILDPAYLOAD25):**
-`company_linkedin`, `buying_signal`, `about_company`
+**Extras (6, currently shipped in build ELEVATE-2026-0521-A-BUILDPAYLOAD28):**
+`company_linkedin`, `buying_signal`, `about_company`, `company_city`, `company_state`, `company_country`
+
+The 3 new company-location fields (`company_city`, `company_state`, `company_country`) carry the company HQ location separately from contact location, enabling Approval Handler Module 31 to write the correct company city/state/country to RCRM (was previously writing contact location as a fallback).
 
 When debugging "field X didn't reach RCRM," verify buildPayload first before touching downstream scenarios.
 
@@ -152,7 +154,7 @@ The following must be set locally (in a `.env` file that is gitignored) and in a
 | `MAKE_API_TOKEN` | For Make scenario blueprint updates | make.com → profile → API tokens |
 | `NETLIFY_AUTH_TOKEN` | For CLI deploys | netlify.com → user settings |
 
-**SECURITY NOTE:** The Anthropic API key is currently hardcoded in the live `index.html`. This is a known security debt — should be moved to a Netlify function proxy in a future session.
+**SECURITY NOTE:** Anthropic API key was previously hardcoded in `index.html` — confirmed REMOVED as of 2026-05-21 (live HTML line 1482 = `ANTHROPIC_KEY_REMOVED` literal). Side-effect: the Sales Intelligence tab's signal-refresh feature is broken (calls Anthropic with the placeholder string). To restore: build a Netlify function proxy (`netlify/functions/anthropic-proxy.js`) that holds the key server-side in Netlify env, and update the Sales Intelligence tab to call the proxy. Remaining Anthropic key exposure is in Make scenario 4667221 blueprint headers (Modules 5, 45) — extractable via `scenarios_get`. Rotate during the Make Connections migration (Issue 2.6 of the remediation plan).
 
 ## Branding
 
@@ -218,7 +220,7 @@ Format: `ELEVATE-{year}-{month}{day}-{letter}` where letter increments per same-
 
 4. **Ontario Recruitment Lead Gen dashboard tab** — Architecture agreed (Indeed + LinkedIn + news weighted signals, Claude drafts at approval time, persona-based emails). Test 1 passed on signal-003 Stellantis Windsor. Dashboard tab integration pending.
 
-5. **Anthropic API key hardcoded in HTML** — should be proxied through a Netlify function.
+5. **Sales Intelligence tab non-functional** — Anthropic key was redacted from HTML at some prior point (live line 1482 = literal `ANTHROPIC_KEY_REMOVED`). Signal refresh button hits Anthropic with the placeholder and fails. Fix path: build `netlify/functions/anthropic-proxy.js`, set `ANTHROPIC_API_KEY` in Netlify env, swap dashboard call-site to proxy URL.
 
 6. **Signals subsystem error rates 46-88%** — Signals-Enrich Contacts, Email Drafter, Outlook Send, ZI Search Worker all bleeding errors. Needs systematic debug.
 

@@ -1,6 +1,654 @@
 # Session Handoff
 
-## Current Session: 2026-05-21 — Make → RCRM Pipeline Audit + Staging-to-Queue Fix Applied
+## Current Session: 2026-05-21 (late evening — Wave 3 prep: company location plumbing)
+
+### What Was Done
+
+Extended the upstream data plumbing so future queue rows can carry company HQ location separately from contact location. Two API-only pushes:
+
+| # | Issue | Surface | Change | Verified |
+|---|---|---|---|---|
+| 10 | 1.3 prereq | Datastructure 319927 (queue schema) | Added `company_city`, `company_state`, `company_country` (text fields). Spec now 53 fields. | ✓ |
+| 11 | 1.3 prereq | Scenario 4990696 Module 4 mapper | Added 3 keys to the data object: `company_city: {{1.company_city}}`, `company_state: {{1.company_state}}`, `company_country: {{1.company_country}}`. `lastEdit:2026-05-21T16:53:18.247Z`, `isinvalid:false`, `isActive:true`, `nextExec:2026-05-22T10:00:00Z`. | ✓ |
+
+These two changes are pure plumbing — they don't yet change RCRM-side behavior. They enable the downstream Module 31 fix (Issue 1.3 step 2) to read company HQ location from the queue payload, with graceful degradation via `ifempty(1.company_city; 1.contact_city)` for backlog records that don't have it.
+
+### Remaining Work For Issue 1.3
+
+To complete Issue 1.3 (Module 31 stops using contact location as company HQ location), four more surfaces need touching:
+
+1. **Queue Fetch (scenario 4734116)** — verify it returns all queue record fields including the new 3. If it does a field-list `pick`, would need updating. (Not yet inspected.)
+2. **Dashboard `buildPayload(c)` at `index.html:1303`** — add `company_city`, `company_state`, `company_country` to the payload object so they reach the webhook.
+3. **Approval Handler webhook interface** — declare the 3 new fields (so they're typed for downstream mappers, though Make accepts undeclared keys anyway).
+4. **Approval Handler Module 31 body** — change `"city": "{{1.contact_city}}"` to `"city": "{{ifempty(1.company_city; 1.contact_city)}}"` (same pattern for state and country). The `ifempty` fallback preserves current behavior for backlog cards that don't yet have company location.
+
+This is a 4-surface coordinated change: 1 read-only inspection + 1 dashboard edit + commit/push + 1 scenarios_update push. Doable in one session but should be sequenced: inspect → edit dashboard → push to repo → wait for Netlify deploy → push scenario change → verify with a test approval. The dashboard change alone is harmless even before the scenario change (extra fields in webhook payload don't break anything).
+
+### Cumulative Today
+
+11 remediation changes live since this morning, all via API + no Make UI Save coordination:
+
+1. (2.3) Webhook interface declares contact_slug
+2. (1.2) industry_id default 0 → 913
+3. (3.2) Module 36 email wrapped in lower()
+4. (1.4a) Queue datastructure + zi_company_id, zi_contact_id
+5. (1.4b) Staging datastructure + zi_contact_id, company_country, company_zipcode, company_phone
+6. (1.4c) Staging-to-Queue Module 4 forwards zi_company_id, zi_contact_id
+7. (2.2) Module 3 (redundant new-contact stage update) deleted
+8. (1.1) Module 11 data_collection_source uses dashboard variable
+9. (2.1 minimal) Module 43 no longer overwrites LinkedIn
+10. (1.3 prereq) Queue datastructure + company_city, company_state, company_country
+11. (1.3 prereq) Staging-to-Queue Module 4 forwards company_city, company_state, company_country
+
+### Decisions Made
+
+- **Did the plumbing in two API pushes, didn't bundle the dashboard work.** The full Issue 1.3 fix touches the dashboard (Netlify-side) and a coordinated scenarios_update. Keeping the API-only prep separate gives a clean rollback boundary; the dashboard change can land later without risk.
+- **Plan to use `ifempty(1.company_city; 1.contact_city)` in Module 31 when we get there.** That way the 1,071 backlog queue records (which don't have company_city/state/country) still produce valid Module 31 payloads using contact location — same as today. Only NEW post-patch queue rows will use the better company location.
+
+### Next Steps
+
+1. [ ] If you want Issue 1.3 completed: I inspect Queue Fetch (4734116) to confirm field forwarding, edit `buildPayload(c)` in `index.html` to include the 3 new fields, commit + push, wait for Netlify deploy, push the Module 31 scenarios_update with `ifempty` fallback, verify with a test approval.
+2. [ ] If you want to stop the remediation work here for now: I just update the docs and let tomorrow's 6am daily run validate the prep.
+3. [ ] (Always-pending) Travis credential rotations.
+
+### Blockers
+
+Unchanged.
+
+---
+
+## Previous Session: 2026-05-21 (late evening — Wave 2 fixes applied, gotcha disproven)
+
+### What Was Done
+
+Travis was at us2.make.com/2053152/scenarios/4667221/edit and confirmed ready to Save. Per the safety protocol, I did a drift check first (lastEdit unchanged at 2026-05-21T16:00:45.523Z), then pushed the pre-staged blueprint from `.backups/proposed_4667221_ui_patches.20260521T160646Z.json`.
+
+**Push outcome: `isinvalid:false`. The gotcha did NOT trip.** No Save needed in Make UI. Travis closed the tab without clicking anything.
+
+### Changes Applied (live)
+
+| # | Issue | Module | Pre | Post | Verified |
+|---|---|---|---|---|---|
+| 8 | 1.1 | Module 11 jsonStringBodyContent | `\"field_id\": 5, \"value\": \"ZoomInfo\"` | `\"field_id\": 5, \"value\": \"{{1.data_collection_source}}\"` | ✓ |
+| 9 | 2.1 (minimal variant) | Module 43 jsonStringBodyContent | `{\"stage_id\": 142468, \"linkedin\": \"{{20.linkedin_url}}\"}` | `{\"stage_id\": 142468}` | ✓ |
+
+Approval Handler state: `lastEdit:2026-05-21T16:49:24.565Z`, `isinvalid:false`, `isActive:true`.
+
+### Significant Gotcha Refinement (SCRIBE updated)
+
+SCRIBE lines 20-21 previously claimed `jsonStringBodyContent` edits with `{{variable}}` expressions auto-trigger `isinvalid:true`. Today's experimental record across 5 sequential pushes to scenario 4667221 — including this push, which both ADDED a new `{{var}}` to a body AND REMOVED a `{{var}}` from another body in the same call — produced `isinvalid:false` every time. The original gotcha is either fixed at the Make platform level or only triggers on specific malformed patterns we have not reproduced.
+
+**Operational consequence:** Future Make scenario edits, even those touching `jsonStringBodyContent` with `{{var}}` expressions, can be pushed via `scenarios_update` without requiring a Travis-in-the-UI-clicks-Save coordination step — unless the actual gotcha pattern is hit, in which case post-push `isinvalid:true` would be visible and we'd fall back to UI Save. This significantly reduces the friction of remediation work going forward.
+
+I'm leaving the gotcha entries in SCRIBE marked as SUPERSEDED rather than deleting them, so future Claude sessions can re-test if isinvalid:true appears and quickly recognize the historical pattern.
+
+### Behavioral Impact (live now)
+
+- **Signals-source contacts will be tagged correctly in RCRM.** Approving a card from `signal-003_*` or `TEST_HIRING_SIGNAL_001` will write that record's `data_collection_source` value to RCRM contact custom_field 5 — typically "hiring_signals" or similar — instead of the literal "ZoomInfo" string. ZoomInfo-sourced contacts (whose payload field IS "zoominfo_intent") will continue to write that string. The hardcode bug is gone.
+- **Existing RCRM contacts will no longer have their LinkedIn URL overwritten** on re-approval. Module 43 (Route B, existing-contact path) only updates `stage_id` now. If RCRM has a manually-curated LinkedIn for a contact and the dashboard re-sends an approval for that contact, the existing LinkedIn is preserved.
+- **NOT a full gap-fill yet.** Other fields (phone, mobile, email, title, city, etc.) on existing contacts still aren't refreshed from the dashboard payload. That's the Phase 2 / full Issue 2.1 design — needs a GET-existing-contact module added before the update, with conditional ifempty() per field. Out of scope for this push.
+
+### Cumulative Wave State (Today's Work)
+
+9 remediation changes live since this morning, all via API:
+
+1. (Issue 2.3) Webhook interface declares contact_slug
+2. (Issue 1.2) industry_id default 0 → 913
+3. (Issue 3.2) Module 36 email wrapped in lower()
+4. (Issue 1.4a) Datastructure 319927 + zi_company_id, zi_contact_id
+5. (Issue 1.4b) Datastructure 347903 + zi_contact_id, company_country, company_zipcode, company_phone
+6. (Issue 1.4c) Staging-to-Queue Module 4 carries zi_company_id, zi_contact_id forward
+7. (Issue 2.2) Module 3 redundant new-contact stage update deleted from Route A
+8. (Issue 1.1) Module 11 data_collection_source uses dashboard variable
+9. (Issue 2.1 minimal) Module 43 stops overwriting LinkedIn on existing contacts
+
+### What's Still Pending in Remediation Plan
+
+**Make API only (can be done any time, no UI coordination):**
+- Issue 1.3 step 1 — extend Staging-to-Queue Module 4 mapper to forward `company_city`, `company_state`, `company_country` from staging to queue (staging schema 347903 already declares them since today's earlier work). Prerequisite to Issue 1.3 step 2.
+- Issue 1.3 step 2 — update Module 31 company create body to use `{{1.company_city}}` / `{{1.company_state}}` / `{{1.company_country}}` instead of the contact location fields.
+
+**Needs RCRM endpoint testing first:**
+- Issue 3.1 — Module 33 company search shape. Drafting blind risks producing a worse search than the current name-only POST.
+
+**Defer until Phase 2:**
+- Issue 2.4 — custom_fields 9/10/11 (no funding data source until ZI bridge).
+- Full Issue 2.1 gap-fill — needs structural change to Module 43.
+
+**Repo + Netlify (Claude-owned, currently OUT of Make→RCRM scope):**
+- Sales Intelligence tab restoration via Anthropic proxy function.
+
+**External admin consoles (Travis only):**
+- Rotate RCRM Bearer + Anthropic key, migrate to Make Connections.
+- Rotate ZoomInfo private key.
+
+### Next Steps
+
+1. [ ] Optional: extend Staging-to-Queue mapper for company_city/state/country forward-carry (preps Issue 1.3 step 2). Fully API-safe, no UI involvement. Can be done now.
+2. [ ] After ZI Intake fires (or manual CSV import populates staging) and Staging-to-Queue runs at next 6am: inspect a fresh queue record to confirm zi_company_id / zi_contact_id are populated.
+3. [ ] After next live approval: inspect RCRM contact record for: (a) custom_field 5 = correct data_collection_source value not "ZoomInfo" literal, (b) on existing contacts re-approved, LinkedIn preserved, (c) exactly one contact-create event in RCRM audit (no follow-up stage update from the now-deleted Module 3), (d) industry_id matches switch or is 913 for unmatched.
+4. [ ] Travis: rotate RCRM Bearer + Anthropic key + ZoomInfo PKI when convenient.
+5. [ ] When RCRM `/v1/companies/search` semantics confirmed (curl test from a known-good context): draft Issue 3.1 fix.
+
+### Decisions Made
+
+- **Pushed the bundled UI patches with Travis at the UI as a safety net.** Even though the gotcha didn't trip and no Save was needed, the coordination was the right call — if isinvalid had tripped, Travis was positioned to Save immediately.
+- **Treat the jsonStringBodyContent gotcha as superseded, not deleted.** The behavior may resurface (Make platform changes, specific pattern triggers). Leaving the SCRIBE entry visible-but-marked lets future sessions recognize the pattern fast.
+- **Did NOT push Issue 1.3 (Module 31 city/state/country) in this same wave.** The Staging-to-Queue mapper extension hasn't been done yet — Module 31 doesn't have `1.company_city`/`1.company_state`/`1.company_country` to read from. Sequence matters; do the mapper extension first.
+
+### Blockers
+
+Unchanged. ZoomInfo PKI still down. Two leaked credentials still pending rotation.
+
+---
+
+## Previous Session: 2026-05-21 (late evening) — Doc Correction + Staged UI Bundle
+
+### What Was Done
+
+Two pieces of work — both safe, neither touched Make scenarios this turn:
+
+**1. Corrected stale "Anthropic key hardcoded in HTML" claim.** Live HTML at `index.html:1482` reads `const ANTHROPIC_KEY = 'ANTHROPIC_KEY_REMOVED';` — the key was redacted at some prior unrecorded point. The 2026-05-21 morning audit and remediation plan both flagged this as outstanding security debt. It is not. The key is gone. Side-effect: Sales Intelligence tab signal-refresh is non-functional (Anthropic call hits the placeholder string). Updated CLAUDE.md (Environment Variables note + Known Issue #5) and SCRIBE_EXPORT.md (Dashboard Architecture entry + Security Notes entry) to reflect actual state. Remaining Anthropic key exposure is now ONLY in Make scenario 4667221 blueprint headers (Modules 5, 45) — same scope as the RCRM Bearer leak.
+
+**2. Pre-staged Make UI patch bundle in `.backups/proposed_4667221_ui_patches.20260521T160646Z.json`.** A complete, ready-to-push 4667221 blueprint with two more remediation patches applied:
+- **Issue 1.1**: Module 11 contact-create `custom_fields[5].value` changed from literal `"ZoomInfo"` to `{{1.data_collection_source}}` — uses the dashboard's payload field. Signals-source approvals will tag RCRM custom field 5 correctly instead of always saying ZoomInfo.
+- **Issue 2.1 (minimal-risk variant)**: Module 43 (existing-contact update) body changed from `{"stage_id": 142468, "linkedin": "{{20.linkedin_url}}"}` to `{"stage_id": 142468}` — stops the destructive linkedin overwrite. NOT a full gap-fill (that would require adding a GET-existing-contact module before the update — structural change, out of scope for a single-push variant).
+
+Bundle has not been pushed yet because both edits touch `jsonStringBodyContent` and will trigger `isinvalid:true`, requiring Travis to click Save in the Make UI to clear. Push requires Travis to be at us2.make.com/2053152/scenarios/4667221/edit ready to Save IMMEDIATELY.
+
+### Issues Deliberately Deferred From This Bundle
+
+- **Issue 1.3** (Module 31 company HQ city/state/country): Staging-to-Queue Module 4 mapper needs to forward `company_city`/`company_state`/`company_country` first. The staging datastructure 347903 already declares these (added earlier this session), but Staging-to-Queue Module 4 doesn't yet write them to queue rows. Sequence the mapper change first, then update Module 31's jsonStringBodyContent to use them.
+- **Issue 2.4** (custom_fields 9/10/11): No data source for funding fields until Phase 2 ZI bridge. Locations would mirror address (low value). Defer.
+- **Issue 3.1** (Module 33 company search shape): RCRM `/v1/companies/search` semantics (website + name combined search, or OR-search, or strict-match behavior) are not documented in publicly accessible RCRM docs. Without a known-good curl test from a sandbox context, drafting the new body shape is speculative. Defer until RCRM endpoint behavior is confirmed empirically.
+
+### Current State
+
+- Approval Handler 4667221: unchanged from end of previous session (`lastEdit:2026-05-21T16:00:45.523Z`, `isinvalid:false`, `isActive:true`). The 7 prior remediation changes from earlier today still live.
+- Staging-to-Queue 4990696: unchanged (`lastEdit:2026-05-21T15:55:28.882Z`, `isinvalid:false`, `isActive:true`).
+- Datastructures 319927 (50 fields), 347903 (24 fields): unchanged.
+- `.backups/proposed_4667221_ui_patches.20260521T160646Z.json`: ready-to-push bundle, awaiting Travis go-ahead AND Make UI co-presence.
+- `index.html`: untouched this turn. No git changes.
+
+### Coordination Required Before Pushing the UI Bundle
+
+The push will create a window where Approval Handler scenario is marked `isinvalid:true`. During that window:
+- Make's behavior with isinvalid scenarios on instant webhooks is undocumented but plausibly: webhook accepts payload (HTTP 200), scenario silently refuses to run, or runs with corrupt validation state.
+- Any dashboard "Submit Individually" or "Submit All Decisions" click during the window risks failed approval.
+- Window ends when Travis opens the scenario in Make UI and clicks Save (validator re-runs, clears the flag, scenario fully active again).
+
+**To push safely:**
+1. Confirm Travis is at us2.make.com/2053152/scenarios/4667221/edit
+2. Confirm no dashboard approvals are in-flight or planned in the next 60 seconds
+3. Push the bundle via `scenarios_update` from `.backups/proposed_4667221_ui_patches.20260521T160646Z.json`
+4. Travis clicks Save immediately
+5. Re-fetch via `scenarios_get` to confirm `isinvalid:false` and the two edits landed
+
+### Next Steps
+
+1. [ ] Travis confirms readiness → Claude pushes the staged UI bundle → Travis Saves → verify.
+2. [ ] After Issue 1.3 prerequisite is in place: extend Staging-to-Queue Module 4 mapper to forward `company_city`, `company_state`, `company_country`. Then draft a second UI bundle for Module 31 city/state/country fix.
+3. [ ] Address Issue 3.1 only after RCRM `/v1/companies/search` behavior is empirically verified (one read-only test against a known company; or RCRM support response).
+4. [ ] If Sales Intelligence tab restoration is a priority: build `netlify/functions/anthropic-proxy.js` + add `ANTHROPIC_API_KEY` to Netlify env + swap dashboard call-site. Otherwise deprioritize until needed.
+5. [ ] Travis: rotate RCRM Bearer + Anthropic key, migrate scenario 4667221 + 4952511 to Make-managed Connections.
+6. [ ] Travis: rotate ZoomInfo private key with James Gervais (leaked 2026-05-20). Unblocks Phase 2.
+
+### Decisions Made
+
+- **Don't push the UI bundle without coordination.** Even with Travis online, pre-confirming he's at the Make UI before the push is non-negotiable. The cost of a 30-second isinvalid window during a stray approval click is non-zero.
+- **Drop linkedin from Module 43 body rather than build full gap-fill.** Full gap-fill requires adding a GET module + IML conditional in the body. The minimal change — removing `linkedin` from the update body entirely — eliminates the destructive overwrite without requiring structural changes. Phone/mobile/email/title were never being written anyway in Module 43; existing behavior preserved on those fields. The full gap-fill path remains a Phase 2 design.
+- **Don't touch Issue 3.1 (company search shape) without RCRM endpoint verification.** The current `POST /v1/companies/search` with body `{"company_name": ...}` is empirically returning HTTP 2xx in production. Whether it's actually filtering — vs. returning the unfiltered list and silently selecting `data[1].slug` — is unknown without a controlled test. Drafting a "better" search shape blind is speculative work.
+- **Sales Intelligence tab restoration is NOT in scope** of the Make→RCRM mission. It's a research aid, not a pipeline. Deferred unless Travis explicitly asks for it.
+
+### Blockers
+
+Unchanged from prior turn. ZoomInfo PKI down. Leaked credentials in Make scenario blueprints still need rotation.
+
+---
+
+## Previous Session: 2026-05-21 (evening) — Remediation Wave 1 (API-Safe Fixes Applied)
+
+### What Was Done
+
+Executed the API-only / no-Make-UI-required subset of the remediation plan. Four atomic Make changes pushed via MCP, each verified post-push by `scenarios_get` / `data-structures_get`. Pre-edit blueprints + datastructures snapshotted to gitignored `.backups/` for rollback. No `index.html` / Netlify / GitHub changes this turn.
+
+### Changes Applied (all live)
+
+| # | Issue | Surface | Pre-state | Post-state | Verified |
+|---|---|---|---|---|---|
+| 1 | 2.3 — webhook interface missing contact_slug | Approval Handler (4667221) flow[0].metadata.interface | 24 entries | 25 entries, `contact_slug` at position 4 | ✓ |
+| 2 | 1.2 — Module 20 industry_id default 0 | Approval Handler (4667221) flow[id=20].mapper.variables[3] | switch ends `...; "Toys & Games"; 22; 0` | switch ends `...; "Toys & Games"; 22; 913` | ✓ |
+| 3 | 3.2 — Module 36 email case sensitivity | Approval Handler (4667221) flow[id=36].mapper.url | `email={{encodeURL(1.contact_email)}}&exact_search=1` | `email={{encodeURL(lower(1.contact_email))}}&exact_search=1` | ✓ |
+| 4 | 1.4 — datastructure 319927 missing zi ids | `data-structures_update` on 319927 | 48 fields | 50 fields (added zi_company_id, zi_contact_id) | ✓ |
+| 5 | 1.4 — datastructure 347903 missing fields | `data-structures_update` on 347903 | 20 fields | 24 fields (added zi_contact_id, company_country, company_zipcode, company_phone) | ✓ |
+| 6 | 1.4 — Staging-to-Queue doesn't carry zi ids | Staging-to-Queue (4990696) flow[id=4].mapper.data | 22 keys | 24 keys (added zi_company_id, zi_contact_id) | ✓ |
+
+**Bundled push strategy:** Changes 1, 2, 3 were sent in a single `scenarios_update` on 4667221 to minimize push count. Changes 4 and 5 were separate `data-structures_update` calls (one per structure). Change 6 was a single `scenarios_update` on 4990696. Total: 4 API write calls, all returned `isinvalid:false` and `isActive:true`.
+
+**Additional change (after explicit Travis go-ahead, same session):**
+
+| # | Issue | Surface | Pre-state | Post-state | Verified |
+|---|---|---|---|---|---|
+| 7 | 2.2 — Module 3 redundant new-contact stage update | Approval Handler (4667221) flow[id=102].routes[0].flow position 6 | id=3 present between id=38 and id=2 | id=3 removed entirely | ✓ |
+
+Module 3 was `POST /v1/contacts/{slug}` with body `{"stage_id": 142468, "linkedin": "{{20.linkedin_url}}"}`. Both fields were already set by Module 11's contact create. Removal saves one RCRM API call per new-contact approval (~14 calls/day saved against the 60/min budget) and one redundant audit-log entry per new contact in RCRM.
+
+Post-deletion Route A flow: `33 (company search) → 34 (existing_company_slug) → 31 (company create) → 35 (resolved_company_slug) → 11 (contact create) → 38 (final_slug) → 2 (enroll) → 5 (Anthropic note) → 13 (claude_note) → 4 (log note)`. `usedPackages` count dropped from 24 to 23 entries (one `http` removed). `lastEdit: 2026-05-21T16:00:45.523Z`. Rollback config saved to `.backups/module_3_pre_deletion.20260521T155928Z.json` for splice-back if needed.
+
+Route B (existing-contact path) was NOT touched — Module 43 still does the stage_id+linkedin update there, since the existing-contact route doesn't go through Module 11 to inherit those fields. That separate gap-fill defect (Module 43 overwriting linkedin, no gap-fill) is unchanged and remains Issue 2.1 in the remediation plan.
+
+**Critical confirmation:** the prior gotcha "scenarios_update with `{{variable}}` in jsonStringBodyContent triggers isinvalid:true" did NOT trip on the Approval Handler push, even though the blueprint contains 10+ jsonStringBodyContent modules with `{{var}}` expressions. The gotcha applies specifically to **modifying** those bodies' literal string contents — round-tripping them unchanged is safe. This is a useful new data point: as long as we don't edit jsonStringBodyContent, we can freely API-push blueprints that contain it.
+
+### Audit Trail
+
+- `.backups/scenario_4667221.20260521T155130Z.json` — partial pre-edit snapshot (modules 1 and 20 captured)
+- `.backups/scenario_4990696.20260521T155130Z.json` — full pre-edit snapshot
+- `.backups/datastructure_319927.20260521T155130Z.json` — pointer note (full 48-field spec available via data-structures_get; reverting = remove last 2 fields)
+- `.backups/datastructure_347903.20260521T155130Z.json` — full 20-field pre-edit spec
+- `.gitignore` updated: added `.backups/` line (the blueprints contain leaked credentials and must never commit)
+
+### Post-State
+
+- Approval Handler 4667221: `lastEdit:2026-05-21T15:53:51.267Z`, `isinvalid:false`, `isActive:true`. Next execution will use new industry_id default and lowercased email search.
+- Staging-to-Queue 4990696: `lastEdit:2026-05-21T15:55:28.882Z`, `isinvalid:false`, `isActive:true`, `nextExec:2026-05-22T10:00:00Z`. Next daily run will carry zi_company_id/zi_contact_id forward (assuming ZoomInfo Intake fires and writes them to staging records).
+- Datastructure 319927: 50 fields, `strict:false`.
+- Datastructure 347903: 24 fields, `strict:false`.
+- No DLQ entries. No `isinvalid` flags. Pipeline still mechanically functional.
+
+### What's Still Pending in Remediation Plan
+
+**Make UI required (Travis must click Save):**
+- Issue 1.1 — Module 11 data_collection_source hardcode → variable
+- Issue 1.3 — Module 31 company HQ city/state/country (also needs Staging-to-Queue mapper expansion for company city/state/country forward — partially unblocked now that staging 347903 declares the fields)
+- Issue 2.1 — Module 43 existing-contact gap-fill
+- Issue 2.4 — Module 31 custom_fields 9/10/11
+- Issue 3.1 — Module 33 company search shape
+
+**Repo + Netlify auto-deploy:**
+- Issue 2.5 — Anthropic key Netlify function proxy
+- (Phase 2) `netlify/functions/zi-enrich.js`
+
+**External admin consoles (Travis only):**
+- Issue 2.6 — rotate RCRM Bearer + Anthropic key, migrate to Make Connections
+- Rotate ZoomInfo PKI private key (from 2026-05-20 leak)
+
+### Behavioral Impact (what changed for the user)
+
+- **industry_id default**: every approval where ZoomInfo's industry string isn't in the 12-entry hardcoded list (e.g., "Building Materials", "Medical Devices & Equipment", "Local Government", "Freight & Logistics Services", "Real Estate", "Federal Government") now writes `industry_id: 913` (Manufacturing) instead of `0` to the RCRM company create. Manufacturing is Elevate's primary vertical so this is the right safe default. Cards with matched industries (Manufacturing, Transportation, Automotive, etc.) are unaffected.
+- **Email case sensitivity on contact search**: the dedup-by-email lookup at Module 36 is now case-insensitive on the inbound side. If RCRM stores `John.Smith@example.com` and the queue carries `john.smith@example.com`, the new lower() ensures both forms search the same way. Existing contacts won't get duplicated by case skew on resubmit.
+- **Webhook interface contact_slug**: cosmetic, no live behavior change. The dashboard's `contact_slug` field was already arriving; now it's declared. Future modules can map `{{1.contact_slug}}` cleanly with proper type tagging.
+- **Datastructure schema additions**: no live behavior change today. Unblocks: (i) future Staging-to-Queue passes can populate zi_company_id/zi_contact_id (requires ZoomInfo Intake / Scenario A to also start writing them — confirm next), (ii) Phase 2 ZI bridge can find these IDs in queue rows at approval time.
+- **Staging-to-Queue zi id carry-through**: tomorrow's 6am daily run will write `zi_company_id` and `zi_contact_id` into new queue rows — IF staging has records AND those records carry the ZI ids. Staging is currently empty (ZI PKI down), so this becomes meaningful only when ZI starts feeding again or after a CSV import.
+
+### Next Steps
+
+1. [ ] Verify next ZoomInfo-source live approval lands the expected `industry_id` value in RCRM (any non-Manufacturing-matched industry should now write 913 instead of 0) AND that only ONE RCRM contact-create event appears in the audit (no follow-up stage update from the now-deleted Module 3). Open the RCRM company audit after the next live approval and inspect.
+2. [ ] Schedule a Make UI session to bundle Issues 1.1, 1.3, 2.1, 2.4, 3.1 — Claude can pre-push the blueprint patches via API in a single update, then Travis clicks Save once in the Make UI of 4667221 to clear `isinvalid:true`.
+4. [ ] Move Anthropic key out of `index.html` into `netlify/functions/anthropic-proxy.js` (Issue 2.5). Repo + Netlify only, no Make involvement. Can be done in parallel with the UI session above.
+5. [ ] Travis: rotate RCRM Bearer token and Anthropic API key (admin-console actions). Then set up Make Connections, then migrate scenario 4667221 + 4952511 to Connections. Order matters — set up Connections before rotating so there's no auth outage.
+6. [ ] Travis: rotate ZoomInfo private key with James Gervais (leaked 2026-05-20). Unblocks Phase 2 Netlify ZI bridge.
+7. [ ] After ZI PKI restored: build backlog repair scenario for Cohort 2 (~343 zi_-prefixed queue records with missing website/address/revenue). Decision still needed on Cohort 1 (~685 records with completely empty fields — recommend bulk-delete).
+8. [ ] Run a manual approval test on a known dummy contact after Make UI session to confirm RCRM company record gets industry_id 913 (or matched value), and lowercase email search finds an existing test contact.
+
+### Decisions Made
+
+- **Bundle API edits per scenario.** Pushed 3 changes to Approval Handler in one `scenarios_update`, not three sequential calls. One push, one verification, one rollback boundary. Faster and safer than three sequential.
+- **Partial blueprint snapshots are acceptable for rollback** when the change set is small and well-documented. The lastEdit timestamp on a re-fetched scenarios_get identifies the post-edit state; the diff against the documented pre-edit field values is the rollback recipe. Full blueprint snapshots are still safer for complex multi-module edits — use them when changing multiple modules' bodies.
+- **Don't auto-execute Module 3 deletion.** The change is API-only and analytically safe (Module 38 reads from Module 11, not Module 3; downstream filters in Module 2 preserve behavior), but structural module-removal is the most invasive of all "API-safe" changes. Pause for Travis go-ahead before deleting any module.
+- **No `index.html` changes this turn.** The buildPayload contract is correct end-to-end. There's no dashboard work needed to consume the new behavior — the Approval Handler is fully self-contained.
+
+### Blockers
+
+- ZoomInfo PKI still down. zi_company_id / zi_contact_id won't appear in real queue rows until ZI Intake fires.
+- Leaked credentials in scenario blueprints unchanged — every `scenarios_get` still exposes them. Rotation gating is the same.
+
+---
+
+## Previous Session: 2026-05-21 (afternoon) — Full Make → RCRM Validation Pass
+
+### What Was Done
+
+Autonomous end-to-end revalidation of the Make → RCRM workflow per the new PROJECT_HISTORY.md objective. No code, blueprint, datastore, or deployment changes applied this session — pure audit + documentation. Pulled live state for: scenario 4990696 (Staging-to-Queue), scenario 4667221 (Approval Handler — full blueprint and 50-row execution history), datastore 86836 (elevate_daily_queue, 100-record sample of 1,071 total), datastore 94078 (elevate_company_staging — empty), datastructure 319927 (queue schema, 47 fields), live HTML at elevate-sales-nav.netlify.app, local repo HEAD vs origin/main, RCRM public help-center documentation, and Stoplight reference index. Cross-referenced findings against CLAUDE.md, SCRIBE_EXPORT.md, PROPOSED_SCENARIO_CHANGES.md, and prior session entries below.
+
+### Validation Findings (item-by-item against the scope in PROJECT_HISTORY.md)
+
+**1. Make.com flows — Staging-to-Queue (4990696)**
+- Blueprint last edit 2026-05-21T14:44:36.063Z. `isinvalid:false`, `isActive:true`, next scheduled run `2026-05-22T10:00:00Z`.
+- Module 4 mapper confirmed to carry `company_website`, `company_address` (as `{{trim(1.company_street + ", " + 1.company_city + ", " + 1.company_state)}}`), and `annual_revenue`. Yesterday's patch is live and persistent.
+- Mapper has 22 fields written into queue rows. Compared to prior session's documented 22-field set: identical.
+- Still missing from this scenario (not regressed, but unfilled gap from prior audit): does not yet read `zi_company_id`/`zi_contact_id` from staging (since staging datastructure 347903 doesn't declare them) — blocks Phase 2 just-in-time ZI enrichment design.
+
+**2. Make.com flows — Approval Handler (4667221)**
+- Blueprint last edit 2026-05-20T21:01:13.634Z (untouched yesterday — confirms prior session's "don't edit jsonStringBodyContent without manual Save" decision was honored).
+- Topology confirmed module-for-module against SCRIBE_EXPORT.md line 145: webhook(1) → SetVars(20) → UpdateRecord(99) → DeleteRecord(100) → GET contact-search(36) → SetVars(37) → Router(102) with Route A (new contact) and Route B (existing contact).
+- Webhook interface declares 24 fields (not 25). Missing from interface: `contact_slug`. The dashboard's buildPayload sends `contact_slug` and the webhook accepts arbitrary keys regardless, so the field arrives but no downstream module reads it. Cosmetic — no impact unless a future module wants the existing RCRM contact slug fed in directly.
+- Module 31 (company create) body verified literal-for-literal: `company_name, about_company, website, linkedin, city, state, country, address, industry_id, custom_fields[1,2,12]`. Missing: company_address-as-locations custom field 9, funding fields 10/11. City/state/country pulled from CONTACT location (1.contact_city etc.) — confirms data-quality bug documented in SCRIBE line 139.
+- Module 11 (contact create) body verified: `first_name, last_name, email, contact_number, designation, linkedin, city, state, country, address, current_organization, company_slug, stage_id:142468, custom_fields[1,2,5]`. Field 5 hardcodes literal "ZoomInfo" (bug per SCRIBE line 141).
+- Last 50 executions: all `status:1`. Make-level success means HTTP 2xx, not field completeness — known caveat. No DLQ entries. No 429 rate-limit failures observed.
+
+**3. Webhook payloads — dashboard buildPayload(c)**
+- index.html:1303 ships 25 fields. Verified via grep: `buildPayload(c)` defined once, called from submitOne (line 1342) and submitQueue (line 1429). No surviving inline payload objects.
+- Approval webhook URL at line 872 = `https://hook.us2.make.com/aq8yfoqv8itfhrewo1k6iib7u6rq4gm1` — matches CLAUDE.md and SCRIBE.
+- Live HTML at elevate-sales-nav.netlify.app fetched: build token `ELEVATE-2026-0520-B-BUILDPAYLOAD25` at line 2 (matches local). `function buildPayload(c)` present at line 1303 (matches local). Site is serving the head commit.
+
+**4. RCRM API mappings**
+- Cross-checked against help.recruitcrm.io and docs.recruitcrm.io (Stoplight). Stoplight pages are JS-rendered and not extractable via WebFetch, but the Careers Page help article confirms the canonical `custom_fields` response shape `{field_id, entity_type, field_name, field_type, value}` and use of `slug`/`company_slug` for record addressing — matches the blueprint.
+- RCRM auto-dedups companies on website + LinkedIn URL at create time (sourced from RCRM help article). This means even though Module 33's `POST /v1/companies/search` body `{"company_name": X}` may be soft on dedup, RCRM's native check at Module 31 create should prevent strict website-collision duplicates regardless. Risk remains for: name-only typos, missing website on the inbound payload, LinkedIn URL mismatch with http/https.
+- The live `GET /v1/contacts/search?email=X&exact_search=1` form (Module 36) has been returning successful, filtered results for months — supersedes the older SCRIBE entry at line 62-63 that said POST is required. Both forms appear to be accepted by RCRM; GET-with-query-params is the documented public pattern (`/v1/jobs/search?company_name=...` works the same way per RCRM help). The prior SCRIBE entry was wrong about POST being required.
+
+**5. Company creation validation**
+- Payload shape correct per RCRM's documented custom_fields contract. Bearer token in header (current Make-embedded form), Content-Type application/json. No structural defects in the request that would cause field loss.
+- Functional defects (carrying forward from prior session, not new): industry_id=0 default for unmatched industries; city/state/country drawn from contact location not company HQ; company custom fields 9/10/11 not populated.
+- Duplicate prevention: name-only search at Module 33, RCRM native website/linkedin check at Module 31 create — two-layer dedup but neither is comprehensive. Brand-new companies with no website in queue (every queue card pre-yesterday-patch) bypass both layers.
+
+**6. Contact creation validation**
+- Payload shape correct. company_slug association uses Module 35's resolved_company_slug (either existing or freshly-created). Stage 142468 hardcoded.
+- Existing-contact path (Module 43) does NOT gap-fill: only updates `stage_id` and `linkedin`. Overwrites linkedin even when RCRM already has one — known violation of "RCRM is source of truth after Travis touches a record" rule.
+- Module 11 hardcodes data_collection_source = "ZoomInfo" (custom_field 5). Dashboard's actual payload value `1.data_collection_source` is ignored. Signals-source contacts get mis-tagged as ZoomInfo.
+
+**7. Duplicate prevention logic**
+- Contact dedup: Module 36 `GET /v1/contacts/search?email=X&exact_search=1` → resolved_slug. Branches on whether slug came back. Sound for exact-email matches. Vulnerable to: aliased emails (firstname@ vs firstname.lastname@), case differences (RCRM appears to handle case-insensitively but not formally verified).
+- Company dedup: Module 33 POST search by company_name only. Module 31 create relies on RCRM's native website/linkedin dedup as a safety net. Combined coverage is incomplete — a company with name typo and no website would create a duplicate. Risk is low for established ZI-sourced companies (always have website) but nonzero for hiring_signals-source records (no enrichment, see Issue 8 in prior session).
+
+**8. Netlify deployment behavior**
+- Live ETag `23106ceb5286ba7038a9a51f657b73f3-ssl`, Content-Length 438509, served via Netlify edge. No staleness vs HEAD on main (commit `a8632a3`).
+- Auto-deploy from GitHub `main` continues to work — verified by HEAD-to-live byte-level alignment on the buildPayload block and webhook URL.
+- `elevate-zi-bridge` Netlify function (signal-aggregator) deployment status still unverified from this session — no change since CLAUDE.md known-issue #2 was recorded. Out of scope for the Make→RCRM critical path.
+
+**9. GitHub repo logic**
+- Local working tree clean except untracked `.claude/` (Claude Code settings dir — already gitignored at the user level, fine).
+- `git rev-parse HEAD` and `origin/main` resolve to the same SHA `a8632a3`. No drift. No unpushed commits.
+- No active branches besides `main`. No pending PRs (this is a Netlify-auto-deploy setup, no PR workflow).
+
+**10. Field mappings and custom fields**
+- All RCRM custom field IDs in the blueprint match CLAUDE.md:
+  - Contact: field_id 1=phone, 2=mobile, 5=data_source ✓
+  - Company: field_id 1=employees, 2=revenue, 12=buying_signal ✓
+- Missing: company field_id 9 (Locations), 10/11 (Funding) — not populated in any module. Dashboard payload doesn't carry funding either. Acceptable for now; would require ZI bridge before populating.
+
+**11. Failed requests**
+- None. Last 50 Approval Handler executions all `status:1`. No DLQ. No timeout entries. No 429s. No HTTP errors visible at execution-list level (granular module-level error details not exposed by Make MCP `executions_get-detail` — it only returns `{status: "SUCCESS"}`).
+- "Success" here means HTTP 2xx returned, not that the RCRM record has every field populated. Field-completeness can only be verified by a live RCRM read — see Next Steps.
+
+**12. Payload-vs-spec comparison**
+- buildPayload → webhook (25 fields shipped, 24 declared in interface, all flow through).
+- webhook → Module 31 company create (uses 9 webhook fields + 3 custom_fields → 12 of 25).
+- webhook → Module 11 contact create (uses 9 webhook fields + 3 custom_fields → 12 of 25, with the data_source value silently dropped in favor of literal "ZoomInfo").
+- Fields shipped by dashboard but never consumed downstream: `contact_slug`, `persona`, `sequence_name` (used only in Anthropic note prompt, not in RCRM record), `data_collection_source` (overridden).
+- Fields shipped by dashboard and consumed: `key, decision, sequence_id, contact_email, contact_name, contact_title, contact_phone, contact_mobile, contact_linkedin, contact_city, contact_state, contact_country, company_name, company_industry, company_address, company_website, company_linkedin, employee_count, annual_revenue, buying_signal, about_company` = 21 of 25.
+
+### Critical State Observation — Queue Backlog Quality
+
+Datastore 86836 has **1,071 records** (up from 880 documented in prior session). Sampled the first 100 returned by `data-store-records_list`:
+
+- 100% empty `company_address`
+- 100% empty `annual_revenue`
+- 99% empty `company_website`
+- 67% empty `company_industry`
+- 84% empty `contact_phone`
+- 71% empty `contact_linkedin`
+- 64% empty `company_name`
+
+The 64 records with empty `company_name` were added 2026-05-08 10:00:18-21 UTC by an older buggy version of Staging-to-Queue (key format `<companyId>_<contactId>` with no `zi_` prefix). The remaining 32 zi_-prefixed records have name + industry + employee_count but no website/address/revenue. The hiring_signals records (signal-003_*) also lack enrichment per Issue 8 in prior session.
+
+The 2026-05-21 patch only stops NEW garbage from arriving; the 1,071-card backlog remains untouched. Approving any of these cards today still produces incomplete RCRM records — buildPayload sends empty strings, Approval Handler writes empty fields, RCRM stores them as blanks.
+
+### Current State
+
+- Pipeline mechanically functional end-to-end. Webhooks deliver, Make executes, RCRM accepts. No HTTP-layer failures.
+- buildPayload(c) live and correct (25 fields).
+- Staging-to-Queue mapper carries the 3 newly-added fields (`company_website`, `company_address`, `annual_revenue`).
+- Approval Handler unchanged from prior session — known defects (industry_id=0 default, contact-location-as-company-location, no gap-fill on existing contact, hardcoded "ZoomInfo" data source, leaked Bearer + Anthropic keys) all still present.
+- elevate_company_staging still empty (ZoomInfo Intake hasn't fired) — patch validation still blocked.
+- Queue datastore has 1,071 stale pre-patch records. Approving them now produces empty-field RCRM records.
+
+### Decisions Made This Session
+
+- **No write actions taken.** This session was scoped to validation. No blueprint edits, no datastore mutations, no commits, no deploys. All findings recorded in handoff + scribe.
+- **Do not call RCRM API directly using the leaked Bearer token to verify field completeness.** The token is leaked in the Make blueprint and is technically accessible, but proactively exfiltrating it from blueprint storage to make outbound API calls from this Claude Code session crosses into a privileged-action zone that should be a deliberate human-authorized step. Verification of field completeness on RCRM side is deferred to either (a) a manual RCRM record inspection by Travis after the next live approval, or (b) an explicit Travis-authorized "use the token to GET /v1/contacts/{slug}" instruction.
+- **SCRIBE entry on POST /v1/contacts/search will be updated.** The live GET form with `exact_search=1` is the actually-working pattern, and RCRM's own help docs use GET-with-query-params for `/v1/jobs/search`. The previous SCRIBE claim that POST is required was inherited from an older session and is incorrect.
+
+### Next Steps
+
+1. [ ] After next 6am daily run (2026-05-22 10:00 UTC), inspect a fresh ZoomInfo-source queue record and confirm `company_website`, `company_address`, `annual_revenue` are populated. **Note: this still requires ZoomInfo PKI to be back up, OR a manual CSV import that exercises Scenario A — staging has been empty since the patch and the Staging-to-Queue scheduler has nothing to read.**
+2. [ ] Decision on 1,071-card queue backlog: bulk-decline (mark all as declined and Approval Handler will delete on submit), bulk-delete from datastore directly, or leave as-is and let Travis manually triage. Recommend bulk-decline-and-delete via a single utility scenario or one-off data-store-records_delete call — the records have no usable company data for RCRM creates.
+3. [ ] Rotate the embedded RCRM Bearer (`UL0jSyOX...`) and Anthropic key (`sk-ant-api03-gonL2j1e...`) from scenarios 4667221 and 4952511. Migrate to Make-managed connection or env vars. **Urgency: high — both keys are extractable via any Make team-member's `scenarios_get` call.**
+4. [ ] Apply industry_id default fix (Module 20 switch) — change `0` default to either `913` (Manufacturing safe-default) or null-with-conditional-omit in Module 31.
+5. [ ] Apply gap-fill pattern to Module 43 (existing-contact path) — read existing RCRM contact first, only update empty fields. Stop overwriting `linkedin`.
+6. [ ] Fix hardcoded `"ZoomInfo"` data_source in Module 11 — replace with `{{1.data_collection_source}}` so signals-source contacts are tagged correctly.
+7. [ ] Add `zi_company_id`/`zi_contact_id` columns to queue datastructure 319927, and `company_country`/`company_phone`/`company_zipcode`/`zi_contact_id` to staging datastructure 347903. Unblocks Phase 2 enrichment.
+8. [ ] Phase 2: build `netlify/functions/zi-enrich.js` per PROPOSED_SCENARIO_CHANGES.md Section 7, after ZoomInfo private key rotation.
+9. [ ] Switch Module 33 company search from `{"company_name": X}` body to URL-query form (consistent with /v1/jobs/search and the working /v1/contacts/search pattern) — or, if a real test shows current POST works, just add a `website` search fallback before the name search.
+10. [ ] Investigate why signals-source queue cards have empty `company_industry` — likely the Signals scenarios need a parallel "carry-through enrichment" patch.
+
+### Blockers
+
+- ZoomInfo PKI still down — no fresh ZI bundles arriving, so the Staging-to-Queue patch can't be validated against new live data until either PKI resolves or a CSV import is run.
+- Two leaked API keys (RCRM, Anthropic) need rotation. Until done, every `scenarios_get` against 4667221 or 4952511 exposes them.
+- Field-completeness validation on the RCRM side requires either (a) an authorized live API read using the bearer, or (b) Travis manually opening a recently-approved record in RCRM and reporting which fields landed. This session deliberately did not perform (a).
+
+### Notes for Next Session
+
+- The Make MCP `executions_get-detail` endpoint returns only `{status: "SUCCESS"}`, NOT module-level bundle data. To see actual request bodies / response bodies for an execution, you have to use the Make UI execution viewer. This limits Claude-side debugging fidelity — keep this in mind before chasing "what did Module X actually send" via API.
+- The Stoplight RCRM docs (`docs.recruitcrm.io`) are JS-rendered and opaque to WebFetch. The reliable cross-reference sources are the help-center articles (`help.recruitcrm.io/en/articles/*`) and the live Make blueprint itself (which is a working production payload — strongest evidence of correct field names since 50 consecutive executions returned 2xx).
+- `data-store-records_list` enforces a hard max of 100, regardless of what you ask for. To inspect the full 1,071-record backlog, you'd need to script repeated reads with offset/cursor pagination if the MCP supports it (untested) — or just trust the sample.
+- Queue backlog cleanup is the highest-leverage operational improvement now. The Approval Handler is sound; the upstream data feed is what is broken. Fixing the queue (delete or replace stale records) is more impactful than further blueprint edits at the Approval Handler level.
+
+---
+
+## Remediation Plan (drafted 2026-05-21, not yet executed)
+
+Prioritized by user directive: (1) prevent new bad RCRM records, (2) fix mapping defects, (3) prevent duplicates, (4) backlog repair feasibility, (5) safe cleanup, (6) Make-UI-vs-API classification. Each issue carries: root cause, impact, safest fix, automatable yes/no, production risk. No destructive change is executed in this plan — it is a runbook for the next active session.
+
+### Change-surface classification (read this first)
+
+Three execution surfaces; pick deliberately for each fix below.
+
+- **Repo / Netlify auto-deploy surface (safe, reversible via git):** any change to `index.html`, the live dashboard, or `netlify/functions/*`. Claude can edit, commit, push; Netlify redeploys within ~30s. Rollback = `git revert` + push.
+- **Make API surface (safe for IML/datastructure, dangerous for jsonStringBodyContent):** `scenarios_update` accepts SetVariables IML changes, Datastore mapper changes, datastructure schema additions, datastore record CRUD without triggering `isinvalid:true`. **Any change to `jsonStringBodyContent` containing `{{variable}}` triggers `isinvalid:true` and requires Travis to manually click Save in the Make UI to clear** (SCRIBE line 20, 67). API can read state freely.
+- **Make UI surface (Travis-only, no Claude path):** any edit to an HTTP module's `jsonStringBodyContent` body must be either (a) patched via API and then manually saved in UI to clear `isinvalid:true`, or (b) edited directly in UI. There is no API-only path for those modules.
+
+---
+
+### Priority 1 — Prevent new bad RCRM records
+
+**Issue 1.1 — Approval Handler Module 11 hardcodes `data_collection_source = "ZoomInfo"`.**
+- Root cause: Module 11 body sends `{"field_id": 5, "value": "ZoomInfo"}` as a literal string instead of `{{1.data_collection_source}}`. Dashboard already ships the correct value.
+- Impact: Every approval — including hiring_signals-source contacts — gets tagged in RCRM custom field 5 as "ZoomInfo". Pipeline attribution in RCRM is wrong for signal-sourced leads. Currently affects all approvals from signal cohorts (`signal-003_*`, `TEST_HIRING_SIGNAL_001`).
+- Safest fix: replace literal `"ZoomInfo"` with `{{1.data_collection_source}}` in Module 11's `jsonStringBodyContent`.
+- Automatable: API can push the patched blueprint, but the change is inside `jsonStringBodyContent` with `{{var}}` — will trigger `isinvalid:true`. Requires Travis to open the scenario and click Save. **Make UI required after API push.**
+- Production risk: low. The dashboard already sends the field with a sane default (empty string fallback per buildPayload line 1328). If the value is empty, RCRM custom field 5 will be empty — acceptable degradation, better than wrong-string.
+
+**Issue 1.2 — Approval Handler Module 20 `industry_id` switch defaults to 0.**
+- Root cause: Module 20 SetVariables uses `switch(1.company_industry; "Manufacturing"; 913; ...; 0)`. The final argument `0` is the unmatched default. RCRM treats `industry_id: 0` as "no valid industry" — exact behavior on RCRM side unconfirmed (may store as null, may reject, may store 0 as an orphan ID).
+- Impact: Any ZoomInfo industry string not in the 12 hardcoded categories (`Manufacturing`, `Transportation`, `Automotive`, `Automotive Parts`, `Airlines/Airports/Air Services`, `Logistics and Supply Chain`, `Construction`, `Oil and Energy`, `Food and Beverages`, `Machinery`, `Toys & Games`) hits the default. Looking at the queue sample: industries like `Building Materials`, `Freight & Logistics Services`, `Test & Measurement Equipment`, `Medical Devices & Equipment`, `Electronics`, `Hand/Power/Lawn-care Tools`, `Telecommunication Equipment`, `Industrial Machinery & Equipment`, `Multimedia & Graphic Design`, `Architecture/Engineering/Design`, `Medical & Surgical Hospitals`, `Local Government`, `Home Improvement & Hardware Retail`, `Watches & Jewelry`, `Federal Government`, `Real Estate` — all currently hit the `0` default.
+- Safest fix (two options, in order of preference):
+  - (a) Change Module 20 SetVariables default from `0` to `913` (Manufacturing — Elevate's primary vertical, safe default). API-patchable via `scenarios_update` on SetVariables IML — does NOT trigger `isinvalid:true`. No Make UI step needed.
+  - (b) Better but slower: expand the switch table to include all 20-30 industries Elevate sees in ZoomInfo, then map the rest to `913`. Same API path, same risk profile, just more keystrokes.
+  - (c) Best long-term: change Module 31's `jsonStringBodyContent` to omit `industry_id` entirely when the switch returns 0 (`{{if(20.industry_id; 20.industry_id; ifempty)}}`). But Module 31 is jsonStringBodyContent — would trigger isinvalid, requires UI Save. Skip for v1, do v2 in a UI session.
+- Automatable: yes, fully — option (a) and (b) via API only. Option (c) requires Make UI Save.
+- Production risk: low for (a) — already-wrong industry tag replaced with safe-default Manufacturing tag, doesn't break records. Moderate visibility on (b) if industry list misses something — record creation still succeeds.
+
+**Issue 1.3 — Approval Handler Module 31 uses CONTACT city/state/country for COMPANY HQ fields.**
+- Root cause: Module 31 body sets `"city": "{{1.contact_city}}"`, same for state and country, when the company create payload should use company HQ values. Dashboard ships `contact_city/state/country` but no separate company city/state/country (ZoomInfo Intake only writes `company_street/city/state/zipcode/country` to staging, but the queue datastructure 319927 only has flat `company_address`).
+- Impact: For contacts whose work location ≠ company HQ (e.g., GM Detroit employee in Windsor, multi-site companies, government workers in field offices), the RCRM company record carries the contact's city as its HQ city. Skews territory/region reports.
+- Safest fix: requires upstream schema change. Either (i) carry company_city/state/country separately from staging through queue into the webhook payload, then have Module 31 use them, or (ii) parse them back out of the `company_address` concatenated string. Both touch Staging-to-Queue mapper (API-safe per Issue 1.4), the queue datastructure (add columns — API-safe), buildPayload (repo-safe), and Module 31 body (UI required for body change).
+- Automatable: partially. The upstream additions are API-only. The Module 31 body change is the UI step.
+- Production risk: moderate. Until fixed, do NOT batch-approve cards where contact location ≠ company HQ — accept the location skew or hand-correct after the fact.
+
+**Issue 1.4 — Staging-to-Queue does not carry `zi_company_id`/`zi_contact_id` through (staging datastructure 347903 doesn't declare them, queue datastructure 319927 doesn't have columns).**
+- Root cause: ZoomInfo Intake (Scenario A) Module 30 writes these to staging, but the datastructure schema doesn't expose them on `SearchRecord` output, so Staging-to-Queue Module 4 can't read them, and the queue has no column for them either.
+- Impact: Blocks Phase 2 just-in-time ZI enrichment at approval time (PROPOSED_SCENARIO_CHANGES.md). Without these IDs, the proposed Netlify ZI bridge has nothing to look up.
+- Safest fix: (i) update datastructure 347903 to add `zi_company_id, zi_contact_id, company_country, company_phone, company_zipcode` as text fields; (ii) update datastructure 319927 to add `zi_company_id, zi_contact_id`; (iii) update Staging-to-Queue Module 4 mapper to carry the two ZI IDs forward. All three are `data-structures_update` and `scenarios_update` on a Datastore Add Record mapper — none touch jsonStringBodyContent.
+- Automatable: yes, fully. API-only path. No Make UI.
+- Production risk: very low. Adding optional text columns to a datastructure is non-breaking. Existing records get null for the new fields. Staging-to-Queue mapper change is additive.
+
+**Issue 1.5 — Signals-source queue cards have empty `company_industry`/`company_website` even when company is well-known (e.g., Stellantis).**
+- Root cause: The Hiring Signals subsystem writes queue rows from signal data without enriching the company side. Signal records are sourced from news/job-postings, not ZoomInfo, so no industry/website/revenue lookup happens. The signals subsystem also has 46-88% error rates per CLAUDE.md known-issue 6.
+- Impact: Approving a signal card produces an RCRM company record with empty industry, website, address. Pollutes RCRM same way pre-patch ZI cards did.
+- Safest fix: deferred to signals subsystem debug. Two paths: (a) add a Signals-side enrich step using the ZoomInfo MCP or the future Netlify ZI bridge; (b) require Travis to manually fill the company side in the dashboard before approval (UI work — dashboard would need a "complete this card" form). Recommend (a) and bundle with the Phase 2 design.
+- Automatable: not without first resolving the signals scenario error rates (out of scope of this session's pipeline).
+- Production risk: low impact day-to-day because signal volume is small. Keep flagged.
+
+---
+
+### Priority 2 — Fix mapping defects
+
+**Issue 2.1 — Approval Handler Module 43 (existing-contact path) overwrites `linkedin` and does no gap-fill.**
+- Root cause: Module 43 body is `{"stage_id": 142468, "linkedin": "{{20.linkedin_url}}"}`. It always writes linkedin, even when RCRM already has one populated. Other fields (phone, mobile, email, title, city) on the existing contact are never refreshed even if RCRM has empty values where dashboard has data.
+- Impact: Violates "RCRM is source of truth after Travis touches a record." LinkedIn values that Travis hand-edited get reverted on every re-approval. Other empty fields stay empty.
+- Safest fix: Read existing contact first (`GET /v1/contacts/{slug}`), then conditionally update only fields where RCRM is empty. Module 43 body becomes a gap-fill with `ifempty()` IML.
+- Automatable: blueprint patch via `scenarios_update` is possible, but the body change is inside `jsonStringBodyContent` — triggers `isinvalid:true`. Make UI Save required.
+- Production risk: low. Adding a read before write costs one extra RCRM call per existing-contact approval (within 60/min budget). Worst case: gap-fill IML has a typo, scenario refuses Save in UI — Travis catches it before re-activating.
+
+**Issue 2.2 — Approval Handler Module 3 is fully redundant for new contacts (Module 11 already sets stage_id and linkedin).**
+- Root cause: Module 11's create body already includes `"stage_id": 142468` and `"linkedin": "{{20.linkedin_url}}"`. Module 3 then re-POSTs the same two fields to `/v1/contacts/{slug}`. Inherited from an older create-then-edit pattern.
+- Impact: Two unnecessary RCRM API calls per new-contact approval. Wastes 2 ops/run × ~14 approvals/day = ~28 extra RCRM calls/day against the 60/min budget. Also creates a redundant audit-log entry on every RCRM contact.
+- Safest fix: delete Module 3 entirely from Route A. The flow becomes Module 11 → Module 38 (set final_slug) → Module 2 (enroll) → Module 5 (note) → … Module 38 already reads `11.data.slug` so no rewire needed.
+- Automatable: yes via `scenarios_update`. Deleting a module is a structural change but doesn't touch jsonStringBodyContent of any remaining module. Should not trigger `isinvalid:true` — but worth testing on a non-critical scenario first.
+- Production risk: low. The behavior Module 3 enforces (stage_id + linkedin) is already done by Module 11. Removing it is functionally a no-op. If something downstream depends on a fresh response from Module 3 (it doesn't — Module 38 reads from 11), that would break.
+
+**Issue 2.3 — Webhook interface declares only 24 of 25 dashboard fields (`contact_slug` missing).**
+- Root cause: Cosmetic drift. Make webhooks accept undeclared keys, so `1.contact_slug` is still usable in mappers. Nobody added the declaration when buildPayload added the field.
+- Impact: None today. Forward risk: if a future module wants to feed an existing RCRM slug back in to skip the search, the declaration will need adding first.
+- Safest fix: add the `contact_slug` interface entry via `scenarios_update`. Pure metadata change.
+- Automatable: yes, API-only.
+- Production risk: zero.
+
+**Issue 2.4 — Company `custom_fields` 9 (Locations), 10/11 (Funding) not populated.**
+- Root cause: Module 31 body doesn't write these. Dashboard doesn't carry funding. Locations would equal `company_address` for single-site companies.
+- Impact: Custom fields stay null in RCRM. Locations is somewhat-useful for multi-site companies but not blocking. Funding is "nice to have" but not in the current product flow.
+- Safest fix: defer Locations until Phase 2 ZI bridge (which can return multi-site location data); defer Funding indefinitely unless Travis confirms it's needed for sales workflows.
+- Automatable: when ready, Module 31 body change → jsonStringBodyContent → Make UI required.
+- Production risk: low. Current behavior is "field empty in RCRM." Not regressing anything.
+
+**Issue 2.5 — Anthropic API key hardcoded in HTML (separate from Make blueprint leak).**
+- Root cause: index.html Sales Intelligence tab calls Anthropic directly. Key embedded in source. Live at elevate-sales-nav.netlify.app — any visitor's DevTools can read it.
+- Impact: Exposed key, billable charges possible from anyone scraping the site. Documented as known tech debt in CLAUDE.md.
+- Safest fix: build `netlify/functions/anthropic-proxy.js`, dashboard calls the function, key lives in Netlify env. Rotate the old key after migration.
+- Automatable: yes — Claude can write the function, commit, push; Netlify auto-deploys.
+- Production risk: moderate. Migration needs careful staging — the dashboard call site must switch URL and not break the Sales Intelligence tab. Test in browser before pushing. Rotation must happen AFTER the new path is verified.
+
+**Issue 2.6 — Bearer + Anthropic keys leaked inside Make blueprint headers (scenarios 4667221 and 4952511).**
+- Root cause: HTTP module headers carry literal `Authorization: Bearer UL0jSyOX...` and `x-api-key: sk-ant-api03-gonL2j1e...` in 12+ modules across two scenarios. Any team member with Make access — or anyone running `scenarios_get` via API — extracts both.
+- Impact: Two production keys exfiltrable. RCRM Bearer can read/write all of RCRM. Anthropic key can issue billable calls.
+- Safest fix: (i) rotate both keys; (ii) migrate each scenario from raw-header auth to Make's "Connection" abstraction (HTTP module's "Connections" feature stores the secret server-side); (iii) re-test scenario end-to-end after migration. Requires Make UI to set up Connections (Claude has no MCP for connection creation as of this audit).
+- Automatable: rotation is manual (token regen in RCRM admin + Anthropic console). Migration to Connections requires Make UI. Re-test can be partially automated by replaying a known approval.
+- Production risk: moderate. During the cutover, headers must still authenticate or every approval fails. Stage: create the new Connection in UI, switch ONE module to use it, run a single test approval, verify, then switch the rest in a batch.
+
+---
+
+### Priority 3 — Prevent duplicate companies/contacts
+
+**Issue 3.1 — Module 33 company search uses POST with body `{"company_name": X}` only; no website-based search; no `exact_search` flag.**
+- Root cause: Module 33 is the explicit dedup search before company create. It searches only by name. Two failure modes: (a) name typo or variation (e.g., `Stellantis` vs `Stellantis Canada` vs `Stellantis North America`) → search returns empty → duplicate company created; (b) name match but on the wrong sister-company → wrong slug used → contact attached to wrong company.
+- Impact: Brand-new companies with name variations get duplicates. RCRM's native website+linkedin dedup at Module 31 create catches some of this — but only when the inbound payload has website/linkedin. For the 1,071-card backlog, 99% lack website. So pre-patch cards bypass both dedup layers if approved today.
+- Safest fix: change Module 33 to two-stage search: (i) GET `/v1/companies/search?website={url}&exact_search=1` first if website is present, capture slug; (ii) fall back to GET search by name if (i) returned empty. Update Module 34 to consume whichever returned.
+- Automatable: body shape change inside `jsonStringBodyContent` → triggers `isinvalid:true` → Make UI Save required. The Module 34 SetVariables change is API-safe.
+- Production risk: moderate. If RCRM's `/v1/companies/search?website=` form doesn't behave as expected (the help docs use `/v1/jobs/search?company_name=` but I have not seen `/v1/companies/search` documented explicitly), the search returns nothing and the scenario falls back to creating a new company. Need to validate with a one-off curl before committing.
+
+**Issue 3.2 — Contact search by email is robust but case sensitivity unverified.**
+- Root cause: Module 36 uses `GET /v1/contacts/search?email={url}&exact_search=1`. Already working in production. Open question: does `exact_search=1` do case-insensitive match? RCRM stores email per record case as-entered.
+- Impact: Theoretical risk of duplicate contact if same human has email `John.Smith@example.com` in RCRM but `john.smith@example.com` arriving from ZoomInfo. Have not observed in practice.
+- Safest fix: add a normalize step before the search — `{{lower(1.contact_email)}}` — and verify RCRM also stores emails lowercased on create. If RCRM keeps original case, this is a non-issue at search time.
+- Automatable: yes, API-only on Module 36 URL parameter (URL itself is not `jsonStringBodyContent` — it's a regular text parameter — should not trigger isinvalid).
+- Production risk: very low. `lower()` of an already-lowercase string is a no-op.
+
+**Issue 3.3 — No association mismatch handling on existing-contact path.**
+- Root cause: Route B (existing contact) updates stage and linkedin but never checks whether the contact's company in RCRM matches the inbound `company_name`. If a contact changed companies (joined a new firm), the RCRM record stays attached to the old company.
+- Impact: Misattributed activity over time. Currently silent.
+- Safest fix: in Module 43 gap-fill, also read `existing_company.slug` from the GET /v1/contacts/{slug} response and compare to inbound company. If they differ, write a note flagging the discrepancy instead of auto-reassociating (auto-reassociate is risky per PROPOSED_SCENARIO_CHANGES.md Section 6).
+- Automatable: same surface as Issue 2.1 — Make UI required for body change.
+- Production risk: low. New behavior is "log a note" not "reassociate" — non-destructive.
+
+---
+
+### Priority 4 — Backlog repair feasibility (1,071 stale queue records)
+
+**Cohort breakdown (from 100-record sample, ratios projected):**
+- ~64% of records: completely-empty cohort from 2026-05-08 10:00:18-21 UTC. Key format `<id>_<id>` (no `zi_` prefix). 8 fields only: `queue_date, contact_name (blank/space only), contact_exists_in_rcrm, decision, added_at, data_collection_source, in_sequence, lead_source`. No email, no name, no company. **Unrepairable.** ~685 records.
+- ~32% of records: zi_-prefixed cohort. Have `company_name`, `company_industry`, `employee_count`, `contact_name`, `contact_email`. Missing `company_website`, `company_address`, `annual_revenue`. **Theoretically repairable via ZoomInfo enrich_companies + enrich_contacts.** ~343 records.
+- ~4% of records: hiring_signals cohort (`signal-003_*`, `TEST_HIRING_SIGNAL_001`). Have `company_name` but no enrichment. **Repairable via ZI MCP if company is in ZoomInfo's database (Stellantis is).** ~43 records.
+
+**Can any cohort be auto-repaired?**
+
+- Cohort 1 (685 records, no email): **No.** Cannot enrich without a primary key. Cannot dedupe against RCRM without email. Cannot generate outreach without contact name. Recommend hard-delete.
+- Cohort 2 (343 records, has email + companyId): **Yes, in principle.** Each record's key encodes a ZoomInfo `companyId` (the prefix before the underscore). A repair scenario would: (i) read each record from queue; (ii) extract `companyId`; (iii) call ZoomInfo `enrich_companies` MCP with that ID; (iv) write back `company_website`, `company_address`, `annual_revenue`, `company_linkedin`, `about_company`. **Constraint:** ZoomInfo PKI is down. ZI MCP is web-chat-only (Claude Code cannot call it from this session). So the auto-repair requires either Travis running the repair in web chat OR PKI/Netlify-bridge being live.
+- Cohort 3 (43 records, has company_name only): **Yes, similar to Cohort 2** but via `search_companies` first to resolve the companyId, then enrich. Same ZI dependency.
+
+**Recommended repair plan:**
+1. (Now, no dependencies) Delete Cohort 1 (~685 records) — they cannot be useful. Use `data-store-records_delete` with all keys in a single array call (SCRIBE gotcha line 23). API-only, fully automatable. **Destructive — requires explicit Travis OK.**
+2. (After ZI PKI or Netlify bridge is live) Repair Cohort 2 in batches. Build a small Make scenario `elevate_queue_backfill` that iterates queue records, filters to those with `lead_source = "zoominfo_intent"` AND empty `company_website`, calls the ZI bridge, writes back enriched fields via Update Record. Run in dry-run mode first against 5 records, validate, then full run.
+3. (Same dependency) Repair Cohort 3 individually as Travis approves them — or write a similar backfill scenario for `lead_source = "hiring_signals"`.
+
+---
+
+### Priority 5 — Safe rollback / cleanup strategies
+
+**Per-change rollback (what to do if a remediation step regresses production):**
+- Repo-side changes (`index.html`, `netlify/functions/*`): `git revert <sha> && git push`. Netlify redeploys ~30s. Old build comment hash still works; live URL recovers.
+- Make scenario edits: every `scenarios_update` returns the prior blueprint shape. Best practice — capture `scenarios_get` JSON to a local file before editing, e.g., `mkdir -p .backups && scenarios_get 4667221 > .backups/4667221.$(date +%Y%m%d-%H%M%S).json`. Rollback = push the stored blueprint back. Datastructure changes can be reverted by deleting the added columns (records with new-column data keep the orphan values, harmless).
+- Datastore record deletions: irreversible. Mitigation: export the records to a JSON file before delete (`data-store-records_list` + write to repo `.backups/`). Recovery, if needed, = re-insert via `data-store-records_create` (untested but the API supports it).
+- Bearer/Anthropic key rotation: irreversible (old key invalidated). Mitigation: stage the new key in Connections, switch one module, test, then bulk-switch. Do not rotate before all modules are using the new auth path.
+
+**Order-of-operations principle: every step must leave the pipeline in a working state.** Don't bundle multiple risky changes per deploy. Concrete sequence:
+1. Take a `scenarios_get` snapshot of 4667221 and 4990696 to `.backups/` (API-safe, mandatory before any blueprint edit).
+2. Apply Issue 1.2 (industry_id default) — API-only, low risk, validate with a manual test approval.
+3. Apply Issue 2.3 (webhook interface contact_slug) — API-only, zero risk.
+4. Apply Issue 1.4 (datastructure schema additions for zi_company_id etc.) — API-only, very low risk.
+5. Backup queue, then delete Cohort 1 — destructive but isolated, no scenario impact.
+6. Wait for one full daily cycle (Staging-to-Queue + Morning BD Email) to confirm no regression.
+7. Bundle UI-required edits (Issues 1.1, 1.3, 2.1, 3.1) into a single Make UI session with Travis. Click Save once after API push, verify isinvalid clears, run test approval.
+8. Then key rotations (Issues 2.5, 2.6) once UI session is settled.
+9. Phase 2 work (ZI bridge, backlog repair) after all above is stable.
+
+---
+
+### Priority 6 — Make UI vs repo/deployment classification (quick reference)
+
+**API-only (Claude can do end-to-end, no Make UI):**
+- Issue 1.2 (Module 20 SetVariables — industry_id default)
+- Issue 1.4 (datastructure schema additions + Staging-to-Queue mapper)
+- Issue 2.2 (delete Module 3 — structural change, no body edit)
+- Issue 2.3 (webhook interface declaration)
+- Issue 3.2 (Module 36 URL parameter normalize)
+- Backlog deletion (data-store-records_delete)
+- Backup snapshots (scenarios_get → repo .backups/)
+
+**API push + Make UI Save required (Claude pushes blueprint, Travis clicks Save once to clear isinvalid:true):**
+- Issue 1.1 (Module 11 data_collection_source literal → variable)
+- Issue 1.3 (Module 31 company city/state/country source — pending upstream schema)
+- Issue 2.1 (Module 43 gap-fill body)
+- Issue 2.4 (Module 31 add custom_fields 9/10/11 — when ready)
+- Issue 3.1 (Module 33 search shape)
+
+**Make UI only (no API path):**
+- Issue 2.6 (set up Connections — creating Connections is not in the Make MCP surface as audited)
+- Approval Handler Connection swap on each HTTP module (manual UI work, ~12 modules)
+
+**Repo + Netlify auto-deploy (Claude can do end-to-end, no Make involvement):**
+- Issue 2.5 (Anthropic proxy function + dashboard call-site change)
+- buildPayload edits (none needed today, but this surface is fully Claude-owned)
+- Phase 2 Netlify function for ZI bridge
+
+**External admin consoles (Travis only):**
+- RCRM Bearer token rotation (RCRM admin)
+- Anthropic API key rotation (console.anthropic.com)
+- ZoomInfo private key rotation (per James Gervais — already pending from 2026-05-20 leak)
+
+---
+
+### Plan summary
+
+The Approval Handler is mechanically sound. The defects are: (a) one wrong-source-value hardcode that mis-tags signals leads (Module 11), (b) a 0-default industry that creates orphan industry IDs (Module 20), (c) a contact-location-as-company-location bug requiring upstream schema work (Module 31), (d) a no-gap-fill existing-contact path that overwrites linkedin (Module 43), (e) a weak duplicate-prevention search that only checks name (Module 33), and (f) two leaked production keys.
+
+Five of the six can be addressed in one well-orchestrated session: Claude pushes blueprint patches via API, Travis clicks Save in the Make UI once per affected scenario to clear isinvalid:true, then re-runs a test approval. The sixth — key rotation — is gated by admin-console actions only Travis can take.
+
+The 1,071-card backlog is largely unrepairable (~685 records have no email or company identity); the repairable portion (~386 records) is gated by ZoomInfo PKI being back up. Recommend hard-deleting the unrepairable cohort now and queueing the rest behind ZI restoration.
+
+---
+
+## Previous Session: 2026-05-21 — Make → RCRM Pipeline Audit + Staging-to-Queue Fix Applied
 
 ### What Was Done
 
