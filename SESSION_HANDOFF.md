@@ -1,6 +1,93 @@
 # Session Handoff
 
-## Current Session: 2026-05-21 (late evening — Wave 3 prep: company location plumbing)
+## Current Session: 2026-05-21 (late evening — Wave 3 complete: Issue 1.3 landed end-to-end)
+
+### What Was Done
+
+Issue 1.3 (Approval Handler Module 31 uses company HQ location, not contact location) landed across all four surfaces in a single coordinated session:
+
+| # | Issue | Surface | Change | Verified |
+|---|---|---|---|---|
+| 12 | 1.3 | Queue Fetch (4734116) | Inspection only — confirmed Module 3 BasicAggregator forwards entire `data` object (`data: {{2.data}}`), no field-pick. New queue fields flow through to dashboard automatically. No edit needed. | ✓ |
+| 13 | 1.3 | `index.html:1303` buildPayload | Added `company_city`, `company_state`, `company_country` to payload object. Build token bumped to `ELEVATE-2026-0521-A-BUILDPAYLOAD28`. | ✓ committed (`c5af4be`), pushed, Netlify deployed live (verified via curl) |
+| 14 | 1.3 | Approval Handler webhook interface (4667221) | Declared 3 new fields at positions 17/18/19 (immediately after `company_address`). 28 total entries. | ✓ |
+| 15 | 1.3 | Approval Handler Module 31 body | `"city": "{{1.contact_city}}"` → `"city": "{{ifempty(1.company_city; 1.contact_city)}}"`. Same pattern for state and country. Graceful fallback to contact location for backlog cards that lack company location. | ✓ |
+
+Approval Handler state: `lastEdit:2026-05-21T17:00:34.479Z`, `isinvalid:false`, `isActive:true`. Push did not trip the gotcha (continued evidence that the historic warning is superseded).
+
+### Behavioral Impact (live now)
+
+- **Newly-staged ZoomInfo cards** (post-Staging-to-Queue patch from earlier this session, once ZI Intake resumes) will carry `company_city`, `company_state`, `company_country` separately from contact location through staging → queue → dashboard → webhook → RCRM. Module 31 will write the company HQ city/state/country to RCRM instead of the contact's work-from-home / branch-office city.
+- **The 1,071 backlog queue records** that lack company location (every record currently in the queue) still produce valid Module 31 payloads — `ifempty()` falls back to contact location, preserving today's behavior exactly. No regression for in-flight approvals.
+- **Build token bumped**: live HTML serves `ELEVATE-2026-0521-A-BUILDPAYLOAD28`. The dashboard's payload now has 28 fields (was 25).
+
+### Cumulative Today
+
+15 remediation changes since this morning. All via API + no Make UI Save coordination after the first wave. The gotcha that originally drove the "must Save in UI" caveat has been disproven across 6 sequential pushes today.
+
+1. (2.3) Webhook interface declares contact_slug
+2. (1.2) industry_id default 0 → 913
+3. (3.2) Module 36 email wrapped in lower()
+4. (1.4a) Queue datastructure + zi_company_id, zi_contact_id
+5. (1.4b) Staging datastructure + zi_contact_id, company_country, company_zipcode, company_phone
+6. (1.4c) Staging-to-Queue Module 4 forwards zi_company_id, zi_contact_id
+7. (2.2) Module 3 (redundant new-contact stage update) deleted
+8. (1.1) Module 11 data_collection_source uses dashboard variable
+9. (2.1 minimal) Module 43 no longer overwrites LinkedIn
+10. (1.3 prereq) Queue datastructure + company_city, company_state, company_country
+11. (1.3 prereq) Staging-to-Queue Module 4 forwards company_city, company_state, company_country
+12. (1.3) Queue Fetch verified pass-through (no edit)
+13. (1.3) buildPayload extended, build token ELEVATE-2026-0521-A-BUILDPAYLOAD28 live on Netlify
+14. (1.3) Approval Handler webhook interface declares 3 new fields
+15. (1.3) Module 31 uses ifempty() fallback for city/state/country
+
+### What Remains in the Remediation Plan
+
+**Needs RCRM endpoint testing first:**
+- Issue 3.1 — Module 33 company search shape. Drafting blind risks producing a worse search than the current name-only POST.
+
+**Deferred:**
+- Issue 2.4 — custom_fields 9/10/11 (no funding data source until Phase 2 ZI bridge).
+- Full Issue 2.1 gap-fill on Module 43 — needs structural change (GET-existing-contact before update).
+
+**Out of Make→RCRM scope but tracked:**
+- Sales Intelligence tab restoration via Anthropic proxy function (Anthropic key already removed from HTML; Sales Intelligence tab is broken but not part of the pipeline).
+
+**External admin consoles (Travis only):**
+- Rotate RCRM Bearer + Anthropic key, migrate to Make Connections.
+- Rotate ZoomInfo private key (leaked 2026-05-20).
+
+**Gated by ZoomInfo PKI:**
+- Phase 2 ZI bridge + backlog repair scenario.
+
+### Validation Plan
+
+The cleanest validation path requires either ZI Intake to resume OR a manual CSV import:
+
+1. After ZI Intake resumes or CSV import populates staging, wait for next Staging-to-Queue 6am run (or trigger manually).
+2. Confirm new queue record contains `company_city`, `company_state`, `company_country`, `zi_company_id`, `zi_contact_id` populated from staging.
+3. Have Travis approve that card from the dashboard.
+4. Inspect the resulting RCRM company record. Confirm:
+   - `city`/`state`/`country` match company HQ (not contact's work city)
+   - `industry_id` matches the switch table OR is 913 for unmatched
+   - `address` populated (was empty pre-Wave-1)
+   - custom_field 5 on the contact = the actual `data_collection_source` value, not literal "ZoomInfo"
+   - Only ONE RCRM contact-create event in audit (no follow-up stage update from deleted Module 3)
+5. If existing contact path is exercised, confirm LinkedIn was NOT clobbered.
+
+### Decisions Made
+
+- **Pushed buildPayload + Approval Handler change in parallel rather than serialized.** Order didn't matter because Module 31's `ifempty` makes the change forward-compatible (empty company_city falls back to contact_city). Dashboard could deploy after the scenario without breaking anything; in practice both pushed in <1 minute.
+- **Used `ifempty(1.company_city; 1.contact_city)` not `if/then/else`.** Simpler IML, clearer intent, equivalent semantics for the empty-string case.
+- **Did not stop at the prep step** — Travis explicitly said "land it" after I described the 4-surface plan. End-to-end completion in one session was the right call given the gotcha is disproven and there's no UI-coordination friction.
+
+### Blockers
+
+Unchanged. ZoomInfo PKI down. Credential rotations pending.
+
+---
+
+## Previous Session: 2026-05-21 (late evening — Wave 3 prep: company location plumbing)
 
 ### What Was Done
 
