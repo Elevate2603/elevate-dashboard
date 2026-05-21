@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0521-C-PERSONAMAP -->
+<!-- ELEVATE-2026-0521-D-PERSONAMAP-BROAD -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1318,13 +1318,13 @@ function bulkDecline() {
 // Module 6 IML so older queue cards without persona/sequence_id still get
 // mapped at submit time.
 const PERSONA_RULES = [
-  { persona: 'HR/TA',               match: ['hr manager','hr director','human resources','talent acquisition','recruiter'] },
-  { persona: 'Plant Manager',       match: ['plant manager','facility manager','site manager'] },
-  { persona: 'Quality Manager',     match: ['quality manager','qa manager','qc manager','quality director'] },
-  { persona: 'Production Manager',  match: ['production manager','shift supervisor','production lead'] },
-  { persona: 'Engineering Manager', match: ['engineering manager','maintenance manager'] },
-  { persona: 'Operations',          match: ['operations manager','operations director','vp of operations'] },
-  { persona: 'C-Suite/VP',          match: ['coo','ceo','cfo','chief','president','vice president','vp'] }
+  { persona: 'HR/TA',               match: ['hr manager','hr director','human resources','talent acquisition','recruiter','hr business partner','hrbp','head of hr','people operations','people partner','vp hr','vp people'] },
+  { persona: 'Plant Manager',       match: ['plant manager','facility manager','site manager','plant director'] },
+  { persona: 'Quality Manager',     match: ['quality manager','qa manager','qc manager','quality director','quality lead'] },
+  { persona: 'Production Manager',  match: ['production manager','shift supervisor','production lead','production director','manufacturing manager'] },
+  { persona: 'Engineering Manager', match: ['engineering manager','maintenance manager','engineering director','maintenance director'] },
+  { persona: 'Operations',          match: ['operations manager','operations director','vp of operations','vp operations','director of operations','head of operations','works operations','plant operations','manufacturing operations'] },
+  { persona: 'C-Suite/VP',          match: ['coo','ceo','cfo','chief','president','vice president','vp','owner','founder','managing director','executive director'] }
 ];
 const PERSONA_SEQUENCE = {
   'HR/TA':               { id: '15307', name: 'HR / Talent Acquisition' },
