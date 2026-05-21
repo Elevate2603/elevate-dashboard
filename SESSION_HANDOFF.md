@@ -1,5 +1,115 @@
 # Session Handoff
 
+## Wave 4 Applied: 2026-05-21 — Module 102 email-required filter (prevention only)
+
+### What Was Done
+
+Single minimal-risk blueprint patch. Module 102 (Approve Only Router) filter extended from one condition to two:
+
+**Before:**
+```
+conditions: [[
+  {"a": "{{1.decision}}", "b": "approve", "o": "text:equal"}
+]]
+```
+
+**After:**
+```
+conditions: [[
+  {"a": "{{1.decision}}", "b": "approve", "o": "text:equal"},
+  {"a": "{{1.contact_email}}", "b": "", "o": "text:notequal"}
+]]
+```
+
+Filter name renamed `Approve Only` → `Approve Only + Email Required` (cosmetic, helps Make UI readability).
+
+Push details: `scenarios_update(4667221)` → response `isinvalid:false, isActive:true, lastEdit:2026-05-21T19:51:21.573Z`. `usedPackages` count unchanged (no module added/removed). Pre-edit Module 102 config saved to `.backups/module_102_pre_wave4.20260521T195013Z.json`.
+
+### Empirical Re-Validation (post-deploy curl pre-flight)
+
+Three queries against the live RCRM endpoint after the Wave 4 push:
+
+**Test 1 — Empty-email behavior (hijack-path verification):**
+- `GET /v1/contacts/search?email=&exact_search=1` → HTTP 200, WRAPPED, `data.length == 100`.
+- First record: Katie Martinovich (slug `17793113029170054787rLZ`).
+- RCRM-side behavior UNCHANGED — still returns unfiltered list.
+- Module 37 in production would still capture `resolved_slug = 17793113029170054787rLZ`.
+- **BUT**: with the new Module 102 filter, the captured slug is never read. Route A (Modules 33, 34, 31, 35, 11, 38, 2, 5, 13, 4) is skipped. Route B (Modules 39, 43, 44, 45, 46, 47) is skipped. The router is gated closed because `1.contact_email == ""` violates the second condition.
+- Modules 99 and 100 (audit + queue delete) still fire — they live OUTSIDE Module 102, gated on `key != ""`. Queue record is cleared with no RCRM touch.
+
+**Test 2 — Valid-email no-regression (Troy English / Ross Video candidate):**
+- `GET /v1/contacts/search?email=tenglish@rossvideo.com&exact_search=1` → HTTP 200, BARE `[]`.
+- Confirms no existing RCRM contact with that email.
+- Module 37 in production would capture `resolved_slug = ""` (empty).
+- Module 102 filter: `decision == "approve"` TRUE, `contact_email != ""` TRUE → router fires.
+- Route A taken (resolved_slug empty → Route A path; resolved_slug non-empty would take Route B). No regression for the valid-email path.
+
+**Test 3 — Company baseline for the recommended test candidate:**
+- `GET /v1/companies/search?company_name=Ross%20Video&exact_search=1` → HTTP 200, BARE `[]`.
+- Ross Video has 0 records in RCRM. Troy English's approval would be a clean **Route A1** (new contact + new company), expected 12 operations.
+
+### Confirmed Behavior By Input Class
+
+| Input | decision | contact_email | RCRM curl pre-check | Module 102 filter | Resulting modules fired | RCRM-side effect |
+|---|---|---|---|---|---|---|
+| Backlog no-email approve (e.g., Sonny Lim if Travis had approved) | "approve" | "" | unfiltered 100 | **BLOCKED** | 1, 20, 99, 100, 36, 37 only (router gate closed) | None — Module 36 returns unfiltered list but its result is never consumed |
+| Valid-email new-contact approve (e.g., Troy English) | "approve" | "tenglish@rossvideo.com" | bare `[]` | PASS (both TRUE) | Route A path | Module 33 search → Module 31 create → Module 11 create contact → enroll → note |
+| Valid-email existing-contact approve | "approve" | "user@example.com" present in RCRM | wrapped 1 | PASS | Route B path | Module 43 stage update → enroll → note |
+| Decline (any email state) | "decline" | (any) | (not called — gated) | BLOCKED (first condition false) | 1, 20, 99, 100 only | None |
+
+### Module 36 Behavior Unchanged
+
+Module 36 still fires for any approve (its own filter is just `decision == "approve"`). For empty-email cases, it still makes a wasted GET to RCRM. The wasted call:
+
+- Consumes ~1 RCRM API operation per empty-email approval against the 60/min rate limit.
+- For a bulk-clear of the ~700 no-email backlog records via the dashboard, that would be ~700 wasted RCRM GETs. Within the rate limit if spread across 12+ minutes.
+- Acceptable minor inefficiency. Adding `contact_email != ""` to Module 36's own filter would eliminate this; deferred — not in scope of the minimal Wave 4 patch.
+
+### What Wave 4 Does NOT Do
+
+- Does not affect the dashboard.
+- Does not affect Staging-to-Queue or any other scenario.
+- Does not change the response shape of any RCRM endpoint.
+- Does not clean up the ~700 no-email backlog records (kept separate per Travis instruction).
+- Does not change Module 36's own behavior.
+- Does not change Routes A1, A2, or B for valid-email approvals.
+
+### Pass/Fail Verdict
+
+**PASS.** Module 102 filter is live with the empty-email block condition. Empirical re-validation confirms:
+
+1. The Make API accepted the patch (`isinvalid:false`).
+2. The blueprint contains the new two-condition filter (verified via `scenarios_get`).
+3. The RCRM-side empty-email hijack pathway still EXISTS (Test 1 still returns unfiltered) — but is now non-consumable because Module 102 blocks the downstream consumers.
+4. The valid-email pathway behaves as before (Test 2 + Test 3 confirm normal Route A1 logic).
+
+No regression observed in the post-deploy curl checks. The fix is minimal, rollback-safe, and prevention-only.
+
+### Rollback
+
+Rollback path documented in `.backups/module_102_pre_wave4.20260521T195013Z.json`. Restores the single-condition `decision == "approve"` filter. **Do not roll back unless an empirical regression is observed in approve-path executions** — the prior single-condition filter is the latent-hijack vulnerable state.
+
+### Decisions Made
+
+- **Patched Module 102 only.** Did NOT also add `contact_email != ""` to Module 36's filter. Minimal change, fewer rollback surfaces.
+- **Did NOT live-test the filter** by approving a no-email card. Static + curl-side evidence is sufficient; firing a real webhook would delete a queue record unnecessarily.
+- **Did NOT touch the ~700 no-email backlog records.** Cleanup is separately-scoped per Travis instruction. The Wave 4 fix makes those records SAFE to approve-clear but does not auto-clear them.
+- **Did NOT proceed with Sonny Lim approval.** Travis explicitly halted that test. With Wave 4 live, Sonny Lim approval would now be safe to clear (it would audit + delete without RCRM touch), but Travis hasn't authorized that action.
+
+### Next Steps
+
+1. [ ] If Travis chooses to clear the Sonny Lim card (safe now): Travis clicks Submit Individually in the dashboard. Expected: 6 ops (Modules 1, 20, 99, 100, 36, 37), `status:1`, queue record deleted, NO RCRM contact touched.
+2. [ ] Pick a new live-test candidate with valid email (Troy English / Ross Video confirmed Route A1, 12 ops expected).
+3. [ ] Optional Wave 5 (not yet authorized): add `contact_email != ""` to Module 36's filter to eliminate the wasted RCRM GET. Cosmetic optimization.
+4. [ ] (Separate from prevention) Decide on cleanup of the ~700 no-email backlog records.
+5. [ ] Travis credential rotations (unchanged).
+
+### Blockers
+
+Unchanged.
+
+---
+
 ## Pre-Flight Finding: 2026-05-21 — Module 36 silent-failure on empty contact_email
 
 ### Status
