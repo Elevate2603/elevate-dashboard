@@ -2666,9 +2666,91 @@ Operational impact today: zero. All 30 existing queue records were already enric
 
 ### Open items for next session (Travis-side)
 
-1. **CRITICAL:** Open Queue Enrich Updater in Make UI and click Save (clears isinvalid:true).
+1. ~~**CRITICAL:** Open Queue Enrich Updater in Make UI and click Save (clears isinvalid:true).~~ — RESOLVED 2026-05-22 (Travis saved, scenario re-activated, fully operational).
 2. Rotate RCRM Bearer + Anthropic key + ZoomInfo PKI.
-3. Decide on 4 RCRM test contacts (32748 Michael Besic, 32749 Wave8 Tester, 32750 A1 Tester, 32751 Christina Mitchell) + test company `17794010836640054787KMx`.
+3. Decide on 4+ RCRM test contacts (32748 Michael Besic, 32749 Wave8 Tester, 32750 A1 Tester, 32751 Christina Mitchell, 32733 Robert Hogan, 32755 Wissam Francis, plus any auto-created Peter Knafelc test contact) + test company `17794010836640054787KMx`.
 4. Decide on 80+ blank queue records in datastore 86836 (filtered from dashboard view, but still consume row count).
 5. ZoomInfo PKI stabilization — still on ZoomInfo support's plate.
 6. Consider adding ZoomInfo enrich step earlier (Staging-to-Queue or Approval Handler) to handle Sonny Lim / Stroud Transport-style entity mismatches.
+
+---
+
+## 2026-05-22 Late Session — Wave 9 (Company Backfill) + Wave 10 (Industry Mapping) + 4 Live Approvals
+
+### Live approvals executed today
+
+| Time (UTC) | Contact | Route | Ops | Validated |
+|---|---|---|---|---|
+| 14:22 | Sonny Lim (no email) | filter-block | 6 | ✓ Wave 4 filter works |
+| 14:31 | Robert Hogan (Stellantis, existing in RCRM) | B | 12 | ✓ But exposed Route B doesn't backfill company → Wave 9 |
+| 15:07 | Wissam Francis (Tricon Residential, existing in RCRM) | A2 | 16 | ✓ Wave 9 (Module 240) + Wave 10 (industry 120) both confirmed |
+| (none — Peter Knafelc validated separately in earlier session) | | | | |
+
+### Wave 9 — Company + contact backfill for existing records
+
+**Motivation:** Robert Hogan approval (14:31) succeeded but left Stellantis company record with empty website/linkedin/about/revenue/employees. Route B's Module 43 only updated stage_id, never the company. Same gap in Route A2 (Module 235 reuses existing company without updating it).
+
+**Push:** scenarios_update on 4667221 at `2026-05-22T14:45:08Z`. isinvalid: false. usedPackages grew +2 entries.
+
+**Three changes:**
+1. **Module 43 body enhanced** — Route B contact update now writes contact_number, designation, linkedin, city, state, country, address, current_organization, custom_fields[1/2/5] in addition to stage_id.
+2. **New Module 240 in Route A2** — after Module 235 (resolve existing company slug), PATCHes the existing company via `POST /v1/companies/{{34.existing_company_slug}}` with full enrichment body (website, linkedin, about, address, city/state/country, industry_id, custom_fields[1/2/12]).
+3. **New Module 48 in Route B** — after Module 43, PATCHes the existing company via `POST /v1/companies/{{37.resolved_company_slug_from_contact}}` with same body. Module 37 enhanced to capture `resolved_company_slug_from_contact` from Module 36's contact-search response.
+
+**Manual patches done before/alongside the push:**
+- Stellantis (slug 17780808284210054787dBD) — fully enriched manually (website, linkedin, about, address, employees, revenue, industry_id 913)
+- Robert Hogan contact (32733) — custom_fields[1] phone + custom_fields[5] Data Source manually backfilled
+
+### Wave 10 — Industry mapping fix
+
+**Motivation:** Travis flagged that Town of Oakville's RCRM industry showed as "Manufacturing". Root cause: Module 20's `industry_id` switch did exact-string match and defaulted to 913 (Manufacturing) on any miss. ZoomInfo dashed formats like `"Government - Local"`, `"Transportation - Freight & Logistics"`, `"Real Estate"`, etc. all missed → defaulted to 913. Effectively every non-Manufacturing card was being misclassified.
+
+**Push:** scenarios_update on 4667221 at `2026-05-22T14:59:53Z`. isinvalid: false.
+
+**Module 20 changes:**
+1. Added new variable `industry_primary` = `{{first(split(1.company_industry; " - "))}}` — extracts primary category from ZoomInfo's dashed format.
+2. Switch now operates on `industry_primary` instead of raw `1.company_industry`.
+3. **Expanded from 11 to 28 mappings** — added Government (52), Hospitals & Physicians Clinics (57), Real Estate (120), Retail (4024), Business Services (1969), Education (34), Hospitality (58), Finance (43), Telecommunications (1910), Insurance (65), Media & Internet (2359), Agriculture (42), Healthcare (2679), Electronics (27), Organizations (18), Watches & Jewelry (79).
+4. **Default changed from 913 (Manufacturing) to 0 (None)** — unmatched industries now honestly report "unknown" instead of lying as Manufacturing.
+
+**Manual patch alongside the push:**
+- Town of Oakville (slug 17120725928040057400PTy) — industry_id 0 → 52 (Government Administration).
+
+### Wave 10 confirmed by live test
+
+Wissam Francis at Tricon Residential (Route A2 approval at 15:07) — first end-to-end exercise of both Wave 9 and Wave 10. Tricon went from `industry_id: 0` + null about + empty website to fully enriched with `industry_id: 120` (Real Estate). All 16 expected ops fired. New contact 32755 created and linked. Note logged 8 seconds after contact creation.
+
+### Approval Handler post-Wave 10 state
+
+| Module | Purpose | Notes |
+|---|---|---|
+| 20 | SetVariables (Wave 10) | Now derives `industry_primary` via split, uses expanded 28-mapping switch with default 0 |
+| 37 | SetVariables (Wave 9) | Now captures `resolved_company_slug_from_contact` too |
+| 43 | HTTP Route B contact update (Wave 9) | Now writes contact_number, designation, linkedin, city/state/country, address, current_organization, custom_fields[1/2/5] in addition to stage_id |
+| 48 (NEW Wave 9) | HTTP Route B company backfill | PATCH existing company linked to existing contact with full enrichment |
+| 240 (NEW Wave 9) | HTTP Route A2 company backfill | PATCH existing company found by name with full enrichment |
+
+### RCRM contacts created during testing today (need Travis decision)
+
+- 32733 Robert Hogan @ Stellantis — Route B test, in sequence 15324 (C-Suite/VP)
+- 32755 Wissam Francis @ Tricon Residential — Route A2 test, in sequence 15324 (C-Suite/VP)
+- Plus the Peter Knafelc / Jose Herrera approvals earlier (if executed)
+- Plus the 4 earlier test contacts (32748-32751)
+
+All except 32751 Christina were enrolled via the sequence assignment, meaning automated outreach will start emailing them. Travis can unenroll/delete via RCRM UI if any aren't real targets.
+
+### Scenarios state at end of session
+
+| Scenario | ID | isinvalid | isActive | lastEdit |
+|---|---|---|---|---|
+| Approval Handler | 4667221 | false | true | 2026-05-22T14:59:53Z (Wave 10) |
+| Staging-to-Queue Daily 6am | 4990696 | false | true | 2026-05-21T22:56:13Z (persona/sequence IML) |
+| Queue Enrich Updater | 4952511 | false | true | 2026-05-22T11:38:51Z (reverted to working 3-module after isinvalid lock; Travis cleared via UI Save) |
+
+### Files committed today (2026-05-22, full list)
+
+- `index.html` build tokens `ELEVATE-2026-0522-A-FULLENRICH` (commits `fc40380`)
+- `SESSION_HANDOFF.md` + `SCRIBE_EXPORT.md` updates (commit `41d64a0` plus this commit)
+- `.backups/staging_to_queue_pre_persona_mapping.20260521T223000Z.json`
+- `.backups/queue_enrich_updater_pre_linkedin.20260522T000000Z.json`
+- `.backups/wave9_pre_company_backfill.20260522T144000Z.json`
