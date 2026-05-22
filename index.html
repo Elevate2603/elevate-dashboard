@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0522-A-FULLENRICH -->
+<!-- ELEVATE-2026-0522-B-MANUALPROSPECT -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -153,6 +153,8 @@
   .hs-tag-row { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:6px; }
   .hs-tag { background:#fff; border:1px solid #fde68a; color:#92400e; font-size:10px; font-weight:600; padding:2px 7px; border-radius:9px; }
   .hs-tag.urgent { background:#fee2e2; border-color:#fecaca; color:#991b1b; }
+  .hs-tag.manual-prospect { background:#c0392b; border-color:#7f1d1d; color:#fff; font-weight:700; letter-spacing:0.05em; }
+  .hs-card.manual-prospect { border-left:4px solid #c0392b; background:#1a0c0c; }
   .hs-pitch { font-size:11px; color:#444; line-height:1.4; margin-bottom:6px; font-style:italic; }
   .hs-meta { font-size:10px; color:#666; margin-bottom:8px; line-height:1.4; flex:1; }
   .hs-meta strong { color:#444; font-weight:600; }
@@ -938,22 +940,42 @@ function hsRender() {
   const count = document.getElementById('hsCount');
   if (!section || !container) return;
 
-  // FILTER: only show IMMEDIATE urgency in this section
-  const immediate = hsRecords.filter(r => (r.urgency || '').toLowerCase() === 'immediate');
+  const now = Date.now();
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-  if (count) count.textContent = `${immediate.length} IMMEDIATE`;
+  const visible = hsRecords.filter(r => {
+    if ((r.urgency || '').toLowerCase() !== 'immediate') return false;
+    const status = (r.status || 'pending').toLowerCase();
+    if (status === 'enriched') return false;
+    if (status === 'blocked') return false;
+    if (status === 'manual_prospect') {
+      const retrievedAt = Date.parse(r.retrieved_at || '');
+      if (retrievedAt && (now - retrievedAt) > SEVEN_DAYS_MS) return false;
+    }
+    return true;
+  });
 
-  // Hide entirely if nothing immediate to act on
-  if (!immediate.length) {
+  const manualProspectCount = visible.filter(r => (r.status || '').toLowerCase() === 'manual_prospect').length;
+  const pendingCount = visible.length - manualProspectCount;
+  if (count) {
+    count.textContent = manualProspectCount > 0
+      ? `${pendingCount} IMMEDIATE · ${manualProspectCount} MANUAL`
+      : `${pendingCount} IMMEDIATE`;
+  }
+
+  if (!visible.length) {
     section.style.display = 'none';
     return;
   }
   section.style.display = 'block';
 
-  // Sort by score desc
-  const sorted = [...immediate].sort((a, b) => (b.score || 0) - (a.score || 0));
+  const sorted = [...visible].sort((a, b) => {
+    const aManual = (a.status || '').toLowerCase() === 'manual_prospect';
+    const bManual = (b.status || '').toLowerCase() === 'manual_prospect';
+    if (aManual !== bManual) return aManual ? 1 : -1;
+    return (b.score || 0) - (a.score || 0);
+  });
 
-  // Always strip mode (horizontal scroll)
   container.className = 'hs-strip';
 
   container.innerHTML = sorted.map((r, i) => {
@@ -963,23 +985,29 @@ function hsRender() {
     const pitch = r.pitch_angle || '';
     const titles = r.target_titles || '';
     const score = r.score || '';
+    const status = (r.status || 'pending').toLowerCase();
+    const isManualProspect = status === 'manual_prospect';
+    const tagText = isManualProspect ? 'MANUALLY PROSPECT' : 'IMMEDIATE';
+    const tagClass = isManualProspect ? 'hs-tag manual-prospect' : 'hs-tag urgent';
+    const cardClass = isManualProspect ? 'hs-card manual-prospect' : 'hs-card';
+    const enrichLabel = isManualProspect ? '⟳ Retry Enrich' : '⚡ Enrich Contacts';
 
     return `
-      <div class="hs-card" data-key="${escapeAttr(signalKey)}">
+      <div class="${cardClass}" data-key="${escapeAttr(signalKey)}">
         <div class="hs-card-top">
           <div class="hs-company">${escapeHtml(company)}</div>
           ${score ? `<div class="hs-score">Lead Score: ${escapeHtml(String(score))}</div>` : ''}
         </div>
         <div class="hs-tag-row">
-          <span class="hs-tag urgent">IMMEDIATE</span>
+          <span class="${tagClass}">${tagText}</span>
           ${signalTag ? `<span class="hs-tag">${escapeHtml(signalTag)}</span>` : ''}
         </div>
-        ${pitch ? `<div class="hs-pitch">"${escapeHtml(pitch)}"</div>` : ''}
+        ${isManualProspect ? '<div class="hs-pitch" style="color:#fca5a5;">⚠ No contacts found via ZoomInfo for this company. Manually prospect via LinkedIn / company directory. Card auto-hides 7 days after enrichment attempt.</div>' : (pitch ? `<div class="hs-pitch">"${escapeHtml(pitch)}"</div>` : '')}
         <div class="hs-meta">
           ${titles ? `<strong>Target titles:</strong> ${escapeHtml(titles)}` : ''}
         </div>
         <div class="hs-actions">
-          <button class="hs-btn" onclick="hsEnrichContacts('${escapeAttr(signalKey)}', this)">⚡ Enrich Contacts</button>
+          <button class="hs-btn" onclick="hsEnrichContacts('${escapeAttr(signalKey)}', this)">${enrichLabel}</button>
           <button class="hs-btn secondary" onclick="hsBlockCompany('${escapeAttr(signalKey)}', '${escapeAttr(company)}', this)" title="Block this company">🚫</button>
         </div>
       </div>
