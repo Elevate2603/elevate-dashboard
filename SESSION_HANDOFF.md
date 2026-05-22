@@ -2754,3 +2754,63 @@ All except 32751 Christina were enrolled via the sequence assignment, meaning au
 - `.backups/staging_to_queue_pre_persona_mapping.20260521T223000Z.json`
 - `.backups/queue_enrich_updater_pre_linkedin.20260522T000000Z.json`
 - `.backups/wave9_pre_company_backfill.20260522T144000Z.json`
+
+---
+
+## 2026-05-22 Final Session — Hiring Signals Pipeline Diagnosis + Manual Backfill
+
+### Issue reported
+
+Travis: "Hiring signals enrich button not bringing in contacts into the Queue."
+
+### Root cause
+
+The dashboard's "⚡ Enrich Contacts" button (line 982, `hsEnrichContacts()`) POSTs `{signal_key}` to webhook `https://hook.us2.make.com/ipmuc58y87cf6ewy22iyxkn64g9c8tsq` → Make scenario **Signals - Enrich Contacts (4957200)**.
+
+That scenario at Module 8 calls out via HTTP to a sub-scenario webhook → **ZI Search & Enrich Worker (4964850)** → which is a pass-through proxy to a **Netlify Function**:
+
+```
+POST https://elevate-zi-bridge.netlify.app/.netlify/functions/zi-search
+```
+
+**Tested the Netlify function directly with a Stellantis-Ontario payload. Function responds HTTP 200 with hollow shape:**
+
+```json
+{"contacts":[],"company":{"name":"Stellantis","website":"","city":"","state":"","country":"","employeeCount":""...}}
+```
+
+Function is deployed and reachable, but returns empty contacts + empty company fields. Likely either (a) PKI auth to ZoomInfo failing silently, (b) function source has a bug, or (c) the wrong upstream API key. Source code not in this repo (deployed via separate zip per CLAUDE.md Known Issue #2).
+
+This explains why the most recent Signals-Enrich Contacts executions (today 14:21:39Z and 14:59:37Z) ran 12 ops each but never iterated the BasicFeeder — there were no contacts in the array to iterate over. The signal record gets marked "enriched" with `contacts_retrieved: 0` and no queue entries are added.
+
+### One-shot manual fix (this session)
+
+Used my ZoomInfo MCP tools directly to enrich 8 of 11 pending signal companies (signal-003 already had 3 contacts from yesterday). Wrote 22 contacts to queue datastore 86836 via data-store-records_replace with keys following the `<signal_key>_<lowercase_first>_<lowercase_last>` convention used by the original scenario. Marked the 8 signals as `status: enriched` in datastore 97143.
+
+| Signal | Contacts written | Notes |
+|---|---|---|
+| signal-test-magna (Magna International, Aurora ON) | 3 (Lorilei White, Santhosh Kumar, Stephen Brand) | |
+| signal-armtec (Armtec, Guelph ON) | 3 (Stephen Cooper VP Finance, Paulette Wilson Pacific Controller, Dylan Magnus Controller) | Cooper/Wilson/Magnus are at BC/MB branches per phone area codes — Travis may want to filter |
+| signal-canada-packers (Mississauga ON) | 1 (Simon Ojiefoh HR Mgr) | Other 2 ZoomInfo IDs were negative integers, Make rejected — manually look up if needed |
+| signal-ovivo (Barrie ON) | 3 (Hendrik Henning, Swapnil Nagwekar, Umesh Kulkarni — all GMs) | Phones suggest South Africa/India locations |
+| signal-andrew-peller (Grimsby ON) | 3 (Lucy Bleviss, Andrea Brum, Allison Cross-Nicholls — all HR Mgrs) | |
+| signal-trojan-technologies (London ON) | 3 (Kevin Spehr VP Sales, Sarah Brown, Mark Selander) | London ON-based Danaher subsidiary |
+| signal-dare-foods (Cambridge ON) | 3 (Eric Tomb Plant Mgr, Natasha Craig QA Dir, Kelly Kreutzweiser HR) | |
+| signal-agi-growth (AGI, Winnipeg MB) | 3 (Colin Turner HR Dir, Russ Klassen Sales, Alicia Cowieson Sales) | HQ Manitoba, not Ontario but signal was tagged Ontario |
+
+### Skipped signals (no contacts added, marked still pending)
+
+- **signal-agf-group** — ZoomInfo company enrichment returned NO_MATCH for "AGF Group" (too generic / multiple subsidiaries)
+- **signal-carte-international** — 2 contacts found but in Winnipeg MB (HQ city), not Ontario
+- **signal-building-products-canada** — 2 contacts found but in Quebec/US, not Ontario
+
+### Long-term fix paths (next session)
+
+1. **Fix or replace the Netlify zi-search function** — Travis would need to access the deployed zip source. Could test with Netlify CLI deploy logs to see what's actually failing inside the function.
+2. **Replace Module 8 in Signals-Enrich Contacts (4957200)** — change from HTTP to bridge → HTTP to Anthropic with ZoomInfo MCP tools. Same pattern as Process Queue (4904965). Risk: that pattern has had ~67% error rate historically.
+3. **Build new Netlify function** — write a fresh `zi-search` that uses the working ZoomInfo PKI cert or a stable API key. Deploy alongside elevate-dashboard repo so the source lives with version control.
+
+### Files committed today (2026-05-22 final)
+
+- (Above plus) this commit covering hiring-signal manual backfill documentation
+- No code/blueprint changes; this was a data-layer fix only via MCP tools
