@@ -2578,3 +2578,97 @@ All four are clearly synthetic. **Per stabilization rule "do not perform cleanup
 - [ ] Travis decision on deleting test contacts 32748/32749/32750 + test company `17794010836640054787KMx`
 - [ ] Live queue approval test (one real card) to confirm all three paths work in production payload shape
 - [ ] Audit Staging-to-Queue (4990696) and other scenarios for the same mid-chain-filter pattern
+
+---
+
+## 2026-05-22 Session — Persona/Sequence Wiring + Queue Backfill + Dashboard Enrichment Display
+
+### Summary
+
+Closed the loop on Travis's complaint that approvals were missing candidate/company linkedin, company about, annual revenue, industry, and website. Implemented the title → persona → sequence_id mapping in both the daily Staging-to-Queue cron and the dashboard buildPayload, broadened the persona match rules, backfilled all 30 enrichable queue records with ZoomInfo data, enriched the Covalon RCRM company record, and enrolled Christina Mitchell in sequence 15325 General.
+
+### Persona / Sequence Mapping Now Live
+
+**Source of truth:** Title → Persona → Sequence ID, applied in both layers:
+
+| Persona | Sequence | Title patterns (broadened set) |
+|---|---|---|
+| HR/TA | 15307 | hr manager, hr director, human resources, talent acquisition, recruiter, hr business partner, hrbp, head of hr, people operations, people partner, vp hr, vp people |
+| Plant Manager | 15310 | plant manager, facility manager, site manager, plant director |
+| Quality Manager | 15311 | quality manager, qa manager, qc manager, quality director, quality lead |
+| Production Manager | 15321 | production manager, shift supervisor, production lead, production director, manufacturing manager |
+| Engineering Manager | 15322 | engineering manager, maintenance manager, engineering director, maintenance director |
+| Operations | 15323 | operations manager, operations director, vp of operations, vp operations, director of operations, head of operations, works operations, plant operations, manufacturing operations |
+| C-Suite/VP | 15324 | coo, ceo, cfo, chief, president, vice president, vp, owner, founder, managing director, executive director |
+| General (fallback) | 15325 | anything else |
+
+If `contact_email` is empty: `sequence_id = ""` and `sequence_name = "No Email - Manually Prospect"` (per the original 4904965 Process Queue spec).
+
+**Implementations:**
+- **Make scenario 4990696 (Staging-to-Queue, Daily 6am)** — Modules 6 + 7 SetVariables compute persona/sequence_id/sequence_name from `lower(1.contact_title)` via nested `if(or(contains()))` chain followed by `switch(persona; ...)`. Module 4 mapper writes the three fields into each queue record. Runs tomorrow 6am Toronto for any staging records that arrive.
+- **Dashboard `buildPayload`** — `derivePersona(title)` JS helper using the same rule list. Falls back at submit time when a queue card lacks the fields. Build token `ELEVATE-2026-0522-A-FULLENRICH`.
+
+### Queue Backfill (30 records updated)
+
+For every queue record with a real company name, called ZoomInfo `enrich_companies` MCP (batched, 2 batches of 10) and wrote back to the datastore via `data-store-records_update`:
+
+- `about_company` — ZoomInfo's full company description
+- `company_linkedin` — extracted from `socialMediaUrls[type=LINKED_IN]`
+- `company_website` — normalized to `https://...`
+- `company_industry` — `primaryIndustry[0]` + sub-industry
+- `annual_revenue` — raw integer (Dashboard formats via `formatRevenue()`)
+- `employee_count`
+- `company_city` / `company_state` / `company_country` — company HQ (separate from `contact_city/state/country`)
+- `company_address` — assembled from ZoomInfo `street + city + state + zipCode`
+
+Records updated (21 unique companies, 30 contacts):
+Stellantis (×3 hiring signals), Western Forest Products, Canada Post, ecobee (×3), Oregon Tool, Wajax, Covalon Technologies, Cargojet (×2), Coreslab Structures, Ross Video, Lunchbox Entertainment, Western Mechanical, Sunnybrook Health Sciences Centre (×3), Region of Durham (×4), Chess Controls, Mejuri, CATSA, Tricon Residential, Town of Oakville (×2).
+
+**Two ZoomInfo entity mismatches** skipped (zoominfo's companyId returned a different entity than the queue card's company_name):
+- Sonny Lim Co (zi_company_id 6963353) — ZoomInfo returned "Casio America" / Dover NJ
+- Stroud Transport (zi_company_id 350698218) — ZoomInfo returned "Post Office" / London UK
+
+These two queue records still have their original ZoomInfo Intake fields. Travis can decide if they're real targets at approval time.
+
+### Dashboard Improvements (commit `fc40380`)
+
+- `renderQueue` filters out queue records with empty/whitespace-only `contact_name` (hides the 80+ legacy "_" blank records from 2026-05-08)
+- New card meta items show: Contact LinkedIn, **Company LinkedIn**, **Website**, **Revenue** (formatted as `$710M` / `$5.1B`)
+- `enrichContact()` now sends `zi_company_id` derived from the queue key (forward-compatible with deeper enrichment via the webhook)
+
+### Queue Enrich Updater (4952511) — STUCK isinvalid:true
+
+Attempted to extend the webhook to also return company_linkedin. First push introduced `parseJSON()` which is NOT a valid Make IML function. The scenario flipped to `isinvalid: true` and **subsequent API pushes can't clear the flag** — even pushing the EXACT prior working blueprint verbatim. `scenarios_deactivate` + `scenarios_activate` cycle didn't help either.
+
+**Travis-only action required:** Open scenario 4952511 in Make UI (`https://us2.make.com/scenarios/4952511`) and click **Save** with no edits. That will clear `isinvalid:true` and re-enable the dashboard's "Enrich Now" button. Until then, clicking Enrich Now in the dashboard silently fails (webhook returns HTTP 200 Accepted but no execution registers).
+
+Operational impact today: zero. All 30 existing queue records were already enriched via direct datastore writes, so the "Enrich Now" button isn't needed for the current queue. The fix only matters for future cards arriving in the queue without enrichment.
+
+### Christina Mitchell RCRM Fixes
+
+- Enrolled in sequence 15325 (General) — enrollment ID 802785, status Active, enrolled_on 2026-05-21T22:53:26Z. Now her "In Outreach" stage is semantically consistent.
+- Covalon Technologies company record (slug `17793113015740054787NjX`) enriched with: website, LinkedIn, about_company, address, employee count (85), annual revenue ($19.15M).
+
+### Verified Scenario Health
+
+| Scenario | ID | isinvalid | isActive | lastEdit | Status |
+|---|---|---|---|---|---|
+| Approval Handler | 4667221 | false | true | 2026-05-21T21:59:52Z | All routes A1/A2/B working (Wave 7+8 sub-routers) |
+| Staging-to-Queue (Daily 6am) | 4990696 | false | true | 2026-05-21T22:56:13Z | Persona/sequence IML wired, next exec 2026-05-23T10:00:00Z |
+| Queue Enrich Updater | 4952511 | **true** | **false** | 2026-05-22T11:38:51Z | **NEEDS TRAVIS UI SAVE** |
+
+### Files committed today (2026-05-22)
+
+- `index.html` build token `ELEVATE-2026-0522-A-FULLENRICH` (commit `fc40380`)
+- `SESSION_HANDOFF.md` + `SCRIBE_EXPORT.md` updates (this commit)
+- `.backups/staging_to_queue_pre_persona_mapping.20260521T223000Z.json`
+- `.backups/queue_enrich_updater_pre_linkedin.20260522T000000Z.json`
+
+### Open items for next session (Travis-side)
+
+1. **CRITICAL:** Open Queue Enrich Updater in Make UI and click Save (clears isinvalid:true).
+2. Rotate RCRM Bearer + Anthropic key + ZoomInfo PKI.
+3. Decide on 4 RCRM test contacts (32748 Michael Besic, 32749 Wave8 Tester, 32750 A1 Tester, 32751 Christina Mitchell) + test company `17794010836640054787KMx`.
+4. Decide on 80+ blank queue records in datastore 86836 (filtered from dashboard view, but still consume row count).
+5. ZoomInfo PKI stabilization — still on ZoomInfo support's plate.
+6. Consider adding ZoomInfo enrich step earlier (Staging-to-Queue or Approval Handler) to handle Sonny Lim / Stroud Transport-style entity mismatches.
