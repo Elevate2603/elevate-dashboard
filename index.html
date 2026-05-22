@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0521-D-PERSONAMAP-BROAD -->
+<!-- ELEVATE-2026-0522-A-FULLENRICH -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1163,7 +1163,11 @@ async function initQueue() {
       const row = (r && r.aggregate) ? r.aggregate : r;
       const d = (row && row.data) ? row.data : row;
       return { ...d, key: (row && row.key) || (d && d.key) || '' };
-    }).filter(c => c && (c.contact_name || c.full_name));
+    }).filter(c => {
+      if (!c) return false;
+      const name = (c.contact_name || c.full_name || '').trim();
+      return !!name;
+    });
 
     console.log('[Queue Fetch] contacts extracted:', contacts.length);
 
@@ -1244,7 +1248,10 @@ function renderQueue() {
         <div class="contact-meta-row">
           ${persona ? `<div class="contact-meta-item"><strong>Persona:</strong> ${escapeHtml(persona)}</div>` : ''}
           ${sequence ? `<div class="contact-meta-item"><strong>Sequence:</strong> ${escapeHtml(sequence)}</div>` : ''}
-          ${linkedin ? `<div class="contact-meta-item"><a href="${escapeAttr(linkedin)}" target="_blank" rel="noopener">LinkedIn ↗</a></div>` : ''}
+          ${linkedin ? `<div class="contact-meta-item"><a href="${escapeAttr(linkedin)}" target="_blank" rel="noopener">Contact LinkedIn ↗</a></div>` : ''}
+          ${c.company_linkedin ? `<div class="contact-meta-item"><a href="${escapeAttr(c.company_linkedin)}" target="_blank" rel="noopener">Company LinkedIn ↗</a></div>` : ''}
+          ${c.company_website ? `<div class="contact-meta-item"><a href="${escapeAttr(c.company_website)}" target="_blank" rel="noopener">Website ↗</a></div>` : ''}
+          ${c.annual_revenue ? `<div class="contact-meta-item"><strong>Revenue:</strong> ${escapeHtml(formatRevenue(c.annual_revenue))}</div>` : ''}
           ${(inRCRM || isClient) && c.last_communication ? `<div class="contact-meta-item"><strong>Last Contact:</strong> ${escapeHtml(c.last_communication)}</div>` : ''}
           ${(inRCRM || isClient) && c.rcrm_owner ? `<div class="contact-meta-item"><strong>Owner:</strong> ${escapeHtml(c.rcrm_owner)}</div>` : ''}
           ${(inRCRM || isClient) && !c.last_communication ? `<div class="contact-meta-item" style="color:#f59e0b;"><strong>In RCRM</strong> — No prior contact logged</div>` : ''}
@@ -1343,6 +1350,22 @@ function derivePersona(title) {
     if (rule.match.some(needle => t.indexOf(needle) !== -1)) return rule.persona;
   }
   return 'General';
+}
+
+function formatRevenue(n) {
+  const v = Number(String(n || '').replace(/[^0-9.]/g, ''));
+  if (!v || !isFinite(v)) return '';
+  if (v >= 1e9) return '$' + (v / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
+  if (v >= 1e6) return '$' + (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
+  return '$' + v;
+}
+
+// Extract zi_company_id from queue key (format: zi_<companyId>_<contactId>)
+function deriveZiCompanyId(c) {
+  if (c.zi_company_id) return String(c.zi_company_id);
+  const m = (c.key || '').match(/^zi_(\d+)_/);
+  return m ? m[1] : '';
 }
 
 // Single source of truth for the Approval Handler webhook payload.
@@ -1447,6 +1470,7 @@ async function enrichContact(idx) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         key: c.key,
+        zi_company_id: deriveZiCompanyId(c),
         company_name: c.company_name || '',
         company_industry: c.company_industry || '',
         company_website: c.company_website || '',
