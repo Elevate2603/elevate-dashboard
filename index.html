@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0522-B-MANUALPROSPECT -->
+<!-- ELEVATE-2026-0522-C-DATES -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1006,6 +1006,12 @@ function hsRender() {
         <div class="hs-meta">
           ${titles ? `<strong>Target titles:</strong> ${escapeHtml(titles)}` : ''}
         </div>
+        ${(() => {
+          const onSince = formatDateAdded(r.requested_at);
+          const retried = isManualProspect ? formatDateAdded(r.retrieved_at) : '';
+          if (!onSince && !retried) return '';
+          return `<div class="hs-meta" style="color:#a0a0a0; font-size:11px; margin-top:4px;">${onSince ? `On dashboard since: ${escapeHtml(onSince)}` : ''}${retried ? ` · Last enrich: ${escapeHtml(retried)}` : ''}</div>`;
+        })()}
         <div class="hs-actions">
           <button class="hs-btn" onclick="hsEnrichContacts('${escapeAttr(signalKey)}', this)">${enrichLabel}</button>
           <button class="hs-btn secondary" onclick="hsBlockCompany('${escapeAttr(signalKey)}', '${escapeAttr(company)}', this)" title="Block this company">🚫</button>
@@ -1274,6 +1280,7 @@ function renderQueue() {
           </div>
         </div>
         <div class="contact-meta-row">
+          ${(() => { const added = formatDateAdded(c.added_at || c.queue_date); return added ? `<div class="contact-meta-item" style="color:#a0a0a0;"><strong>Added:</strong> ${escapeHtml(added)}</div>` : ''; })()}
           ${persona ? `<div class="contact-meta-item"><strong>Persona:</strong> ${escapeHtml(persona)}</div>` : ''}
           ${sequence ? `<div class="contact-meta-item"><strong>Sequence:</strong> ${escapeHtml(sequence)}</div>` : ''}
           ${linkedin ? `<div class="contact-meta-item"><a href="${escapeAttr(linkedin)}" target="_blank" rel="noopener">Contact LinkedIn ↗</a></div>` : ''}
@@ -1387,6 +1394,22 @@ function formatRevenue(n) {
   if (v >= 1e6) return '$' + (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
   if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
   return '$' + v;
+}
+
+function formatDateAdded(s) {
+  if (!s) return '';
+  const ts = Date.parse(s);
+  if (!ts || isNaN(ts)) return '';
+  const d = new Date(ts);
+  const now = new Date();
+  const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const daysAgo = Math.round((startOf(now) - startOf(d)) / 86400000);
+  if (daysAgo === 0) return 'today';
+  if (daysAgo === 1) return 'yesterday';
+  if (daysAgo >= 2 && daysAgo <= 13) return daysAgo + ' days ago';
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return MONTHS[d.getMonth()] + ' ' + d.getDate() + (sameYear ? '' : ', ' + d.getFullYear());
 }
 
 // Extract zi_company_id from queue key (format: zi_<companyId>_<contactId>)
