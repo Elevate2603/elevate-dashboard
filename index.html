@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0522-C-DATES -->
+<!-- ELEVATE-2026-0525-A-PERSONA -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1360,13 +1360,13 @@ function bulkDecline() {
 // Module 6 IML so older queue cards without persona/sequence_id still get
 // mapped at submit time.
 const PERSONA_RULES = [
-  { persona: 'HR/TA',               match: ['hr manager','hr director','human resources','talent acquisition','recruiter','hr business partner','hrbp','head of hr','people operations','people partner','vp hr','vp people'] },
-  { persona: 'Plant Manager',       match: ['plant manager','facility manager','site manager','plant director'] },
-  { persona: 'Quality Manager',     match: ['quality manager','qa manager','qc manager','quality director','quality lead'] },
-  { persona: 'Production Manager',  match: ['production manager','shift supervisor','production lead','production director','manufacturing manager'] },
-  { persona: 'Engineering Manager', match: ['engineering manager','maintenance manager','engineering director','maintenance director'] },
-  { persona: 'Operations',          match: ['operations manager','operations director','vp of operations','vp operations','director of operations','head of operations','works operations','plant operations','manufacturing operations'] },
-  { persona: 'C-Suite/VP',          match: ['coo','ceo','cfo','chief','president','vice president','vp','owner','founder','managing director','executive director'] }
+  { persona: 'HR/TA',               match: ['hr manager','hr director','hr lead','head of hr','vp hr','vp of hr','director of hr','chief hr','chro','human resources','head of human resources','vp human resources','vp of human resources','director of human resources','chief human resources','talent acquisition','talent management','head of talent','vp talent','vp of talent','director of talent','chief talent','recruiter','recruiting','hr business partner','hrbp','people operations','people partner','head of people','vp people','vp of people','director of people','chief people'] },
+  { persona: 'Plant Manager',       match: ['plant manager','plant director','plant operations','head of plant','vp plant','vp of plant','director of plant','facility manager','facility director','head of facility','site manager','site director'] },
+  { persona: 'Quality Manager',     match: ['quality manager','quality director','quality lead','quality assurance manager','quality control manager','qa manager','qc manager','qa director','qc director','head of quality','vp quality','vp of quality','director of quality','chief quality'] },
+  { persona: 'Production Manager',  match: ['production manager','production director','production lead','shift supervisor','manufacturing manager','manufacturing director','manufacturing lead','manufacturing operations','head of production','vp production','vp of production','director of production','chief production','head of manufacturing','vp manufacturing','vp of manufacturing','director of manufacturing','chief manufacturing'] },
+  { persona: 'Engineering Manager', match: ['engineering manager','engineering director','engineering lead','maintenance manager','maintenance director','maintenance lead','head of engineering','vp engineering','vp of engineering','director of engineering','chief engineering','chief engineer','head of maintenance','vp maintenance','vp of maintenance','director of maintenance','vice president of engineering','vice president engineering'] },
+  { persona: 'Operations',          match: ['operations manager','operations director','operations lead','head of operations','vp operations','vp of operations','director of operations','chief operations','vp ops','vp of ops','director of ops','head of ops','works operations'] },
+  { persona: 'C-Suite/Owner',       match: ['ceo','cfo','coo','cto','cio','chief executive','chief financial','chief operating','chief technology','chief information','president','owner','founder','co-founder','proprietor','managing director','executive director','general manager','chairman','chairwoman'] }
 ];
 const PERSONA_SEQUENCE = {
   'HR/TA':               { id: '15307', name: 'HR / Talent Acquisition' },
@@ -1375,7 +1375,8 @@ const PERSONA_SEQUENCE = {
   'Production Manager':  { id: '15321', name: 'Production Manager' },
   'Engineering Manager': { id: '15322', name: 'Engineering Manager' },
   'Operations':          { id: '15323', name: 'Operations' },
-  'C-Suite/VP':          { id: '15324', name: 'C-Suite / VP' },
+  'C-Suite/Owner':       { id: '15324', name: 'C-Suite / Owner' },
+  'C-Suite/VP':          { id: '15324', name: 'C-Suite / Owner' },
   'General':             { id: '15325', name: 'General' }
 };
 function derivePersona(title) {
