@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-N-JARVIS-SONG -->
+<!-- ELEVATE-2026-0528-O-JARVIS-INTERRUPT -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2604,6 +2604,22 @@ function jrvStartAlwaysOn() {
       return;
     }
 
+    // ── INTERRUPT — if JARVIS is mid-speech, wake word silences him immediately ──
+    // No acknowledgement, just shuts up and listens. Follow-up window opens so the
+    // next sentence works without the wake word.
+    const wasSpeaking = (typeof speechSynthesis !== 'undefined' && speechSynthesis.speaking) || jrvState.speaking;
+    if (wakeMatch && wasSpeaking) {
+      jrvInterruptSpeech();
+      jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
+      // Strip the wake word — if Travis bundled a command with the interrupt, handle it
+      const cmdAfter = finalText.replace(JRV_WAKE_RE, '').replace(/^[\s,.!?]+/, '').trim();
+      if (cmdAfter) {
+        if (jrvIsResumePhrase(cmdAfter)) { jrvResumeLastSpeech(); return; }
+        jrvProcessCommand(cmdAfter);
+      }
+      return;
+    }
+
     // Special-phrase + greeting interceptors — only fire when wake word is present
     if (wakeMatch) {
       const special = jrvDetectSpecialPhrase(finalText);
@@ -2619,6 +2635,18 @@ function jrvStartAlwaysOn() {
       if (wakeMatch) jrvAcknowledge();
       return;
     }
+
+    // Resume phrase ("continue", "never mind continue", "go ahead", "keep going")
+    // — only meaningful if there's something to resume
+    if (jrvIsResumePhrase(command)) {
+      if (jrvResumeLastSpeech()) {
+        jrvMarkInteraction();
+        jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
+        return;
+      }
+      // Nothing to resume — fall through and let the brain handle the phrase
+    }
+
     jrvProcessCommand(command);
   };
 
@@ -2673,11 +2701,21 @@ function jrvMatchGreeting(text) {
 // voice (at 1.0) stays clearly on top.
 const JRV_SONG_URL = 'Fortunate Son (CCR) - QuickSounds.com.mp3';
 const JRV_SONG_VOLUME = 0.30;
+const JRV_SONG_DATE_KEY = 'jrv_song_played_date_v1';
 let jrvBgSongAudio = null;
-let jrvBgSongPlayedSession = false;
+
+function jrvShouldPlaySongToday() {
+  const today = new Date().toDateString();
+  try { return localStorage.getItem(JRV_SONG_DATE_KEY) !== today; }
+  catch (_) { return true; }
+}
+
+function jrvMarkSongPlayedToday() {
+  try { localStorage.setItem(JRV_SONG_DATE_KEY, new Date().toDateString()); } catch (_) {}
+}
 
 function jrvPlayBgSong() {
-  if (jrvBgSongPlayedSession) return; // once per page load
+  if (!jrvShouldPlaySongToday()) return; // once per calendar day
   try {
     if (!jrvBgSongAudio) {
       jrvBgSongAudio = new Audio(JRV_SONG_URL);
@@ -2689,7 +2727,7 @@ function jrvPlayBgSong() {
     }
     const p = jrvBgSongAudio.play();
     if (p && typeof p.catch === 'function') p.catch(err => console.warn('[JARVIS] song play blocked:', err && err.message));
-    jrvBgSongPlayedSession = true;
+    jrvMarkSongPlayedToday();
   } catch (e) {
     console.warn('[JARVIS] song setup failed:', e && e.message);
   }
@@ -2888,11 +2926,36 @@ function jrvShowActionToast(action) {
 // Speak text via browser SpeechSynthesis (Phase 5 swaps this for ElevenLabs)
 const JRV_VOICE_KEY = 'jrv_chosen_voice_v1';
 
+// Track what's being spoken so wake-word interruption can capture it for "continue" resume
+let jrvCurrentSpeechText = null;
+let jrvLastInterruptedText = null;
+
+function jrvInterruptSpeech() {
+  if (!('speechSynthesis' in window)) return false;
+  if (!speechSynthesis.speaking && !jrvState.speaking) return false;
+  if (jrvCurrentSpeechText) jrvLastInterruptedText = jrvCurrentSpeechText;
+  try { speechSynthesis.cancel(); } catch (_) {}
+  jrvCurrentSpeechText = null;
+  jrvState.speaking = false;
+  jrvState.coreTargetOpacity = 0.30;
+  jrvState.coreThrob = 0;
+  return true;
+}
+
+function jrvResumeLastSpeech() {
+  if (!jrvLastInterruptedText) return false;
+  const txt = jrvLastInterruptedText;
+  jrvLastInterruptedText = null;
+  jrvSpeakOut(txt);
+  return true;
+}
+
 function jrvSpeakOut(text) {
   try {
     if (!('speechSynthesis' in window)) return;
     if (!text) return;
     speechSynthesis.cancel();
+    jrvCurrentSpeechText = text;
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 1.0;
     u.pitch = 0.95;
@@ -2921,6 +2984,8 @@ function jrvSpeakOut(text) {
       // Resting baseline — orb stays visible with a gentle breath, just dimmer
       jrvState.coreTargetOpacity = 0.30;
       jrvState.coreThrob = 0;
+      // Natural end clears current text so "continue" only resumes interrupted speech
+      if (jrvCurrentSpeechText === text) jrvCurrentSpeechText = null;
     };
     u.onend = settle;
     u.onerror = settle;
@@ -3060,6 +3125,11 @@ function jrvFirstOfDay() {
 function jrvDetectSpecialPhrase(text) {
   if (/\bdaddy['’]?s?\s*(home|is\s*home)\b/i.test(text)) return 'daddys-home';
   return null;
+}
+
+// Matches phrases that resume the last interrupted speech.
+function jrvIsResumePhrase(text) {
+  return /\b(continue|go\s+ahead|keep\s+going|resume|carry\s+on|finish\s+(what|your)\s+(you\s+were\s+saying|thought)|never\s*mind\s+continue|nevermind\s+continue|sorry\s+continue)\b/i.test(text);
 }
 
 function jrvProcessSpecialPhrase(key, originalText) {
