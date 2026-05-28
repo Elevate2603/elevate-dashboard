@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-I-JARVIS-CONSOLE -->
+<!-- ELEVATE-2026-0528-J-JARVIS-FLAT -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2299,7 +2299,7 @@ function jrvInitSphere() {
 
   jrvSphereScene = new THREE.Scene();
   jrvSphereCamera = new THREE.PerspectiveCamera(45, w/h, 1, 1000);
-  jrvSphereCamera.position.z = 280;
+  jrvSphereCamera.position.z = 400;
   jrvSphereRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
   jrvSphereRenderer.setSize(w, h);
   jrvSphereRenderer.setClearColor(0x000000, 0);
@@ -2311,10 +2311,10 @@ function jrvInitSphere() {
   jrvSphereScene.add(jrvSphereInner);
   jrvSphereScene.add(jrvSphereOuter);
 
-  // ── LAYER 1 — tight defined particle sphere at center ──
-  const N = 420;
+  // ── LAYER 1 — tight defined particle sphere at center (original size) ──
+  const N = 900;
   const positions = new Float32Array(N * 3);
-  const baseRadius = 38;
+  const baseRadius = 80;
   for (let i = 0; i < N; i++) {
     const u = Math.random(), v = Math.random();
     const theta = 2 * Math.PI * u;
@@ -2336,8 +2336,8 @@ function jrvInitSphere() {
   // ── LAYER 2 — two bright partial-arc segments at opposite sides ──
   // Each arc spans ~60° on the XY ring at radius 58. Stacked as a line + an
   // additive-blended points layer to create a glowing presence without textures.
-  const arcRadius = 58;
-  const arcSegments = 28;
+  const arcRadius = 102;
+  const arcSegments = 32;
   for (const startDeg of [30, 210]) {
     const arcPos = [];
     for (let i = 0; i <= arcSegments; i++) {
@@ -2357,8 +2357,8 @@ function jrvInitSphere() {
   }
 
   // ── LAYER 3 — dashed ring at mid radius ──
-  const dashRadius = 76;
-  const dashTotal = 56;
+  const dashRadius = 125;
+  const dashTotal = 64;
   jrvSphereDashMat = new THREE.LineBasicMaterial({ color: gold, transparent: true, opacity: 0.55 });
   for (let i = 0; i < dashTotal; i++) {
     if (i % 2 !== 0) continue; // skip every other segment = dashed look
@@ -2373,8 +2373,8 @@ function jrvInitSphere() {
   }
 
   // ── LAYER 4 — outer dotted ring ──
-  const dotRadius = 98;
-  const dotCount = 72;
+  const dotRadius = 150;
+  const dotCount = 80;
   const dotPos = new Float32Array(dotCount * 3);
   for (let i = 0; i < dotCount; i++) {
     const a = (i / dotCount) * Math.PI * 2;
@@ -2388,9 +2388,9 @@ function jrvInitSphere() {
   jrvSphereOuter.add(new THREE.Points(dotGeo, jrvSphereDotMat));
 
   // ── LAYER 5 — spokes / tick marks radiating outward around the full ring ──
-  const spokeCount = 36;
-  const spokeInner = 104;
-  const spokeOuter = 114;
+  const spokeCount = 40;
+  const spokeInner = 156;
+  const spokeOuter = 166;
   const spokeGeo = new THREE.BufferGeometry();
   const spokePos = new Float32Array(spokeCount * 2 * 3);
   for (let i = 0; i < spokeCount; i++) {
@@ -2410,7 +2410,7 @@ function jrvInitSphere() {
   const coreGeo = new THREE.BufferGeometry();
   coreGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
   jrvSphereCoreMat = new THREE.PointsMaterial({
-    color: gold, size: 10, sizeAttenuation: true, transparent: true,
+    color: gold, size: 18, sizeAttenuation: true, transparent: true,
     opacity: 0.0, blending: THREE.AdditiveBlending
   });
   jrvSphereCore = new THREE.Points(coreGeo, jrvSphereCoreMat);
@@ -2435,15 +2435,13 @@ function jrvSphereAnimate() {
   if (!jrvSphereReady) return;
   requestAnimationFrame(jrvSphereAnimate);
   const speakBoost = jrvState.speaking ? 1.7 : 1.0;
-  // Counter-rotation: inner one way, outer the other; both speed up while talking
+  // Counter-rotation — Z axis ONLY so the rings spin in plane, never tilt
   jrvSphereInner.rotation.z += 0.0028 * speakBoost;
-  jrvSphereInner.rotation.y += 0.0008 * speakBoost;
   jrvSphereOuter.rotation.z -= 0.0020 * speakBoost;
-  jrvSphereOuter.rotation.y -= 0.0006 * speakBoost;
-  // Independent slow sphere spin so the central cluster feels alive even when groups settle
+  // The center sphere is rotationally symmetric, so a slow Y spin on it keeps
+  // the particle cluster feeling alive without tilting any ring layers
   if (jrvSpherePoints) {
     jrvSpherePoints.rotation.y += 0.0014 * speakBoost;
-    jrvSpherePoints.rotation.x += 0.0006 * speakBoost;
   }
   // Brief momentary scale emphasis (greetings/ack); decays back to 1.0
   jrvSphereCurrentScale += (jrvSphereTargetScale - jrvSphereCurrentScale) * 0.08;
