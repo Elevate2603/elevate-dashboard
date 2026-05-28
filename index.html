@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-E-JARVIS-VOICE -->
+<!-- ELEVATE-2026-0528-F-JARVIS-AUTO -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -509,11 +509,15 @@
   .jrv-sphere-label { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color: var(--gold); font-family:'Consolas', monospace; font-size:11px; letter-spacing:0.2em; text-transform:uppercase; pointer-events:none; opacity:0.55; }
 
   .jrv-voice { width:100%; max-width:600px; display:flex; flex-direction:column; gap:10px; }
-  .jrv-mic-row { display:flex; gap:8px; align-items:stretch; }
-  .jrv-mic-btn { flex:1; background: linear-gradient(180deg, var(--gold), var(--gold-light)); color:#000; font-weight:700; font-size:13px; letter-spacing:0.12em; border:none; border-radius:8px; padding:14px 24px; cursor:pointer; font-family:'Consolas', monospace; transition: all 0.2s; }
-  .jrv-mic-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(200,130,10,0.4); }
-  .jrv-voice-btn { background: var(--dark3); color: var(--text); border:1px solid var(--border); border-radius:8px; padding:0 16px; cursor:pointer; font-family:'Consolas', monospace; font-size:11px; letter-spacing:0.1em; transition: all 0.15s; }
-  .jrv-voice-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .jrv-mic-indicator { display:flex; align-items:center; justify-content:center; gap:10px; font-family:'Consolas', monospace; font-size:11px; letter-spacing:0.14em; color: var(--text-muted); text-transform:uppercase; padding:8px; }
+  .jrv-mic-dot { width:8px; height:8px; border-radius:50%; background: #4b5563; transition: background 0.2s; }
+  .jrv-mic-indicator.listening .jrv-mic-dot { background: #4ade80; box-shadow: 0 0 8px #4ade80; animation: jrvPulseDot 1.6s ease-in-out infinite; }
+  .jrv-mic-indicator.listening .jrv-mic-state { color: #4ade80; }
+  .jrv-mic-indicator.waiting .jrv-mic-dot { background: var(--gold); animation: jrvPulseDot 1.6s ease-in-out infinite; }
+  .jrv-mic-indicator.waiting .jrv-mic-state { color: var(--gold); }
+  @keyframes jrvPulseDot { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  /* Legacy classes kept hidden — referenced by inactive code paths */
+  .jrv-mic-row, .jrv-mic-btn, .jrv-voice-btn { display:none !important; }
 
   /* Voice picker (inline panel above transcript) */
   .jrv-voice-picker { background: var(--dark2); border:1px solid var(--gold); border-radius:10px; padding:14px 16px; max-height:360px; overflow-y:auto; }
@@ -660,11 +664,8 @@
           <div class="jrv-sphere-label" id="jrvSphereLabel">JARVIS</div>
         </div>
         <div class="jrv-voice">
-          <div class="jrv-mic-row">
-            <button class="jrv-mic-btn" id="jrvMicBtn" onclick="jrvTalk()">🎤  ACTIVATE JARVIS</button>
-            <button class="jrv-voice-btn" id="jrvVoiceBtn" onclick="jrvOpenVoicePicker()" title="Choose voice">🔊 Voice</button>
-          </div>
-          <div class="jrv-transcript" id="jrvTranscript">Tap the button above. Once active, say "Jarvis" anytime followed by your command.</div>
+          <div class="jrv-mic-indicator" id="jrvMicIndicator"><span class="jrv-mic-dot"></span><span class="jrv-mic-state" id="jrvMicState">Waking up…</span></div>
+          <div class="jrv-transcript" id="jrvTranscript">Click anywhere on the page to wake Jarvis. After that he listens for his name on his own.</div>
         </div>
       </section>
 
@@ -2192,6 +2193,38 @@ function jrvInit() {
   jrvLoadHiringSignals();
   jrvCheckBrain();
   jrvPrimeVoices();
+  jrvSetupAutoWake();
+}
+
+// Auto-wake: try to start mic on load. Browsers usually require a user gesture
+// for the first call, so if it fails, wake on the first click anywhere on the page.
+function jrvSetupAutoWake() {
+  jrvSetIndicator('waiting', 'Tap anywhere to wake');
+  // First try immediately — works on subsequent visits where permission is remembered
+  try { jrvStartAlwaysOn(); } catch (_) {}
+  if (jrvState.alwaysOn) { jrvSetIndicator('listening', 'Listening for "Jarvis"'); return; }
+
+  // Otherwise wait for any user gesture
+  const onFirstGesture = () => {
+    document.removeEventListener('click', onFirstGesture, true);
+    document.removeEventListener('keydown', onFirstGesture, true);
+    document.removeEventListener('touchstart', onFirstGesture, true);
+    try { jrvStartAlwaysOn(); } catch (_) {}
+    if (jrvState.alwaysOn) jrvSetIndicator('listening', 'Listening for "Jarvis"');
+    else jrvSetIndicator('', 'Mic blocked — check browser permission');
+  };
+  document.addEventListener('click', onFirstGesture, true);
+  document.addEventListener('keydown', onFirstGesture, true);
+  document.addEventListener('touchstart', onFirstGesture, true);
+}
+
+function jrvSetIndicator(stateClass, text) {
+  const el = document.getElementById('jrvMicIndicator');
+  const txtEl = document.getElementById('jrvMicState');
+  if (!el || !txtEl) return;
+  el.classList.remove('listening', 'waiting');
+  if (stateClass) el.classList.add(stateClass);
+  txtEl.textContent = text;
 }
 
 // Chrome lazy-loads SpeechSynthesis voices. Call getVoices() once + listen to
@@ -2386,6 +2419,7 @@ function jrvStartAlwaysOn() {
 
   if (btn) { btn.classList.add('listening'); btn.textContent = '◉  LISTENING · Tap to pause'; }
   if (tx) tx.innerHTML = '<span class="jrv-transcript-you" style="opacity:0.7">Say "Jarvis" anytime followed by what you need.</span>';
+  jrvSetIndicator('listening', 'Listening for "Jarvis"');
   jrvSphereTargetScale = 1.05;
 
   rec.onresult = (evt) => {
