@@ -83,7 +83,10 @@ exports.handler = async (event) => {
         // Daily report needs room for sections + WHYs; everything else can be much tighter.
         // Lower tokens = faster end-of-stream from Claude.
         max_tokens: /\b(report|brief|rundown|briefing|recap)\b/i.test(transcript) ? 700 : 350,
-        system: ROUTING_PROMPT,
+        // Prompt cache the ~3 KB routing prompt. Warm cache cuts time-to-first-token
+        // dramatically and bills the cached portion at 10% the input-token rate.
+        // Ephemeral TTL is 5 minutes, refreshed on every hit.
+        system: [{ type: "text", text: ROUTING_PROMPT, cache_control: { type: "ephemeral" } }],
         messages: buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary, signalsSummary, styleSamples, memoryFacts, followUpsSummary }),
       }),
     });

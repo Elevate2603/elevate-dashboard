@@ -92,7 +92,10 @@ export default async (request) => {
         model,
         max_tokens: maxTokens,
         stream: true,
-        system: ROUTING_PROMPT,
+        // Prompt cache the ~3 KB system prompt. With a warm cache, time-to-first-token
+        // drops from ~1.5–2 s to ~300–500 ms and we're billed at 10% the input-token rate
+        // for the cached portion. Ephemeral TTL is 5 minutes, refreshed on every hit.
+        system: [{ type: "text", text: ROUTING_PROMPT, cache_control: { type: "ephemeral" } }],
         messages,
       }),
     });
