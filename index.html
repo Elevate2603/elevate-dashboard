@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-H-JARVIS-ACK -->
+<!-- ELEVATE-2026-0528-I-JARVIS-CONSOLE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -665,7 +665,6 @@
         </div>
         <div class="jrv-voice">
           <div class="jrv-mic-indicator" id="jrvMicIndicator"><span class="jrv-mic-dot"></span><span class="jrv-mic-state" id="jrvMicState">Waking up…</span></div>
-          <div class="jrv-transcript" id="jrvTranscript">Click anywhere on the page to wake Jarvis. After that he listens for his name on his own.</div>
         </div>
       </section>
 
@@ -2180,8 +2179,13 @@ const JRV_CONFIG = {
 
 let jrvActiveAgent = 'jarvis';
 let jrvSphereReady = false;
-let jrvSphereScene, jrvSphereCamera, jrvSphereRenderer, jrvSpherePoints, jrvSphereMaterial;
+let jrvSphereScene, jrvSphereCamera, jrvSphereRenderer;
+let jrvSphereInner, jrvSphereOuter; // counter-rotating groups
+let jrvSpherePoints, jrvSphereMaterial; // center particle sphere
 let jrvSphereBasePositions = null;
+let jrvSphereArcMats = [], jrvSphereArcGlowMats = []; // two glowing arcs
+let jrvSphereDashMat, jrvSphereDotMat, jrvSphereSpokeMat;
+let jrvSphereCore, jrvSphereCoreMat; // ignites when talking
 let jrvSphereTargetScale = 1.0;
 let jrvSphereCurrentScale = 1.0;
 
@@ -2291,62 +2295,129 @@ function jrvInitSphere() {
   const host = document.getElementById('jrvSphereHost');
   if (!host) return;
   const w = host.clientWidth || 380, h = host.clientHeight || 380;
+  const gold = JRV_CONFIG.AGENT_COLORS.jarvis;
 
   jrvSphereScene = new THREE.Scene();
   jrvSphereCamera = new THREE.PerspectiveCamera(45, w/h, 1, 1000);
-  jrvSphereCamera.position.z = 240;
+  jrvSphereCamera.position.z = 280;
   jrvSphereRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
   jrvSphereRenderer.setSize(w, h);
   jrvSphereRenderer.setClearColor(0x000000, 0);
   host.appendChild(jrvSphereRenderer.domElement);
 
-  // Particle sphere
-  const N = 900;
+  // Two counter-rotating groups
+  jrvSphereInner = new THREE.Group(); // particles + arcs + dashed ring + core
+  jrvSphereOuter = new THREE.Group(); // dotted ring + spokes
+  jrvSphereScene.add(jrvSphereInner);
+  jrvSphereScene.add(jrvSphereOuter);
+
+  // ── LAYER 1 — tight defined particle sphere at center ──
+  const N = 420;
   const positions = new Float32Array(N * 3);
-  const radius = 80;
+  const baseRadius = 38;
   for (let i = 0; i < N; i++) {
     const u = Math.random(), v = Math.random();
     const theta = 2 * Math.PI * u;
     const phi = Math.acos(2 * v - 1);
-    const r = radius * (0.94 + Math.random() * 0.10);
+    const r = baseRadius * (0.94 + Math.random() * 0.10);
     positions[i*3]   = r * Math.sin(phi) * Math.cos(theta);
     positions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
     positions[i*3+2] = r * Math.cos(phi);
   }
   jrvSphereBasePositions = positions.slice();
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const sphereGeo = new THREE.BufferGeometry();
+  sphereGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   jrvSphereMaterial = new THREE.PointsMaterial({
-    color: JRV_CONFIG.AGENT_COLORS.jarvis,
-    size: 2.2,
-    sizeAttenuation: true,
-    transparent: true,
-    opacity: 0.9
+    color: gold, size: 2.1, sizeAttenuation: true, transparent: true, opacity: 0.95
   });
-  jrvSpherePoints = new THREE.Points(geo, jrvSphereMaterial);
-  jrvSphereScene.add(jrvSpherePoints);
+  jrvSpherePoints = new THREE.Points(sphereGeo, jrvSphereMaterial);
+  jrvSphereInner.add(jrvSpherePoints);
 
-  // Subtle inner core
-  const coreGeo = new THREE.BufferGeometry();
-  const coreN = 180;
-  const corePos = new Float32Array(coreN * 3);
-  for (let i = 0; i < coreN; i++) {
-    const u = Math.random(), v = Math.random();
-    const theta = 2 * Math.PI * u;
-    const phi = Math.acos(2 * v - 1);
-    const r = 30 + Math.random() * 12;
-    corePos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
-    corePos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
-    corePos[i*3+2] = r * Math.cos(phi);
+  // ── LAYER 2 — two bright partial-arc segments at opposite sides ──
+  // Each arc spans ~60° on the XY ring at radius 58. Stacked as a line + an
+  // additive-blended points layer to create a glowing presence without textures.
+  const arcRadius = 58;
+  const arcSegments = 28;
+  for (const startDeg of [30, 210]) {
+    const arcPos = [];
+    for (let i = 0; i <= arcSegments; i++) {
+      const ang = ((startDeg + (i / arcSegments) * 60) * Math.PI) / 180;
+      arcPos.push(arcRadius * Math.cos(ang), arcRadius * Math.sin(ang), 0);
+    }
+    const arcGeo = new THREE.BufferGeometry();
+    arcGeo.setAttribute('position', new THREE.Float32BufferAttribute(arcPos, 3));
+    const arcMat = new THREE.LineBasicMaterial({ color: gold, transparent: true, opacity: 0.95 });
+    const arcGlowMat = new THREE.PointsMaterial({
+      color: gold, size: 3.6, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, sizeAttenuation: true
+    });
+    jrvSphereArcMats.push(arcMat);
+    jrvSphereArcGlowMats.push(arcGlowMat);
+    jrvSphereInner.add(new THREE.Line(arcGeo, arcMat));
+    jrvSphereInner.add(new THREE.Points(arcGeo, arcGlowMat));
   }
-  coreGeo.setAttribute('position', new THREE.BufferAttribute(corePos, 3));
-  const coreMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.2, transparent: true, opacity: 0.4 });
-  const coreMesh = new THREE.Points(coreGeo, coreMat);
-  jrvSphereScene.add(coreMesh);
+
+  // ── LAYER 3 — dashed ring at mid radius ──
+  const dashRadius = 76;
+  const dashTotal = 56;
+  jrvSphereDashMat = new THREE.LineBasicMaterial({ color: gold, transparent: true, opacity: 0.55 });
+  for (let i = 0; i < dashTotal; i++) {
+    if (i % 2 !== 0) continue; // skip every other segment = dashed look
+    const a1 = (i / dashTotal) * Math.PI * 2;
+    const a2 = ((i + 0.55) / dashTotal) * Math.PI * 2;
+    const segGeo = new THREE.BufferGeometry();
+    segGeo.setAttribute('position', new THREE.Float32BufferAttribute([
+      dashRadius * Math.cos(a1), dashRadius * Math.sin(a1), 0,
+      dashRadius * Math.cos(a2), dashRadius * Math.sin(a2), 0
+    ], 3));
+    jrvSphereInner.add(new THREE.LineSegments(segGeo, jrvSphereDashMat));
+  }
+
+  // ── LAYER 4 — outer dotted ring ──
+  const dotRadius = 98;
+  const dotCount = 72;
+  const dotPos = new Float32Array(dotCount * 3);
+  for (let i = 0; i < dotCount; i++) {
+    const a = (i / dotCount) * Math.PI * 2;
+    dotPos[i*3]   = dotRadius * Math.cos(a);
+    dotPos[i*3+1] = dotRadius * Math.sin(a);
+    dotPos[i*3+2] = 0;
+  }
+  const dotGeo = new THREE.BufferGeometry();
+  dotGeo.setAttribute('position', new THREE.BufferAttribute(dotPos, 3));
+  jrvSphereDotMat = new THREE.PointsMaterial({ color: gold, size: 2.4, transparent: true, opacity: 0.75 });
+  jrvSphereOuter.add(new THREE.Points(dotGeo, jrvSphereDotMat));
+
+  // ── LAYER 5 — spokes / tick marks radiating outward around the full ring ──
+  const spokeCount = 36;
+  const spokeInner = 104;
+  const spokeOuter = 114;
+  const spokeGeo = new THREE.BufferGeometry();
+  const spokePos = new Float32Array(spokeCount * 2 * 3);
+  for (let i = 0; i < spokeCount; i++) {
+    const a = (i / spokeCount) * Math.PI * 2;
+    spokePos[i*6]   = spokeInner * Math.cos(a);
+    spokePos[i*6+1] = spokeInner * Math.sin(a);
+    spokePos[i*6+2] = 0;
+    spokePos[i*6+3] = spokeOuter * Math.cos(a);
+    spokePos[i*6+4] = spokeOuter * Math.sin(a);
+    spokePos[i*6+5] = 0;
+  }
+  spokeGeo.setAttribute('position', new THREE.BufferAttribute(spokePos, 3));
+  jrvSphereSpokeMat = new THREE.LineBasicMaterial({ color: gold, transparent: true, opacity: 0.55 });
+  jrvSphereOuter.add(new THREE.LineSegments(spokeGeo, jrvSphereSpokeMat));
+
+  // ── LAYER 6 — dead-center glow core (dim at rest, ignites + throbs while talking) ──
+  const coreGeo = new THREE.BufferGeometry();
+  coreGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
+  jrvSphereCoreMat = new THREE.PointsMaterial({
+    color: gold, size: 10, sizeAttenuation: true, transparent: true,
+    opacity: 0.0, blending: THREE.AdditiveBlending
+  });
+  jrvSphereCore = new THREE.Points(coreGeo, jrvSphereCoreMat);
+  jrvSphereInner.add(jrvSphereCore);
 
   jrvSphereReady = true;
   jrvSphereAnimate();
-  // Handle resize when tab becomes visible
   window.addEventListener('resize', jrvOnResize);
 }
 
@@ -2363,11 +2434,39 @@ function jrvOnResize() {
 function jrvSphereAnimate() {
   if (!jrvSphereReady) return;
   requestAnimationFrame(jrvSphereAnimate);
-  jrvSpherePoints.rotation.y += 0.002;
-  jrvSpherePoints.rotation.x += 0.0008;
-  // ease scale toward target
+  const speakBoost = jrvState.speaking ? 1.7 : 1.0;
+  // Counter-rotation: inner one way, outer the other; both speed up while talking
+  jrvSphereInner.rotation.z += 0.0028 * speakBoost;
+  jrvSphereInner.rotation.y += 0.0008 * speakBoost;
+  jrvSphereOuter.rotation.z -= 0.0020 * speakBoost;
+  jrvSphereOuter.rotation.y -= 0.0006 * speakBoost;
+  // Independent slow sphere spin so the central cluster feels alive even when groups settle
+  if (jrvSpherePoints) {
+    jrvSpherePoints.rotation.y += 0.0014 * speakBoost;
+    jrvSpherePoints.rotation.x += 0.0006 * speakBoost;
+  }
+  // Brief momentary scale emphasis (greetings/ack); decays back to 1.0
   jrvSphereCurrentScale += (jrvSphereTargetScale - jrvSphereCurrentScale) * 0.08;
-  jrvSpherePoints.scale.setScalar(jrvSphereCurrentScale);
+  if (jrvSphereInner) jrvSphereInner.scale.setScalar(jrvSphereCurrentScale);
+
+  // Talking pulse — particle scatter + core ignite/throb
+  if (jrvSpherePoints && jrvSphereBasePositions) {
+    const targetScatter = jrvState.speaking ? 1.28 : 1.0;
+    jrvState.currentScatter += (targetScatter - jrvState.currentScatter) * 0.06;
+    const positions = jrvSpherePoints.geometry.attributes.position.array;
+    for (let i = 0; i < positions.length; i++) positions[i] = jrvSphereBasePositions[i] * jrvState.currentScatter;
+    jrvSpherePoints.geometry.attributes.position.needsUpdate = true;
+  }
+  if (jrvSphereCoreMat) {
+    jrvSphereCoreMat.opacity += (jrvState.coreTargetOpacity - jrvSphereCoreMat.opacity) * 0.18;
+    // Throb decay — onboundary kicks coreThrob, this decays it
+    if (jrvState.coreThrob > 0.01) {
+      jrvSphereCoreMat.size = 10 + jrvState.coreThrob * 22;
+      jrvState.coreThrob *= 0.82;
+    } else {
+      jrvSphereCoreMat.size = 10 + (jrvState.speaking ? 4 : 0);
+    }
+  }
   jrvSphereRenderer.render(jrvSphereScene, jrvSphereCamera);
 }
 
@@ -2379,7 +2478,16 @@ function jrvSelectAgent(name, btn) {
   if (label) label.textContent = name.toUpperCase() + ' · IDLE';
   const sphereLabel = document.getElementById('jrvSphereLabel');
   if (sphereLabel) sphereLabel.textContent = name.toUpperCase();
-  if (jrvSphereMaterial) jrvSphereMaterial.color.setHex(JRV_CONFIG.AGENT_COLORS[name] || JRV_CONFIG.AGENT_COLORS.jarvis);
+  // Re-tint every sphere layer in one call: center particles, both arcs (line + glow),
+  // dashed ring, dotted ring, spokes, glow core.
+  const hex = JRV_CONFIG.AGENT_COLORS[name] || JRV_CONFIG.AGENT_COLORS.jarvis;
+  if (jrvSphereMaterial) jrvSphereMaterial.color.setHex(hex);
+  jrvSphereArcMats.forEach(m => m.color.setHex(hex));
+  jrvSphereArcGlowMats.forEach(m => m.color.setHex(hex));
+  if (jrvSphereDashMat) jrvSphereDashMat.color.setHex(hex);
+  if (jrvSphereDotMat) jrvSphereDotMat.color.setHex(hex);
+  if (jrvSphereSpokeMat) jrvSphereSpokeMat.color.setHex(hex);
+  if (jrvSphereCoreMat) jrvSphereCoreMat.color.setHex(hex);
 }
 
 // ── Always-on wake-word listening (toggle via mic button) ────────────────
@@ -2463,8 +2571,10 @@ function jrvStartAlwaysOn() {
       return;
     }
 
-    // Greeting interceptor — only fires when wake word is present
+    // Special-phrase + greeting interceptors — only fire when wake word is present
     if (wakeMatch) {
+      const special = jrvDetectSpecialPhrase(finalText);
+      if (special) { jrvProcessSpecialPhrase(special, finalText); return; }
       const period = jrvMatchGreeting(finalText);
       if (period) { jrvProcessGreeting(period, finalText); return; }
     }
@@ -2539,21 +2649,25 @@ const JRV_ACKS = [
 ];
 
 function jrvAcknowledge() {
-  const reply = JRV_ACKS[Math.floor(Math.random() * JRV_ACKS.length)];
-  const tx = document.getElementById('jrvTranscript');
-  if (tx) {
-    tx.innerHTML = '<span class="jrv-transcript-you">You: "Jarvis"</span>' +
-                   '<div class="jrv-transcript-reply">' + escapeHtml(reply) + '</div>';
+  let reply;
+  // 5-hour-gap rule — if it's been a while, lead with a time-of-day greeting
+  if (jrvFirstOfDay()) {
+    const tod = jrvTimeOfDay();
+    reply = `Good ${tod}, Travis. It's a great day for sales, let's get shit going. What can I do for you?`;
+  } else {
+    reply = JRV_ACKS[Math.floor(Math.random() * JRV_ACKS.length)];
   }
+  jrvMarkInteraction();
   jrvCaptureStyle('Jarvis');
   jrvSphereTargetScale = 1.18;
-  setTimeout(() => { jrvSphereTargetScale = 1.05; }, 800);
+  setTimeout(() => { jrvSphereTargetScale = 1.0; }, 800);
   jrvSpeakOut(reply);
   jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
 }
 
 function jrvProcessGreeting(period, originalText) {
   jrvCaptureStyle(originalText);
+  jrvMarkInteraction();
   const reply = "Good " + period + ", Travis. Great day for sales. Let's kick ass today!";
   const tx = document.getElementById('jrvTranscript');
   if (tx) {
@@ -2568,6 +2682,7 @@ function jrvProcessGreeting(period, originalText) {
 
 function jrvProcessCommand(command) {
   jrvCaptureStyle(command);
+  jrvMarkInteraction();
   // Push to conversation memory so the brain can resolve "those contacts", "that company", etc.
   jrvState.history.push({ role: 'user', text: command });
   if (jrvState.history.length > JRV_CONFIG.HISTORY_MAX * 2) jrvState.history = jrvState.history.slice(-JRV_CONFIG.HISTORY_MAX * 2);
@@ -2713,16 +2828,31 @@ function jrvSpeakOut(text) {
     u.pitch = 0.95;
     u.volume = 0.85;
     const voices = speechSynthesis.getVoices();
-    // 1. Saved preference wins
     const savedName = localStorage.getItem(JRV_VOICE_KEY);
     let pick = savedName ? voices.find(v => v.name === savedName) : null;
-    // 2. Sensible default — prefer male English voice
     if (!pick) {
       pick = voices.find(v => /male/i.test(v.name) && /en/i.test(v.lang)) ||
              voices.find(v => /david|daniel|google uk english male/i.test(v.name)) ||
              voices.find(v => /en-GB|en-US/i.test(v.lang));
     }
     if (pick) u.voice = pick;
+    // Sphere talking-pulse hooks
+    u.onstart = () => {
+      jrvState.speaking = true;
+      jrvState.coreTargetOpacity = 0.92;
+      jrvState.coreThrob = 0.6; // initial ignite burst
+    };
+    u.onboundary = () => {
+      // Throb the core on every word boundary so it visibly pulses with speech
+      jrvState.coreThrob = Math.min(1.6, jrvState.coreThrob + 0.55);
+    };
+    const settle = () => {
+      jrvState.speaking = false;
+      jrvState.coreTargetOpacity = 0;
+      jrvState.coreThrob = 0;
+    };
+    u.onend = settle;
+    u.onerror = settle;
     speechSynthesis.speak(u);
   } catch (_) { /* mute speech failures */ }
 }
@@ -2817,8 +2947,65 @@ const jrvState = {
   recognition: null,
   followUpUntil: 0,
   consumedTranscripts: null,
-  styleSamples: [] // rolling buffer of Travis's recent transcripts (max 25)
+  styleSamples: [], // rolling buffer of Travis's recent transcripts (max 25)
+  // Sphere talking-pulse runtime state
+  speaking: false,
+  coreTargetOpacity: 0,
+  coreThrob: 0,
+  currentScatter: 1.0
 };
+
+// ── Time-of-day awareness + 5-hour-gap rule ─────────────────────────────
+// Persist the timestamp of every interaction so JARVIS knows when it's been
+// a while since Travis last talked to him. After 5+ hours, the next reply
+// gets a time-of-day greeting prepended + the "great day for sales" line.
+const JRV_LAST_TS_KEY = 'jrv_last_interaction_ts_v1';
+const JRV_GAP_HOURS = 5;
+
+function jrvHoursSinceLast() {
+  try {
+    const ts = parseInt(localStorage.getItem(JRV_LAST_TS_KEY) || '0', 10);
+    if (!ts) return Infinity;
+    return (Date.now() - ts) / 3600000;
+  } catch (_) { return Infinity; }
+}
+
+function jrvMarkInteraction() {
+  try { localStorage.setItem(JRV_LAST_TS_KEY, String(Date.now())); } catch (_) {}
+}
+
+function jrvTimeOfDay() {
+  const h = new Date().getHours();
+  if (h < 12) return 'morning';
+  if (h < 18) return 'afternoon';
+  return 'evening';
+}
+
+function jrvFirstOfDay() {
+  return jrvHoursSinceLast() >= JRV_GAP_HOURS;
+}
+
+// Returns true if the transcript contains a special phrase JARVIS should handle directly.
+function jrvDetectSpecialPhrase(text) {
+  if (/\bdaddy['’]?s?\s*(home|is\s*home)\b/i.test(text)) return 'daddys-home';
+  return null;
+}
+
+function jrvProcessSpecialPhrase(key, originalText) {
+  jrvCaptureStyle(originalText);
+  const tod = jrvTimeOfDay();
+  let reply = null;
+  if (key === 'daddys-home') {
+    reply = `Good ${tod}, rockstar. What can I do for you?`;
+    if (jrvFirstOfDay()) reply += " It's a great day for sales, let's get shit going.";
+  }
+  if (!reply) return;
+  jrvMarkInteraction();
+  jrvSphereTargetScale = 1.25;
+  setTimeout(() => { jrvSphereTargetScale = 1.0; }, 1200);
+  jrvSpeakOut(reply);
+  jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
+}
 
 // ── Style learning loop ─────────────────────────────────────────────────
 // Capture every transcript Travis actually says so the brain can mirror it.
