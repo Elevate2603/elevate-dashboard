@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-G-JARVIS-WAKE-DEBUG -->
+<!-- ELEVATE-2026-0528-H-JARVIS-ACK -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2471,7 +2471,11 @@ function jrvStartAlwaysOn() {
 
     // Strip the wake word from the command if present, then handle
     const command = finalText.replace(JRV_WAKE_RE, '').replace(/^[\s,.!?]+/, '').trim();
-    if (!command) return; // they just said the name
+    if (!command) {
+      // Bare wake word — JARVIS acknowledges and opens the follow-up window
+      if (wakeMatch) jrvAcknowledge();
+      return;
+    }
     jrvProcessCommand(command);
   };
 
@@ -2518,6 +2522,34 @@ function jrvMatchGreeting(text) {
   if (/\bgood\s+evening\b/.test(text)) return 'evening';
   if (/\bgood\s+night\b/.test(text)) return 'night';
   return null;
+}
+
+// Random opener pool — variety so it doesn't feel robotic. Picked when Travis
+// says just "Jarvis" with nothing else after.
+const JRV_ACKS = [
+  "Hi Travis, what can I do for you?",
+  "Hey Travis, what's up?",
+  "Yes Travis, what do you need?",
+  "I'm here. What's the play?",
+  "Standing by. What can I do?",
+  "Yeah Travis, what's going on?",
+  "Right here. Shoot.",
+  "Yo Travis, what's the move?",
+  "Listening. What do you need?"
+];
+
+function jrvAcknowledge() {
+  const reply = JRV_ACKS[Math.floor(Math.random() * JRV_ACKS.length)];
+  const tx = document.getElementById('jrvTranscript');
+  if (tx) {
+    tx.innerHTML = '<span class="jrv-transcript-you">You: "Jarvis"</span>' +
+                   '<div class="jrv-transcript-reply">' + escapeHtml(reply) + '</div>';
+  }
+  jrvCaptureStyle('Jarvis');
+  jrvSphereTargetScale = 1.18;
+  setTimeout(() => { jrvSphereTargetScale = 1.05; }, 800);
+  jrvSpeakOut(reply);
+  jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
 }
 
 function jrvProcessGreeting(period, originalText) {
