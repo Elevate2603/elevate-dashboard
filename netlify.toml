@@ -6,6 +6,13 @@
   publish = "."
   functions = "netlify/functions"
 
+# Bump function timeout so Claude Opus has room to think (default is 10s; max on free is 26s)
+[functions]
+  node_bundler = "esbuild"
+
+[functions."jarvis"]
+  timeout = 26
+
 # Static asset cache headers (long for static images, short for index.html so deploys appear instantly)
 [[headers]]
   for = "/index.html"

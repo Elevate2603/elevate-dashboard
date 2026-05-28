@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-R-FAST-STOP -->
+<!-- ELEVATE-2026-0528-S-SANITIZE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -3043,13 +3043,32 @@ function jrvResumeLastSpeech() {
   return true;
 }
 
+// Client-side defense — strip anything TTS would read literally
+function jrvSanitizeSpeak(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/\\n/g, ' ')
+    .replace(/\\t/g, ' ')
+    .replace(/\\r/g, ' ')
+    .replace(/\\\"/g, '"')
+    .replace(/\\\\/g, '')
+    .replace(/\\/g, '')
+    .replace(/```[a-z]*|```/gi, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function jrvSpeakOut(text) {
   try {
     if (!('speechSynthesis' in window)) return;
-    if (!text) return;
+    const clean = jrvSanitizeSpeak(text);
+    if (!clean) return;
     speechSynthesis.cancel();
-    jrvCurrentSpeechText = text;
-    const u = new SpeechSynthesisUtterance(text);
+    jrvCurrentSpeechText = clean;
+    const u = new SpeechSynthesisUtterance(clean);
     u.rate = 1.0;
     u.pitch = 0.95;
     u.volume = 1.0; // max — JARVIS must stay loud over the background song
@@ -3078,7 +3097,7 @@ function jrvSpeakOut(text) {
       jrvState.coreTargetOpacity = 0.30;
       jrvState.coreThrob = 0;
       // Natural end clears current text so "continue" only resumes interrupted speech
-      if (jrvCurrentSpeechText === text) jrvCurrentSpeechText = null;
+      if (jrvCurrentSpeechText === clean) jrvCurrentSpeechText = null;
     };
     u.onend = settle;
     u.onerror = settle;

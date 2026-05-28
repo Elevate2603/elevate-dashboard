@@ -108,11 +108,22 @@ exports.handler = async (event) => {
   // ── 2. Parse Claude's JSON decision ───────────────────────────────────
   let decision;
   try {
-    const cleaned = text.replace(/```json|```/g, "").trim();
+    // Strip code fences + leading/trailing non-JSON noise. Find the first { and last }.
+    let cleaned = text.replace(/```json|```/g, "").trim();
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace > firstBrace) cleaned = cleaned.slice(firstBrace, lastBrace + 1);
     decision = JSON.parse(cleaned);
   } catch {
-    // Fallback: if Claude didn't comply, treat the raw text as a JARVIS reply.
-    decision = { agent: "jarvis", speak: text || "I didn't catch that.", action: null };
+    // Fallback: Claude didn't comply with the JSON contract. Speak a clean retry rather
+    // than reading raw JSON/markdown/backslashes literally.
+    decision = { agent: "jarvis", speak: "Hmm, give me that again — I lost the thread.", action: null };
+  }
+
+  // Sanitize the speak field before sending to the client — TTS will read any leftover
+  // characters literally (e.g. "backslash backslash" if escape sequences leak through).
+  if (decision && typeof decision.speak === "string") {
+    decision.speak = sanitizeSpeakText(decision.speak);
   }
 
   // ── 3. Fire an action webhook if Claude requested one ─────────────────
@@ -290,10 +301,31 @@ Reply with ONLY a JSON object. No markdown fences, no preamble, no trailing text
 - Ground every answer in the snapshots. Name real companies. Use real numbers. Reference the hiring signals by name.
 - Never invent. If a fact isn't in the snapshot, say so plainly and point to where it'd come from (RCRM, ZoomInfo MCP, Outlook).
 - "speak" gets heard out loud — punchy, 25–45 words. Longer only when delivering real insight or running through stats.
+- "speak" must be PLAIN PROSE. No markdown, no backslashes, no asterisks, no code fences, no JSON. Just words a voice would say.
 - No em dashes. No "I'd be happy to." No "let me know if you need anything else."
 - Good news → lean in. Bad news → say it straight without softening to vagueness.
 - When a sub-agent best fits the answer, set agent to their name and write speak AS THAT SPECIALIST (Sarah: calm, fact-driven; Scout: fast; Intel: sharp; Scribe: thoughtful). JARVIS introduces them in one short line, then they deliver.
 `.trim();
+
+// Strip characters TTS would read literally — backslashes, markdown, JSON noise.
+function sanitizeSpeakText(s) {
+  if (!s) return "";
+  return String(s)
+    .replace(/\\n/g, " ")               // literal "\n" → space
+    .replace(/\\t/g, " ")               // literal "\t"
+    .replace(/\\r/g, " ")               // literal "\r"
+    .replace(/\\\"/g, '"')              // literal \" → "
+    .replace(/\\\\/g, "")               // literal "\\"
+    .replace(/\\/g, "")                 // any remaining lone backslash
+    .replace(/```[a-z]*|```/gi, "")     // code fences
+    .replace(/\*\*([^*]+)\*\*/g, "$1")  // bold markdown
+    .replace(/\*([^*]+)\*/g, "$1")      // italic *
+    .replace(/(?<![a-z])_([^_]+)_(?![a-z])/gi, "$1") // italic _ (not inside identifiers)
+    .replace(/`([^`]+)`/g, "$1")        // inline code backticks
+    .replace(/^#{1,6}\s+/gm, "")        // headers
+    .replace(/\s+/g, " ")               // collapse whitespace
+    .trim();
+}
 
 // Format the hiring signals array into a compact, Claude-readable snapshot.
 function summarizeSignals(signals) {
