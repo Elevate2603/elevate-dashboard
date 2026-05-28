@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-K-JARVIS-BIG -->
+<!-- ELEVATE-2026-0528-L-JARVIS-BRIGHT -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2311,8 +2311,8 @@ function jrvInitSphere() {
   jrvSphereScene.add(jrvSphereInner);
   jrvSphereScene.add(jrvSphereOuter);
 
-  // ── LAYER 1 — tight defined particle sphere at center (2x original) ──
-  const N = 900;
+  // ── LAYER 1 — tight defined particle sphere at center (2x original, fuller + brighter) ──
+  const N = 2000;
   const positions = new Float32Array(N * 3);
   const baseRadius = 160;
   for (let i = 0; i < N; i++) {
@@ -2327,8 +2327,17 @@ function jrvInitSphere() {
   jrvSphereBasePositions = positions.slice();
   const sphereGeo = new THREE.BufferGeometry();
   sphereGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  // AdditiveBlending makes overlapping particles stack brightness — gives the sphere
+  // a real luminous glow against the dark theme. The same gold color reads ~5× brighter
+  // than NormalBlending at this density.
   jrvSphereMaterial = new THREE.PointsMaterial({
-    color: gold, size: 2.5, sizeAttenuation: true, transparent: true, opacity: 0.85
+    color: gold,
+    size: 4.0,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.95,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
   });
   jrvSpherePoints = new THREE.Points(sphereGeo, jrvSphereMaterial);
   jrvSphereInner.add(jrvSpherePoints);
@@ -2455,11 +2464,12 @@ function jrvSphereAnimate() {
     jrvSpherePoints.geometry.attributes.position.needsUpdate = true;
   }
 
-  // Outer particle sphere — base size 2.5, grows during speech, pulses brighter on each word boundary
+  // Outer particle sphere — base size 4.0 at rest (bright, full), grows during speech,
+  // pulses larger on every word boundary
   if (jrvSphereMaterial) {
-    const sizeTarget = jrvState.speaking ? 3.6 + jrvState.coreThrob * 1.8 : 2.5;
+    const sizeTarget = jrvState.speaking ? 5.6 + jrvState.coreThrob * 2.4 : 4.0;
     jrvSphereMaterial.size += (sizeTarget - jrvSphereMaterial.size) * 0.12;
-    const opacityTarget = jrvState.speaking ? Math.min(1.0, 0.95 + jrvState.coreThrob * 0.15) : 0.85;
+    const opacityTarget = jrvState.speaking ? Math.min(1.0, 0.95 + jrvState.coreThrob * 0.1) : 0.95;
     jrvSphereMaterial.opacity += (opacityTarget - jrvSphereMaterial.opacity) * 0.15;
   }
 
