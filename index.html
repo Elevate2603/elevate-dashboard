@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-M-RINGS-BRIGHT -->
+<!-- ELEVATE-2026-0528-N-JARVIS-SONG -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2667,6 +2667,40 @@ function jrvMatchGreeting(text) {
   return null;
 }
 
+// ── Background song — Fortunate Son ────────────────────────────────────
+// Plays once per session as wake-up music when Travis says "Good morning Jarvis"
+// or on any first interaction after a 5-hour gap. Volume kept low so JARVIS's
+// voice (at 1.0) stays clearly on top.
+const JRV_SONG_URL = 'Fortunate Son (CCR) - QuickSounds.com.mp3';
+const JRV_SONG_VOLUME = 0.30;
+let jrvBgSongAudio = null;
+let jrvBgSongPlayedSession = false;
+
+function jrvPlayBgSong() {
+  if (jrvBgSongPlayedSession) return; // once per page load
+  try {
+    if (!jrvBgSongAudio) {
+      jrvBgSongAudio = new Audio(JRV_SONG_URL);
+      jrvBgSongAudio.volume = JRV_SONG_VOLUME;
+      jrvBgSongAudio.preload = 'auto';
+    } else {
+      jrvBgSongAudio.currentTime = 0;
+      jrvBgSongAudio.volume = JRV_SONG_VOLUME;
+    }
+    const p = jrvBgSongAudio.play();
+    if (p && typeof p.catch === 'function') p.catch(err => console.warn('[JARVIS] song play blocked:', err && err.message));
+    jrvBgSongPlayedSession = true;
+  } catch (e) {
+    console.warn('[JARVIS] song setup failed:', e && e.message);
+  }
+}
+
+function jrvStopBgSong() {
+  if (jrvBgSongAudio) {
+    try { jrvBgSongAudio.pause(); jrvBgSongAudio.currentTime = 0; } catch (_) {}
+  }
+}
+
 // Random opener pool — variety so it doesn't feel robotic. Picked when Travis
 // says just "Jarvis" with nothing else after.
 const JRV_ACKS = [
@@ -2683,10 +2717,11 @@ const JRV_ACKS = [
 
 function jrvAcknowledge() {
   let reply;
-  // 5-hour-gap rule — if it's been a while, lead with a time-of-day greeting
+  // 5-hour-gap rule — if it's been a while, lead with a time-of-day greeting + song
   if (jrvFirstOfDay()) {
     const tod = jrvTimeOfDay();
     reply = `Good ${tod}, Travis. It's a great day for sales, let's get shit going. What can I do for you?`;
+    jrvPlayBgSong();
   } else {
     reply = JRV_ACKS[Math.floor(Math.random() * JRV_ACKS.length)];
   }
@@ -2700,6 +2735,8 @@ function jrvAcknowledge() {
 
 function jrvProcessGreeting(period, originalText) {
   jrvCaptureStyle(originalText);
+  // Morning greeting OR first interaction in 5+ hours kicks off the wake-up song
+  if (period === 'morning' || jrvFirstOfDay()) jrvPlayBgSong();
   jrvMarkInteraction();
   const reply = "Good " + period + ", Travis. Great day for sales. Let's kick ass today!";
   const tx = document.getElementById('jrvTranscript');
@@ -2859,7 +2896,7 @@ function jrvSpeakOut(text) {
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 1.0;
     u.pitch = 0.95;
-    u.volume = 0.85;
+    u.volume = 1.0; // max — JARVIS must stay loud over the background song
     const voices = speechSynthesis.getVoices();
     const savedName = localStorage.getItem(JRV_VOICE_KEY);
     let pick = savedName ? voices.find(v => v.name === savedName) : null;
@@ -2950,7 +2987,7 @@ function jrvTestVoice(idx) {
   try { speechSynthesis.cancel(); } catch (_) {}
   const u = new SpeechSynthesisUtterance("Good morning, Travis. Great day for sales. Let's kick ass today.");
   u.voice = v;
-  u.rate = 1.0; u.pitch = 0.95; u.volume = 0.9;
+  u.rate = 1.0; u.pitch = 0.95; u.volume = 1.0;
   speechSynthesis.speak(u);
 }
 
@@ -2967,7 +3004,7 @@ function jrvPickVoice(idx) {
   try { speechSynthesis.cancel(); } catch (_) {}
   const u = new SpeechSynthesisUtterance("Voice set. I'll sound like this from now on.");
   u.voice = v;
-  u.rate = 1.0; u.pitch = 0.95; u.volume = 0.9;
+  u.rate = 1.0; u.pitch = 0.95; u.volume = 1.0;
   speechSynthesis.speak(u);
 }
 
@@ -3034,6 +3071,7 @@ function jrvProcessSpecialPhrase(key, originalText) {
     if (jrvFirstOfDay()) reply += " It's a great day for sales, let's get shit going.";
   }
   if (!reply) return;
+  if (jrvFirstOfDay()) jrvPlayBgSong();
   jrvMarkInteraction();
   jrvSphereTargetScale = 1.25;
   setTimeout(() => { jrvSphereTargetScale = 1.0; }, 1200);
