@@ -178,7 +178,10 @@ function buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary
 // Configuration: model + routing prompt.
 // Edit ROUTING_PROMPT to change how the brain thinks.
 // ════════════════════════════════════════════════════════════════════════
-const MODEL = process.env.JARVIS_MODEL || "claude-opus-4-7";
+// Default to Haiku 4.5 for snappy replies (1-3s typical). Travis can opt back up to
+// Opus 4.7 by setting JARVIS_MODEL in Netlify env. Haiku follows this prompt cleanly
+// — the structured JSON output + tight context keeps quality high for routing.
+const MODEL = process.env.JARVIS_MODEL || "claude-haiku-4-5-20251001";
 
 const ROUTING_PROMPT = `
 You are JARVIS — Travis Ouellette's voice-driven sales command center and best friend on the desk.

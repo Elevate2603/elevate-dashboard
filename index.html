@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-P-DAILY-REPORT -->
+<!-- ELEVATE-2026-0528-Q-FAST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2588,15 +2588,27 @@ function jrvStartAlwaysOn() {
       else interimText += result[0].transcript + ' ';
     }
     finalText = finalText.trim().toLowerCase();
-    interimText = interimText.trim();
+    const interimLower = interimText.trim().toLowerCase();
 
     // Live preview — show what Chrome is hearing, in real time.
-    // This is the diagnostic that tells Travis whether the mic is picking him up at all.
     const txEl = document.getElementById('jrvTranscript');
     if (txEl && interimText && !finalText) {
       const followUp = Date.now() < jrvState.followUpUntil;
       const wakeHint = followUp ? '<span style="opacity:0.5">[follow-up window]</span>' : '<span style="opacity:0.5">listening…</span>';
-      txEl.innerHTML = wakeHint + ' <span class="jrv-transcript-you" style="opacity:0.7;font-style:italic;">' + escapeHtml(interimText) + '</span>';
+      txEl.innerHTML = wakeHint + ' <span class="jrv-transcript-you" style="opacity:0.7;font-style:italic;">' + escapeHtml(interimText.trim()) + '</span>';
+    }
+
+    // ── FAST INTERRUPT — fire on INTERIM transcripts ──
+    // Chrome waits 1-2s before marking transcripts "final", which feels laggy when
+    // Travis says "Jarvis" to interrupt. By acting on interim text the moment the
+    // wake word appears, the interrupt is near-instant.
+    const speaking = (typeof speechSynthesis !== 'undefined' && speechSynthesis.speaking) || jrvState.speaking;
+    if (speaking && interimLower && JRV_WAKE_RE.test(interimLower) && !jrvState.recentInterrupt) {
+      jrvState.recentInterrupt = true;
+      setTimeout(() => { jrvState.recentInterrupt = false; }, 1800);
+      jrvInterruptSpeech();
+      jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
+      // Don't return — let the final-text logic still process any command bundled with the interrupt
     }
 
     if (!finalText) return;
@@ -2646,7 +2658,9 @@ function jrvStartAlwaysOn() {
     const command = finalText.replace(JRV_WAKE_RE, '').replace(/^[\s,.!?]+/, '').trim();
     if (!command) {
       // Bare wake word — JARVIS acknowledges and opens the follow-up window
-      if (wakeMatch) jrvAcknowledge();
+      // But if we JUST interrupted on the interim transcript of this same utterance,
+      // skip the ack so JARVIS doesn't double-respond.
+      if (wakeMatch && !jrvState.recentInterrupt) jrvAcknowledge();
       return;
     }
 
@@ -3138,7 +3152,8 @@ const jrvState = {
   speaking: false,
   coreTargetOpacity: 0.30, // resting glow baseline — orb is always visible
   coreThrob: 0,
-  currentScatter: 1.0
+  currentScatter: 1.0,
+  recentInterrupt: false // gate: prevents bare-wake ack from double-firing after interim interrupt
 };
 
 // ── Time-of-day awareness + 5-hour-gap rule ─────────────────────────────
