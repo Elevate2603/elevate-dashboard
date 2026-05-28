@@ -185,11 +185,7 @@ class JarvisVoice:
             self._speaking = False
 
     async def _wait_for_tts_done(self) -> None:
-        # Poll briefly until the TTS queues drain.
-        for _ in range(600):  # cap ~30s
-            if not self.tts.is_speaking():
-                return
-            await asyncio.sleep(0.05)
+        await self.tts.wait_until_quiet(timeout=30.0)
 
     async def _interrupt(self) -> None:
         if self._current_brain_task and not self._current_brain_task.done():

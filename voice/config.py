@@ -24,6 +24,18 @@ def _int_or_none(val: Optional[str]) -> Optional[int]:
         return None
 
 
+def _resolve_path(env_var: str, fallback: Path) -> str:
+    """Read a path from env; if it's relative, resolve against the repo root."""
+    raw = os.getenv(env_var)
+    if not raw:
+        return str(fallback)
+    p = Path(raw)
+    if not p.is_absolute():
+        # Relative paths in .env are anchored to the repo root (parent of voice/)
+        p = (_VOICE_DIR.parent / p).resolve()
+    return str(p)
+
+
 @dataclass
 class Config:
     # Brain
@@ -39,12 +51,12 @@ class Config:
     vad_min_silence_ms: int = int(os.getenv("VAD_MIN_SILENCE_MS", "350"))
     vad_min_speech_ms: int = int(os.getenv("VAD_MIN_SPEECH_MS", "200"))
 
-    # TTS
-    piper_voice_model: str = os.getenv(
-        "PIPER_VOICE_MODEL", str(_VOICE_DIR / "models" / "en_GB-cori-medium.onnx")
+    # TTS — paths in .env may be relative to repo root; resolve to absolute
+    piper_voice_model: str = _resolve_path(
+        "PIPER_VOICE_MODEL", _VOICE_DIR / "models" / "en_GB-cori-medium.onnx"
     )
-    piper_voice_config: str = os.getenv(
-        "PIPER_VOICE_CONFIG", str(_VOICE_DIR / "models" / "en_GB-cori-medium.onnx.json")
+    piper_voice_config: str = _resolve_path(
+        "PIPER_VOICE_CONFIG", _VOICE_DIR / "models" / "en_GB-cori-medium.onnx.json"
     )
 
     # Audio
