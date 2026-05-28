@@ -63,8 +63,9 @@ exports.handler = async (event) => {
   const pipelineSummary = summarizePipeline(context.records || [], context.counts || {});
   const signalsSummary = summarizeSignals(context.hiringSignals || []);
   const styleSamples = summarizeStyleSamples(context.styleSamples || []);
-  // History is an array of { role: "user"|"assistant", text: "..." } — last ~10 turns.
-  const recentTurns = (Array.isArray(context.history) ? context.history : []).slice(-10);
+  const memoryFacts = summarizeMemoryFacts(context.memoryFacts || []);
+  // History is an array of { role: "user"|"assistant", text: "..." } — last ~20 turns.
+  const recentTurns = (Array.isArray(context.history) ? context.history : []).slice(-20);
 
   // ── 1. Ask Claude to route + answer ────────────────────────────────────
   let claudeResp;
@@ -82,7 +83,7 @@ exports.handler = async (event) => {
         // Lower tokens = faster end-of-stream from Claude.
         max_tokens: /\b(report|brief|rundown|briefing|recap)\b/i.test(transcript) ? 700 : 350,
         system: ROUTING_PROMPT,
-        messages: buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary, signalsSummary, styleSamples }),
+        messages: buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary, signalsSummary, styleSamples, memoryFacts }),
       }),
     });
   } catch (e) {
@@ -161,15 +162,16 @@ exports.handler = async (event) => {
       speak: decision.speak || "",
       action: actionResult,
       ui: decision.ui || null,
+      memory: Array.isArray(decision.memory) ? decision.memory.slice(0, 5) : null,
     }),
   };
 };
 
 // Build the messages array sent to Claude. Conversation history gives JARVIS memory
 // so phrases like "those contacts" and "that company" resolve naturally.
-function buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary, signalsSummary, styleSamples }) {
+function buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary, signalsSummary, styleSamples, memoryFacts }) {
   const msgs = [];
-  // Replay recent turns so Claude has conversation memory
+  // Replay recent turns so Claude has conversation memory across sessions
   for (const t of recentTurns) {
     if (!t || !t.text || !t.role) continue;
     msgs.push({ role: t.role === "assistant" ? "assistant" : "user", content: String(t.text).slice(0, 1200) });
@@ -180,11 +182,18 @@ function buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary
     content:
       `Travis just said: "${transcript}"\n\n` +
       `Active agent: ${context.activeAgent || "jarvis"}\n\n` +
+      (memoryFacts ? `=== LONG-TERM MEMORY ABOUT TRAVIS (durable facts you've learned) ===\n${memoryFacts}\n\n` : "") +
       `=== PIPELINE SNAPSHOT ===\n${pipelineSummary}\n\n` +
       `=== HIRING SIGNALS (live from elevate_pending_retrieval) ===\n${signalsSummary}\n\n` +
       (styleSamples ? `=== TRAVIS SPEECH SAMPLES (mirror this style) ===\n${styleSamples}\n` : "")
   });
   return msgs;
+}
+
+// Format the long-term memory facts into a compact block.
+function summarizeMemoryFacts(facts) {
+  if (!Array.isArray(facts) || !facts.length) return "";
+  return facts.slice(-30).map((f, i) => `${i + 1}. ${String(f).replace(/[\r\n]+/g, " ").trim()}`).join("\n");
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -229,8 +238,22 @@ You orchestrate. Each specialist has a name and a personality — call one up wh
 - SCRIBE — Reads RCRM notes + Outlook threads. Surfaces stalls and silences. (Phase 3 — for now, route here and say it's coming once Outlook is wired.) Set agent="scribe".
 - JARVIS (you) — Morning brief, "what should I do today", judgment calls, the big picture. Set agent="jarvis".
 
-═══ MEMORY ═══
-The conversation messages above ARE real. When Travis says "those contacts" / "that company" / "this list" / "why was it on there", resolve the reference from the conversation history and the hiring-signals snapshot. Never ask him to repeat himself if it's already in context.
+═══ MEMORY (two layers — use both) ═══
+
+SHORT-TERM (conversation history): The user/assistant turns above are real and persistent across days. When Travis says "those contacts" / "that company" / "this list" / "what we talked about yesterday" / "you mentioned X", resolve from the history. Never ask him to repeat himself if it's already in context.
+
+LONG-TERM (durable facts about Travis — appears later as "LONG-TERM MEMORY ABOUT TRAVIS"): Standing observations like preferences, ongoing initiatives, target sectors, accounts he cares about. Use these proactively to inform recommendations.
+
+GROWING MEMORY — you can ADD facts:
+When you learn something durable about Travis — a preference, a goal, an ongoing campaign, a person/account he cares about, a rule he's stated — emit a "memory" array on the response with 1-3 short fact strings. They get persisted and given back to you on every future call. Examples:
+  "memory": ["Travis prefers Windsor + Brampton focus over Toronto", "He's running a Q3 campaign on Tier 1 automotive Plant Managers", "Don't outreach finance VPs — not his ICP"]
+
+Rules for memory facts:
+- Only add facts when you genuinely learn something durable. Not every turn needs a fact.
+- Keep facts ≤200 chars, short and matter-of-fact.
+- Don't restate stuff that's already in the long-term memory block.
+- If Travis explicitly says "remember that X" — definitely add it.
+- If he contradicts a prior fact, add the new one (the system dedupes by text).
 
 ═══ ACTIONS — you can really do things ═══
 Set "action" when Travis explicitly asks for one:
@@ -309,7 +332,8 @@ Reply with ONLY a JSON object. No markdown fences, no preamble, no trailing text
   "agent": "jarvis" | "sarah" | "scout" | "queue" | "intel" | "scribe",
   "speak": "what to say out loud — in Travis's voice, specific, names names, no fluff",
   "ui": null | { "type": "stats_modal" | "daily_report", "title": "...", "metrics": [...], "rows": [...], "sections": [...] },
-  "action": null | { "type": "pull_queue" | "source_companies" | "log_note" | "enrich_contacts", "payload": {} }
+  "action": null | { "type": "pull_queue" | "source_companies" | "log_note" | "enrich_contacts", "payload": {} },
+  "memory": null | [ "short durable fact 1", "fact 2" ]
 }
 
 ═══ RULES ═══
