@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0525-A-PERSONA -->
+<!-- ELEVATE-2026-0528-D-JARVIS-CONTEXT -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -479,7 +479,84 @@
   .contact-card.submitted { opacity: 0.45; pointer-events: none; }
   .contact-card.submitted .btn-card-send { pointer-events: auto; }
 
+  /* ═══════════════════════════════════════════
+     JARVIS COMMAND CENTER (jrv-* prefix only)
+     New tab; does not touch existing rules above.
+     ═══════════════════════════════════════════ */
+  .jrv-wrap { display:grid; grid-template-columns: 220px 1fr 300px; gap:24px; min-height: calc(100vh - 220px); padding: 16px 0; }
+  @media (max-width: 1100px) { .jrv-wrap { grid-template-columns: 1fr; } }
+
+  .jrv-rail { background: var(--dark2); border:1px solid var(--border); border-radius:12px; padding:18px 16px; display:flex; flex-direction:column; gap:12px; }
+  .jrv-rail-title { color: var(--text-muted); font-size:11px; letter-spacing:0.14em; text-transform:uppercase; font-family: 'Consolas', monospace; margin-bottom:6px; }
+
+  .jrv-agent { background: var(--dark3); border:1px solid var(--border); border-radius:8px; padding:10px 12px; cursor:pointer; transition: all 0.2s; display:flex; align-items:center; gap:10px; }
+  .jrv-agent:hover { border-color: var(--gold); }
+  .jrv-agent.active { border-color: var(--gold); background: rgba(200,130,10,0.08); }
+  .jrv-agent-dot { width:8px; height:8px; border-radius:50%; background: var(--text-muted); flex-shrink:0; }
+  .jrv-agent.active .jrv-agent-dot { background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+  .jrv-agent-name { color: var(--text); font-size:12px; font-weight:600; letter-spacing:0.08em; font-family:'Consolas', monospace; }
+  .jrv-agent-role { color: var(--text-muted); font-size:10px; margin-top:2px; }
+  .jrv-agent-text { flex:1; }
+
+  .jrv-center { background: var(--dark2); border:1px solid var(--border); border-radius:12px; padding:24px; display:flex; flex-direction:column; align-items:center; justify-content:space-between; min-height:520px; position:relative; overflow:hidden; }
+  .jrv-status { display:flex; gap:14px; align-items:center; color: var(--text-muted); font-size:11px; letter-spacing:0.14em; font-family:'Consolas', monospace; }
+  .jrv-status .jrv-badge { padding:4px 10px; border:1px solid var(--border); border-radius:4px; }
+  .jrv-status .jrv-badge.live { color: #4ade80; border-color: rgba(74,222,128,0.4); }
+  .jrv-status .jrv-badge.demo { color: var(--gold); border-color: rgba(200,130,10,0.4); }
+
+  .jrv-sphere-host { width:380px; height:380px; max-width:100%; max-height:50vh; position:relative; }
+  .jrv-sphere-host canvas { display:block; width:100% !important; height:100% !important; }
+  .jrv-sphere-label { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color: var(--gold); font-family:'Consolas', monospace; font-size:11px; letter-spacing:0.2em; text-transform:uppercase; pointer-events:none; opacity:0.55; }
+
+  .jrv-voice { width:100%; max-width:600px; display:flex; flex-direction:column; gap:10px; }
+  .jrv-mic-btn { background: linear-gradient(180deg, var(--gold), var(--gold-light)); color:#000; font-weight:700; font-size:13px; letter-spacing:0.12em; border:none; border-radius:8px; padding:14px 24px; cursor:pointer; font-family:'Consolas', monospace; transition: all 0.2s; }
+  .jrv-mic-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(200,130,10,0.4); }
+  .jrv-mic-btn.listening { background: linear-gradient(180deg, #4ade80, #22c55e); animation: jrvPulseGreen 1.2s ease-in-out infinite; }
+  @keyframes jrvPulseGreen { 0%,100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.5); } 50% { box-shadow: 0 0 0 12px rgba(74,222,128,0); } }
+  .jrv-transcript { background: var(--dark3); border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-family:'Consolas', monospace; font-size:12px; color: var(--text-muted); min-height: 38px; }
+  .jrv-transcript-you { color: #93c5fd; }
+  .jrv-transcript-reply { color: var(--text); margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); }
+  .jrv-transcript-reply::before { content:"⊳ "; color: var(--gold); font-weight:700; }
+
+  .jrv-stage-row { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background: var(--dark3); border:1px solid var(--border); border-radius:6px; font-family:'Consolas', monospace; font-size:12px; transition: all 0.2s; cursor: default; }
+  .jrv-stage-row:hover { border-color: var(--gold); }
+  .jrv-stage-label { color: var(--text); letter-spacing:0.08em; }
+  .jrv-stage-count { color: var(--gold); font-weight:700; font-size:13px; }
+  .jrv-stage-row.empty .jrv-stage-count { color: var(--text-muted); }
+
+  .jrv-log { display:flex; flex-direction:column; gap:8px; max-height:380px; overflow-y:auto; }
+  .jrv-log-item { background: var(--dark3); border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:11px; line-height:1.4; }
+  .jrv-log-time { color: var(--text-muted); font-family:'Consolas', monospace; font-size:10px; letter-spacing:0.08em; }
+  .jrv-log-name { color: var(--text); font-weight:600; }
+  .jrv-log-meta { color: var(--text-muted); margin-top:2px; }
+  .jrv-log-empty { color: var(--text-muted); font-style:italic; font-size:11px; padding:8px; text-align:center; }
+
+  .jrv-greet { color: var(--text); font-size:18px; font-weight:600; letter-spacing:0.04em; margin-bottom:4px; }
+  .jrv-greet-sub { color: var(--text-muted); font-size:12px; font-family:'Consolas', monospace; letter-spacing:0.12em; }
+
+  /* Stats modal pop-up (rendered when the brain emits a ui directive) */
+  .jrv-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); backdrop-filter: blur(4px); display:flex; align-items:center; justify-content:center; z-index:9999; animation: jrvFadeIn 0.2s ease; }
+  @keyframes jrvFadeIn { from { opacity:0; } to { opacity:1; } }
+  .jrv-modal { background: var(--dark2); border:1px solid var(--gold); border-radius:14px; max-width:560px; width:90%; max-height:80vh; overflow:auto; box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(200,130,10,0.2); animation: jrvModalIn 0.25s cubic-bezier(0.2,0.9,0.3,1.2); }
+  @keyframes jrvModalIn { from { transform: scale(0.92); opacity:0; } to { transform: scale(1); opacity:1; } }
+  .jrv-modal-head { display:flex; align-items:center; justify-content:space-between; padding:18px 24px; border-bottom:1px solid var(--border); }
+  .jrv-modal-title { color: var(--gold); font-family:'Consolas', monospace; font-size:13px; letter-spacing:0.18em; text-transform:uppercase; }
+  .jrv-modal-close { background:none; border:none; color: var(--text-muted); font-size:24px; cursor:pointer; line-height:1; padding:0 4px; transition: color 0.15s; }
+  .jrv-modal-close:hover { color: var(--gold); }
+  .jrv-modal-body { padding:20px 24px; }
+  .jrv-modal-metrics { display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:12px; }
+  .jrv-metric { background: var(--dark3); border:1px solid var(--border); border-radius:10px; padding:14px; text-align:center; }
+  .jrv-metric-label { color: var(--text-muted); font-size:10px; letter-spacing:0.12em; text-transform:uppercase; font-family:'Consolas', monospace; }
+  .jrv-metric-value { color: var(--gold); font-size:28px; font-weight:700; margin-top:6px; line-height:1; }
+  .jrv-metric-trend { color: #4ade80; font-size:11px; margin-top:6px; font-family:'Consolas', monospace; }
+  .jrv-modal-rows { margin-top:16px; display:flex; flex-direction:column; gap:6px; }
+  .jrv-modal-row { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background: var(--dark3); border:1px solid var(--border); border-radius:6px; }
+  .jrv-modal-row-name { color: var(--text); font-size:13px; font-weight:600; }
+  .jrv-modal-row-meta { color: var(--text-muted); font-size:11px; margin-top:2px; }
+  .jrv-modal-row-badge { background: rgba(200,130,10,0.15); color: var(--gold); padding:4px 10px; border-radius:4px; font-size:10px; font-family:'Consolas', monospace; letter-spacing:0.1em; }
+
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <!-- BUILD_TOKEN: ELEVATE-SECRETS-REMOVED-1776279864 -->
 <!-- DEPLOY-TOKEN: 1776700335-rename-buttons -->
 </head>
@@ -510,15 +587,82 @@
   </header>
 
   <div class="tab-bar">
-    <button class="tab-btn active" onclick="showTab(&#39;queue&#39;,this)">Approval Queue</button>
+    <button class="tab-btn active" onclick="showTab(&#39;jarvis&#39;,this)">Dashboard</button>
+    <button class="tab-btn" onclick="showTab(&#39;queue&#39;,this)">Approval Queue</button>
     <button class="tab-btn" onclick="showTab(&#39;sales&#39;,this)">Sales Intelligence</button>
     <button class="tab-btn" onclick="showTab(&#39;sourcing&#39;,this)">AI Sourcing</button>
     <button class="tab-btn" onclick="showTab(&#39;import&#39;,this)">CSV Import</button>
     <button class="tab-btn" onclick="showTab(&#39;settings&#39;,this)">Settings</button>
   </div>
 
+  <!-- ══════════════ JARVIS COMMAND CENTER ══════════════ -->
+  <div id="tabJarvis" class="tab-content active">
+    <div style="padding: 4px 0 12px 0;">
+      <div class="jrv-greet" id="jrvGreet">Good day, Travis</div>
+      <div class="jrv-greet-sub">JARVIS COMMAND CENTER · <span id="jrvDateLine">—</span></div>
+    </div>
+    <div class="jrv-wrap">
+
+      <!-- LEFT RAIL: AGENTS -->
+      <aside class="jrv-rail">
+        <div class="jrv-rail-title">Agents</div>
+        <div class="jrv-agent active" data-agent="jarvis" onclick="jrvSelectAgent('jarvis', this)">
+          <span class="jrv-agent-dot"></span>
+          <div class="jrv-agent-text"><div class="jrv-agent-name">JARVIS</div><div class="jrv-agent-role">The brain</div></div>
+        </div>
+        <div class="jrv-agent" data-agent="scout" onclick="jrvSelectAgent('scout', this)">
+          <span class="jrv-agent-dot"></span>
+          <div class="jrv-agent-text"><div class="jrv-agent-name">SCOUT</div><div class="jrv-agent-role">Sourcing</div></div>
+        </div>
+        <div class="jrv-agent" data-agent="queue" onclick="jrvSelectAgent('queue', this)">
+          <span class="jrv-agent-dot"></span>
+          <div class="jrv-agent-text"><div class="jrv-agent-name">QUEUE</div><div class="jrv-agent-role">Pipeline</div></div>
+        </div>
+        <div class="jrv-agent" data-agent="intel" onclick="jrvSelectAgent('intel', this)">
+          <span class="jrv-agent-dot"></span>
+          <div class="jrv-agent-text"><div class="jrv-agent-name">INTEL</div><div class="jrv-agent-role">Market signals</div></div>
+        </div>
+        <div class="jrv-agent" data-agent="scribe" onclick="jrvSelectAgent('scribe', this)">
+          <span class="jrv-agent-dot"></span>
+          <div class="jrv-agent-text"><div class="jrv-agent-name">SCRIBE</div><div class="jrv-agent-role">Notes &amp; replies</div></div>
+        </div>
+      </aside>
+
+      <!-- CENTER: SPHERE + VOICE -->
+      <section class="jrv-center">
+        <div class="jrv-status">
+          <span class="jrv-badge" id="jrvFeedBadge">CONNECTING…</span>
+          <span id="jrvActiveAgentLabel">JARVIS · IDLE</span>
+        </div>
+        <div class="jrv-sphere-host" id="jrvSphereHost">
+          <div class="jrv-sphere-label" id="jrvSphereLabel">JARVIS</div>
+        </div>
+        <div class="jrv-voice">
+          <button class="jrv-mic-btn" id="jrvMicBtn" onclick="jrvTalk()">🎤  ACTIVATE JARVIS</button>
+          <div class="jrv-transcript" id="jrvTranscript">Tap the button above. Once active, say "Jarvis" anytime followed by your command.</div>
+        </div>
+      </section>
+
+      <!-- RIGHT RAIL: PIPELINE + RECENT -->
+      <aside class="jrv-rail">
+        <div class="jrv-rail-title">Pipeline</div>
+        <div class="jrv-stage-row" id="jrvStageNew"><span class="jrv-stage-label">NEW LEAD</span><span class="jrv-stage-count">—</span></div>
+        <div class="jrv-stage-row" id="jrvStageStaged"><span class="jrv-stage-label">STAGED</span><span class="jrv-stage-count">—</span></div>
+        <div class="jrv-stage-row" id="jrvStageEnrolled"><span class="jrv-stage-label">IN SEQUENCE</span><span class="jrv-stage-count">—</span></div>
+        <div class="jrv-stage-row" id="jrvStageApproved"><span class="jrv-stage-label">APPROVED</span><span class="jrv-stage-count">—</span></div>
+        <div class="jrv-stage-row" id="jrvStageActive"><span class="jrv-stage-label">ACTIVE CLIENT</span><span class="jrv-stage-count">—</span></div>
+
+        <div class="jrv-rail-title" style="margin-top:14px;">Recent</div>
+        <div class="jrv-log" id="jrvLog">
+          <div class="jrv-log-empty">Loading recent activity…</div>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+
   <!-- ══════════════ APPROVAL QUEUE ══════════════ -->
-  <div id="tabQueue" class="tab-content active">
+  <div id="tabQueue" class="tab-content">
     <div class="queue-header">
       <h2>Pending Approvals</h2>
       <div class="queue-stats">
@@ -1980,6 +2124,608 @@ if (importDropEl) {
     }
   });
 }
+
+// ═══════════════════════════════════════════
+// JARVIS COMMAND CENTER (Phase 1)
+// All state and functions scoped under jrv* to avoid collision with existing code.
+// ═══════════════════════════════════════════
+const JRV_CONFIG = {
+  DATA_URL: 'https://hook.us2.make.com/fbwggrimbt2iidjeckvs25sk61hej2lh', // Queue Fetch webhook → datastore 86836
+  SIGNALS_URL: 'https://hook.us2.make.com/u5omv41orexphg4nxldq6f3vvxp67ygu', // Pending Retrieval Fetch → datastore 97143
+  JARVIS_URL: '/.netlify/functions/jarvis', // Phase 2 brain. Empty string = force demo mode.
+  VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
+  HISTORY_MAX: 10, // turns of conversation memory passed to brain
+  EXCLUDE_LIST_IDS: ['166186', '198202'], // Active Client, DNU per brief
+  AGENT_COLORS: {
+    jarvis: 0xC8820A,  // gold (default)
+    scout:  0x60a5fa,  // blue
+    queue:  0x4ade80,  // green
+    intel:  0xa78bfa,  // purple
+    scribe: 0xf472b6   // pink
+  },
+  REPLIES: {
+    jarvis: 'Demo mode. I can route to SCOUT, QUEUE, INTEL, or SCRIBE. Phase 2 deploys the brain via a Netlify Function.',
+    scout:  'Last ZoomInfo pull surfaced 30 Ontario manufacturing prospects across Plant Manager, Production, HR/TA, Operations. Approval queue is loaded.',
+    queue:  'You have %APPROVED% approved this week and %ENROLLED% in active sequences. %NEW% new leads pending your decision.',
+    intel:  '12 fresh hiring signals tracked, top score 90 (Multimatic, Markham). NEXTSTAR Energy in Windsor flagged for EV battery production ramp.',
+    scribe: 'Phase 3 reads your RCRM notes and Outlook threads. For now, you can review pending decisions in the Approval Queue tab.'
+  }
+};
+
+let jrvActiveAgent = 'jarvis';
+let jrvSphereReady = false;
+let jrvSphereScene, jrvSphereCamera, jrvSphereRenderer, jrvSpherePoints, jrvSphereMaterial;
+let jrvSphereBasePositions = null;
+let jrvSphereTargetScale = 1.0;
+let jrvSphereCurrentScale = 1.0;
+
+function jrvInit() {
+  jrvSetGreeting();
+  jrvLoadStyleSamples();
+  jrvInitSphere();
+  jrvLoadQueueData();
+  jrvLoadHiringSignals();
+  jrvCheckBrain();
+}
+
+// Pull hiring signals from datastore 97143 so JARVIS has them in context for every command.
+function jrvLoadHiringSignals() {
+  if (!JRV_CONFIG.SIGNALS_URL) return;
+  fetch(JRV_CONFIG.SIGNALS_URL)
+    .then(r => r.ok ? r.json() : [])
+    .then(data => {
+      const arr = (Array.isArray(data) ? data : []).map(r => (r && r.aggregate) ? r.aggregate : r).filter(r => r && r.key);
+      jrvState.hiringSignals = arr;
+    })
+    .catch(() => { jrvState.hiringSignals = []; });
+}
+
+// Probe the JARVIS Function once on load so we can flip the status badge.
+function jrvCheckBrain() {
+  if (!JRV_CONFIG.JARVIS_URL) return;
+  fetch(JRV_CONFIG.JARVIS_URL, { method: 'GET' })
+    .then(r => r.ok ? r.json() : null)
+    .then(j => {
+      if (j && j.ok && j.hasKey) jrvState.brain = 'online';
+      else if (j && j.ok && !j.hasKey) jrvState.brain = 'no-key';
+      else jrvState.brain = 'offline';
+      jrvUpdateBrainBadge();
+    })
+    .catch(() => { jrvState.brain = 'offline'; jrvUpdateBrainBadge(); });
+}
+
+function jrvUpdateBrainBadge() {
+  const label = document.getElementById('jrvActiveAgentLabel');
+  if (!label) return;
+  const brain = jrvState.brain || 'unknown';
+  const tag = brain === 'online' ? 'BRAIN ONLINE' :
+              brain === 'no-key' ? 'BRAIN · KEY MISSING' :
+              brain === 'offline' ? 'BRAIN OFFLINE · DEMO' : '';
+  label.textContent = jrvActiveAgent.toUpperCase() + ' · ' + (tag || 'IDLE');
+}
+
+function jrvSetGreeting() {
+  const h = new Date().getHours();
+  const greet = h < 12 ? 'Good morning' : (h < 18 ? 'Good afternoon' : 'Good evening');
+  const el = document.getElementById('jrvGreet');
+  if (el) el.textContent = greet + ', Travis';
+  const d = new Date();
+  const dateLine = document.getElementById('jrvDateLine');
+  if (dateLine) dateLine.textContent = d.toLocaleDateString('en-CA', { weekday:'long', month:'short', day:'numeric' }).toUpperCase();
+}
+
+function jrvInitSphere() {
+  if (typeof THREE === 'undefined') {
+    console.warn('[JARVIS] Three.js not loaded — sphere disabled.');
+    return;
+  }
+  const host = document.getElementById('jrvSphereHost');
+  if (!host) return;
+  const w = host.clientWidth || 380, h = host.clientHeight || 380;
+
+  jrvSphereScene = new THREE.Scene();
+  jrvSphereCamera = new THREE.PerspectiveCamera(45, w/h, 1, 1000);
+  jrvSphereCamera.position.z = 240;
+  jrvSphereRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  jrvSphereRenderer.setSize(w, h);
+  jrvSphereRenderer.setClearColor(0x000000, 0);
+  host.appendChild(jrvSphereRenderer.domElement);
+
+  // Particle sphere
+  const N = 900;
+  const positions = new Float32Array(N * 3);
+  const radius = 80;
+  for (let i = 0; i < N; i++) {
+    const u = Math.random(), v = Math.random();
+    const theta = 2 * Math.PI * u;
+    const phi = Math.acos(2 * v - 1);
+    const r = radius * (0.94 + Math.random() * 0.10);
+    positions[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+    positions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+    positions[i*3+2] = r * Math.cos(phi);
+  }
+  jrvSphereBasePositions = positions.slice();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  jrvSphereMaterial = new THREE.PointsMaterial({
+    color: JRV_CONFIG.AGENT_COLORS.jarvis,
+    size: 2.2,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.9
+  });
+  jrvSpherePoints = new THREE.Points(geo, jrvSphereMaterial);
+  jrvSphereScene.add(jrvSpherePoints);
+
+  // Subtle inner core
+  const coreGeo = new THREE.BufferGeometry();
+  const coreN = 180;
+  const corePos = new Float32Array(coreN * 3);
+  for (let i = 0; i < coreN; i++) {
+    const u = Math.random(), v = Math.random();
+    const theta = 2 * Math.PI * u;
+    const phi = Math.acos(2 * v - 1);
+    const r = 30 + Math.random() * 12;
+    corePos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+    corePos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+    corePos[i*3+2] = r * Math.cos(phi);
+  }
+  coreGeo.setAttribute('position', new THREE.BufferAttribute(corePos, 3));
+  const coreMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.2, transparent: true, opacity: 0.4 });
+  const coreMesh = new THREE.Points(coreGeo, coreMat);
+  jrvSphereScene.add(coreMesh);
+
+  jrvSphereReady = true;
+  jrvSphereAnimate();
+  // Handle resize when tab becomes visible
+  window.addEventListener('resize', jrvOnResize);
+}
+
+function jrvOnResize() {
+  if (!jrvSphereReady) return;
+  const host = document.getElementById('jrvSphereHost');
+  if (!host) return;
+  const w = host.clientWidth || 380, h = host.clientHeight || 380;
+  jrvSphereCamera.aspect = w/h;
+  jrvSphereCamera.updateProjectionMatrix();
+  jrvSphereRenderer.setSize(w, h);
+}
+
+function jrvSphereAnimate() {
+  if (!jrvSphereReady) return;
+  requestAnimationFrame(jrvSphereAnimate);
+  jrvSpherePoints.rotation.y += 0.002;
+  jrvSpherePoints.rotation.x += 0.0008;
+  // ease scale toward target
+  jrvSphereCurrentScale += (jrvSphereTargetScale - jrvSphereCurrentScale) * 0.08;
+  jrvSpherePoints.scale.setScalar(jrvSphereCurrentScale);
+  jrvSphereRenderer.render(jrvSphereScene, jrvSphereCamera);
+}
+
+function jrvSelectAgent(name, btn) {
+  jrvActiveAgent = name;
+  document.querySelectorAll('.jrv-agent').forEach(a => a.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const label = document.getElementById('jrvActiveAgentLabel');
+  if (label) label.textContent = name.toUpperCase() + ' · IDLE';
+  const sphereLabel = document.getElementById('jrvSphereLabel');
+  if (sphereLabel) sphereLabel.textContent = name.toUpperCase();
+  if (jrvSphereMaterial) jrvSphereMaterial.color.setHex(JRV_CONFIG.AGENT_COLORS[name] || JRV_CONFIG.AGENT_COLORS.jarvis);
+}
+
+// ── Always-on wake-word listening (toggle via mic button) ────────────────
+// Travis taps once to grant mic permission + start the engine. From then on,
+// JARVIS listens passively. It only responds when it hears its name.
+// Special greetings ("Good morning Jarvis", etc.) get hardcoded snappy replies.
+// After any interaction, a 15-second follow-up window opens so the next sentence
+// works without saying "Jarvis" again. Recognition restarts automatically on
+// the periodic onend events the Web Speech API fires.
+
+const JRV_WAKE_RE = /\bjarvi[sz]\b/i; // tolerate "jarvis"/"jarviz" mishearings
+const JRV_FOLLOWUP_MS = 15000;
+
+function jrvTalk() {
+  if (jrvState.alwaysOn) { jrvStopAlwaysOn(); }
+  else { jrvStartAlwaysOn(); }
+}
+
+function jrvStartAlwaysOn() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = document.getElementById('jrvMicBtn');
+  const tx = document.getElementById('jrvTranscript');
+  if (!SR) {
+    if (tx) tx.innerHTML = '<span class="jrv-transcript-you">Voice is only supported in Chrome or Edge. Open the dashboard in one of those.</span>';
+    return;
+  }
+  const rec = new SR();
+  rec.lang = 'en-US';
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+
+  jrvState.recognition = rec;
+  jrvState.alwaysOn = true;
+  jrvState.followUpUntil = 0;
+  jrvState.consumedTranscripts = new Set();
+
+  if (btn) { btn.classList.add('listening'); btn.textContent = '◉  LISTENING · Tap to pause'; }
+  if (tx) tx.innerHTML = '<span class="jrv-transcript-you" style="opacity:0.7">Say "Jarvis" anytime followed by what you need.</span>';
+  jrvSphereTargetScale = 1.05;
+
+  rec.onresult = (evt) => {
+    let finalText = '';
+    for (let i = evt.resultIndex; i < evt.results.length; i++) {
+      if (evt.results[i].isFinal) finalText += evt.results[i][0].transcript + ' ';
+    }
+    finalText = finalText.trim().toLowerCase();
+    if (!finalText) return;
+    // Don't reprocess the same chunk if Chrome re-emits it on resume
+    if (jrvState.consumedTranscripts.has(finalText)) return;
+    jrvState.consumedTranscripts.add(finalText);
+    // Trim memory occasionally
+    if (jrvState.consumedTranscripts.size > 80) jrvState.consumedTranscripts.clear();
+
+    const inFollowUp = Date.now() < jrvState.followUpUntil;
+    const wakeMatch = JRV_WAKE_RE.test(finalText);
+    if (!wakeMatch && !inFollowUp) return;
+
+    // Greeting interceptor — only fires when wake word is present
+    if (wakeMatch) {
+      const period = jrvMatchGreeting(finalText);
+      if (period) { jrvProcessGreeting(period, finalText); return; }
+    }
+
+    // Strip the wake word from the command if present, then handle
+    const command = finalText.replace(/\bjarvi[sz]\b/gi, '').replace(/^[\s,.!?]+/, '').trim();
+    if (!command) return; // they just said the name
+    jrvProcessCommand(command);
+  };
+
+  rec.onerror = (e) => {
+    if (e.error === 'no-speech' || e.error === 'audio-capture') return;
+    if (e.error === 'not-allowed') {
+      if (tx) tx.innerHTML = '<span class="jrv-transcript-you">Microphone permission denied. Allow mic access in the browser address bar, then tap activate again.</span>';
+      jrvStopAlwaysOn();
+      return;
+    }
+    console.warn('[JARVIS] speech recognition error:', e.error);
+  };
+
+  rec.onend = () => {
+    if (jrvState.alwaysOn) {
+      try { rec.start(); } catch (_) { /* already running on some browsers */ }
+    }
+  };
+
+  try { rec.start(); }
+  catch (e) {
+    console.warn('[JARVIS] could not start recognition:', e);
+    jrvState.alwaysOn = false;
+    if (btn) { btn.classList.remove('listening'); btn.textContent = '🎤  ACTIVATE JARVIS'; }
+  }
+}
+
+function jrvStopAlwaysOn() {
+  jrvState.alwaysOn = false;
+  if (jrvState.recognition) {
+    try { jrvState.recognition.stop(); } catch (_) {}
+    jrvState.recognition = null;
+  }
+  const btn = document.getElementById('jrvMicBtn');
+  const tx = document.getElementById('jrvTranscript');
+  if (btn) { btn.classList.remove('listening'); btn.textContent = '🎤  ACTIVATE JARVIS'; }
+  if (tx) tx.innerHTML = '<span class="jrv-transcript-you">Voice paused. Tap above to listen for "Jarvis".</span>';
+  jrvSphereTargetScale = 1.0;
+}
+
+function jrvMatchGreeting(text) {
+  if (/\bgood\s+morning\b/.test(text)) return 'morning';
+  if (/\bgood\s+afternoon\b/.test(text)) return 'afternoon';
+  if (/\bgood\s+evening\b/.test(text)) return 'evening';
+  if (/\bgood\s+night\b/.test(text)) return 'night';
+  return null;
+}
+
+function jrvProcessGreeting(period, originalText) {
+  jrvCaptureStyle(originalText);
+  const reply = "Good " + period + ", Travis. Great day for sales. Let's kick ass today!";
+  const tx = document.getElementById('jrvTranscript');
+  if (tx) {
+    tx.innerHTML = '<span class="jrv-transcript-you">You: "' + escapeHtml(originalText) + '"</span>' +
+                   '<div class="jrv-transcript-reply">' + escapeHtml(reply) + '</div>';
+  }
+  jrvSphereTargetScale = 1.25;
+  setTimeout(() => { jrvSphereTargetScale = 1.05; }, 1200);
+  jrvSpeakOut(reply);
+  jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
+}
+
+function jrvProcessCommand(command) {
+  jrvCaptureStyle(command);
+  // Push to conversation memory so the brain can resolve "those contacts", "that company", etc.
+  jrvState.history.push({ role: 'user', text: command });
+  if (jrvState.history.length > JRV_CONFIG.HISTORY_MAX * 2) jrvState.history = jrvState.history.slice(-JRV_CONFIG.HISTORY_MAX * 2);
+
+  const tx = document.getElementById('jrvTranscript');
+  if (tx) {
+    tx.innerHTML = '<span class="jrv-transcript-you">You: "' + escapeHtml(command) + '"</span>' +
+                   '<div class="jrv-transcript-reply" style="opacity:0.55">Thinking…</div>';
+  }
+  jrvSphereTargetScale = 1.18;
+
+  const context = {
+    activeAgent: jrvActiveAgent,
+    counts: jrvState.counts,
+    records: jrvState.records.slice(0, 30).map(r => ({ data: r.data || r })),
+    hiringSignals: jrvState.hiringSignals.slice(0, 30),
+    history: jrvState.history.slice(-JRV_CONFIG.HISTORY_MAX),
+    styleSamples: jrvState.styleSamples
+  };
+
+  const callBrain = JRV_CONFIG.JARVIS_URL
+    ? fetch(JRV_CONFIG.JARVIS_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ transcript: command, context })
+      }).then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+    : Promise.reject(new Error('no JARVIS_URL'));
+
+  callBrain
+    .then(j => {
+      const agent = j.agent || jrvActiveAgent;
+      const speak = j.speak || '(no reply)';
+      // Save assistant turn to memory
+      jrvState.history.push({ role: 'assistant', text: speak });
+      // Sync sphere/agent color with whatever the brain routed to
+      if (agent !== jrvActiveAgent) {
+        const target = document.querySelector('.jrv-agent[data-agent="' + agent + '"]');
+        if (target) jrvSelectAgent(agent, target);
+      }
+      if (tx) {
+        const agentTag = agent && agent !== 'jarvis' ? `<span style="color:var(--gold);font-family:'Consolas',monospace;font-size:10px;letter-spacing:0.12em;">[${agent.toUpperCase()}]</span> ` : '';
+        tx.innerHTML = '<span class="jrv-transcript-you">You: "' + escapeHtml(command) + '"</span>' +
+                       '<div class="jrv-transcript-reply">' + agentTag + escapeHtml(speak) + '</div>';
+      }
+      // Render any UI artifact the brain asked for (stats modal, etc.)
+      if (j.ui && typeof j.ui === 'object') jrvShowUI(j.ui);
+      // Surface action receipt (success or "webhook not wired")
+      if (j.action) jrvShowActionToast(j.action);
+      jrvSpeakOut(speak);
+      jrvSphereTargetScale = 1.05;
+      jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
+    })
+    .catch(() => {
+      const tpl = JRV_CONFIG.REPLIES[jrvActiveAgent] || JRV_CONFIG.REPLIES.jarvis;
+      const reply = tpl
+        .replace('%APPROVED%', jrvState.counts.approved)
+        .replace('%ENROLLED%', jrvState.counts.enrolled)
+        .replace('%NEW%', jrvState.counts.new);
+      jrvState.history.push({ role: 'assistant', text: reply });
+      if (tx) {
+        tx.innerHTML = '<span class="jrv-transcript-you">You: "' + escapeHtml(command) + '"</span>' +
+                       '<div class="jrv-transcript-reply">' + escapeHtml(reply) + ' <span style="opacity:0.6">(brain unreachable · demo reply)</span></div>';
+      }
+      jrvSpeakOut(reply);
+      jrvSphereTargetScale = 1.05;
+      jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
+    });
+}
+
+// ── UI directive renderers ─────────────────────────────────────────────
+function jrvShowUI(ui) {
+  if (!ui || !ui.type) return;
+  if (ui.type === 'stats_modal') jrvShowStatsModal(ui);
+}
+
+function jrvShowStatsModal(ui) {
+  jrvCloseModal();
+  const overlay = document.createElement('div');
+  overlay.className = 'jrv-modal-overlay';
+  overlay.id = 'jrvModalOverlay';
+  overlay.onclick = (e) => { if (e.target === overlay) jrvCloseModal(); };
+  const metricsHtml = (Array.isArray(ui.metrics) ? ui.metrics : []).map(m => `
+    <div class="jrv-metric">
+      <div class="jrv-metric-label">${escapeHtml(m.label || '')}</div>
+      <div class="jrv-metric-value">${escapeHtml(String(m.value || '—'))}</div>
+      ${m.trend ? `<div class="jrv-metric-trend">${escapeHtml(m.trend)}</div>` : ''}
+    </div>`).join('');
+  const rowsHtml = (Array.isArray(ui.rows) ? ui.rows : []).map(r => `
+    <div class="jrv-modal-row">
+      <div>
+        <div class="jrv-modal-row-name">${escapeHtml(r.name || '')}</div>
+        ${r.meta ? `<div class="jrv-modal-row-meta">${escapeHtml(r.meta)}</div>` : ''}
+      </div>
+      ${r.badge ? `<span class="jrv-modal-row-badge">${escapeHtml(r.badge)}</span>` : ''}
+    </div>`).join('');
+  overlay.innerHTML = `
+    <div class="jrv-modal">
+      <div class="jrv-modal-head">
+        <div class="jrv-modal-title">${escapeHtml(ui.title || 'Stats')}</div>
+        <button class="jrv-modal-close" onclick="jrvCloseModal()">×</button>
+      </div>
+      <div class="jrv-modal-body">
+        ${metricsHtml ? `<div class="jrv-modal-metrics">${metricsHtml}</div>` : ''}
+        ${rowsHtml ? `<div class="jrv-modal-rows">${rowsHtml}</div>` : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  // Escape key closes the modal
+  document.addEventListener('keydown', jrvModalKey);
+}
+
+function jrvCloseModal() {
+  const el = document.getElementById('jrvModalOverlay');
+  if (el) el.remove();
+  document.removeEventListener('keydown', jrvModalKey);
+}
+
+function jrvModalKey(e) { if (e.key === 'Escape') jrvCloseModal(); }
+
+function jrvShowActionToast(action) {
+  if (!action || !action.type) return;
+  const tx = document.getElementById('jrvTranscript');
+  if (!tx) return;
+  const note = action.ok ? `✓ ${action.type} fired` :
+               action.error ? `⚠ ${action.type}: ${action.error}` :
+               `${action.type} queued`;
+  const span = document.createElement('div');
+  span.style.cssText = 'margin-top:6px;font-size:10px;color:var(--text-muted);font-family:\'Consolas\',monospace;letter-spacing:0.08em;';
+  span.textContent = note;
+  tx.appendChild(span);
+}
+
+// Speak text via browser SpeechSynthesis (Phase 5 swaps this for ElevenLabs)
+function jrvSpeakOut(text) {
+  try {
+    if (!('speechSynthesis' in window)) return;
+    if (!text) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.0;
+    u.pitch = 0.95;
+    u.volume = 0.85;
+    // Prefer a deeper male voice if one's available
+    const voices = speechSynthesis.getVoices();
+    const pick = voices.find(v => /male/i.test(v.name) && /en/i.test(v.lang)) ||
+                 voices.find(v => /david|daniel|google uk english male/i.test(v.name)) ||
+                 voices.find(v => /en-GB|en-US/i.test(v.lang));
+    if (pick) u.voice = pick;
+    speechSynthesis.speak(u);
+  } catch (_) { /* mute speech failures */ }
+}
+
+const jrvState = {
+  counts: { new:0, staged:0, enrolled:0, approved:0, active:0 },
+  records: [],
+  hiringSignals: [],
+  history: [], // conversation memory: [{ role: "user"|"assistant", text }]
+  brain: null,
+  alwaysOn: false,
+  recognition: null,
+  followUpUntil: 0,
+  consumedTranscripts: null,
+  styleSamples: [] // rolling buffer of Travis's recent transcripts (max 25)
+};
+
+// ── Style learning loop ─────────────────────────────────────────────────
+// Capture every transcript Travis actually says so the brain can mirror it.
+// Persists to localStorage so JARVIS gets smarter across sessions.
+const JRV_STYLE_KEY = 'jrv_style_samples_v1';
+const JRV_STYLE_MAX = 25;
+
+function jrvLoadStyleSamples() {
+  try {
+    const raw = localStorage.getItem(JRV_STYLE_KEY);
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) jrvState.styleSamples = arr.slice(-JRV_STYLE_MAX);
+  } catch (_) { /* ignore storage errors */ }
+}
+
+function jrvCaptureStyle(transcript) {
+  if (!transcript) return;
+  const clean = String(transcript).trim();
+  if (clean.length < 4 || clean.length > 240) return; // skip noise + monologues
+  jrvState.styleSamples.push(clean);
+  if (jrvState.styleSamples.length > JRV_STYLE_MAX) {
+    jrvState.styleSamples = jrvState.styleSamples.slice(-JRV_STYLE_MAX);
+  }
+  try { localStorage.setItem(JRV_STYLE_KEY, JSON.stringify(jrvState.styleSamples)); } catch (_) {}
+}
+
+function jrvLoadQueueData() {
+  fetch(JRV_CONFIG.DATA_URL)
+    .then(r => r.json())
+    .then(data => {
+      const records = (Array.isArray(data) ? data : []).map(r => (r && r.aggregate) ? r.aggregate : r).filter(r => r && r.key && r.data);
+      jrvState.records = records;
+      jrvComputeCounts(records);
+      jrvRenderStages();
+      jrvRenderRecent(records);
+      jrvSetFeedBadge(true, records.length);
+    })
+    .catch(err => {
+      console.warn('[JARVIS] Queue fetch failed:', err);
+      jrvSetFeedBadge(false, 0);
+      jrvRenderStages(); // shows dashes
+      const log = document.getElementById('jrvLog');
+      if (log) log.innerHTML = '<div class="jrv-log-empty">Demo mode — live feed unavailable</div>';
+    });
+}
+
+function jrvComputeCounts(records) {
+  const c = { new:0, staged:0, enrolled:0, approved:0, active:0 };
+  for (const r of records) {
+    const d = r.data || {};
+    if (d.is_client === true || d.is_client === 'true') { c.active++; continue; }
+    if (d.in_sequence === true || d.in_sequence === 'true') { c.enrolled++; continue; }
+    if (d.decision === 'approve' || d.decision === 'approved') { c.approved++; continue; }
+    if (d.lead_source === 'zoominfo_intent' && d.decision === 'pending') { c.staged++; continue; }
+    if (d.decision === 'pending') { c.new++; }
+  }
+  jrvState.counts = c;
+}
+
+function jrvRenderStages() {
+  const map = { new:'jrvStageNew', staged:'jrvStageStaged', enrolled:'jrvStageEnrolled', approved:'jrvStageApproved', active:'jrvStageActive' };
+  for (const k of Object.keys(map)) {
+    const row = document.getElementById(map[k]);
+    if (!row) continue;
+    const countEl = row.querySelector('.jrv-stage-count');
+    const v = jrvState.counts[k];
+    if (countEl) countEl.textContent = (v == null ? '—' : v);
+    row.classList.toggle('empty', !v);
+  }
+}
+
+function jrvRenderRecent(records) {
+  const log = document.getElementById('jrvLog');
+  if (!log) return;
+  if (!records.length) { log.innerHTML = '<div class="jrv-log-empty">No recent activity</div>'; return; }
+  const sorted = records.slice().sort((a,b) => {
+    const ta = new Date(a.data.added_at || a.data.queue_date || 0).getTime();
+    const tb = new Date(b.data.added_at || b.data.queue_date || 0).getTime();
+    return tb - ta;
+  });
+  log.innerHTML = sorted.slice(0, 8).map(r => {
+    const d = r.data;
+    const name = (d.contact_name || '').trim() || '(no name)';
+    const co = d.company_name || '';
+    const stamp = jrvFormatStamp(d.added_at || d.queue_date);
+    const city = d.contact_city || d.company_city || '';
+    return '<div class="jrv-log-item">' +
+      '<div class="jrv-log-time">' + escapeHtml(stamp) + '</div>' +
+      '<div><span class="jrv-log-name">' + escapeHtml(name) + '</span></div>' +
+      '<div class="jrv-log-meta">' + escapeHtml(co) + (city ? ' · ' + escapeHtml(city) : '') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function jrvFormatStamp(s) {
+  if (!s) return '—';
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return '—';
+  const now = new Date();
+  const diff = (now - d) / 86400000;
+  if (diff < 1) return 'TODAY ' + d.toLocaleTimeString('en-CA', { hour:'2-digit', minute:'2-digit' });
+  if (diff < 2) return 'YESTERDAY';
+  if (diff < 7) return Math.floor(diff) + 'D AGO';
+  return d.toLocaleDateString('en-CA', { month:'short', day:'numeric' }).toUpperCase();
+}
+
+function jrvSetFeedBadge(live, count) {
+  const el = document.getElementById('jrvFeedBadge');
+  if (!el) return;
+  if (live) { el.textContent = 'LIVE FEED · ' + count + ' RECORDS'; el.className = 'jrv-badge live'; }
+  else { el.textContent = 'DEMO MODE'; el.className = 'jrv-badge demo'; }
+}
+
+// Boot when DOM ready (auth gate runs first; JARVIS lives inside the protected page)
+document.addEventListener('DOMContentLoaded', function() {
+  // Defer until Three.js is loaded (CDN). If THREE shows up later, init then.
+  if (typeof THREE !== 'undefined') { jrvInit(); }
+  else { const tries = setInterval(() => { if (typeof THREE !== 'undefined') { clearInterval(tries); jrvInit(); } }, 100); setTimeout(() => clearInterval(tries), 5000); }
+});
 </script>
 
 

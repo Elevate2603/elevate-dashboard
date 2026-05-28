@@ -1,0 +1,21 @@
+# Netlify build + functions config for Elevate dashboard
+# Static site (no build step) — index.html is published as-is.
+# Functions live in netlify/functions/.
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# Static asset cache headers (long for static images, short for index.html so deploys appear instantly)
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

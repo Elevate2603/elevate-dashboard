@@ -19,3 +19,9 @@ logs/
 scratch/
 *.bak
 .backups/
+.claude/
+docs/
+Jarvis Docs/
+SCRIBE_EXPORT.md
+SESSION_HANDOFF.md
+PROPOSED_SCENARIO_CHANGES.md
