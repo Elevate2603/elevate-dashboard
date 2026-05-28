@@ -78,7 +78,9 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 700,
+        // Daily report needs room for sections + WHYs; everything else can be much tighter.
+        // Lower tokens = faster end-of-stream from Claude.
+        max_tokens: /\b(report|brief|rundown|briefing|recap)\b/i.test(transcript) ? 700 : 350,
         system: ROUTING_PROMPT,
         messages: buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary, signalsSummary, styleSamples }),
       }),

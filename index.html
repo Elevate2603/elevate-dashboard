@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-Q-FAST -->
+<!-- ELEVATE-2026-0528-R-FAST-STOP -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2212,10 +2212,39 @@ function jrvInit() {
   jrvCheckBrain();
   jrvPrimeVoices();
   jrvSetupAutoWake();
+  jrvSetupInstantStop();
 }
 
 // Auto-wake: try to start mic on load. Browsers usually require a user gesture
 // for the first call, so if it fails, wake on the first click anywhere on the page.
+// ESC key + sphere click → instant interrupt. Zero-latency, no voice recognition involved.
+// Most reliable way to stop JARVIS mid-sentence when echo is interfering with the mic.
+function jrvSetupInstantStop() {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const speaking = (typeof speechSynthesis !== 'undefined' && speechSynthesis.speaking) || jrvState.speaking;
+      if (speaking) {
+        e.preventDefault();
+        jrvInterruptSpeech();
+        jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
+      }
+    }
+  }, true);
+  // Clicking the sphere itself also stops him
+  const sphereHost = document.getElementById('jrvSphereHost');
+  if (sphereHost) {
+    sphereHost.style.cursor = 'pointer';
+    sphereHost.title = 'Click to stop JARVIS';
+    sphereHost.addEventListener('click', () => {
+      const speaking = (typeof speechSynthesis !== 'undefined' && speechSynthesis.speaking) || jrvState.speaking;
+      if (speaking) {
+        jrvInterruptSpeech();
+        jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
+      }
+    });
+  }
+}
+
 function jrvSetupAutoWake() {
   jrvSetIndicator('waiting', 'Tap anywhere to wake');
   // First try immediately — works on subsequent visits where permission is remembered
