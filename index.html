@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-F-JARVIS-AUTO -->
+<!-- ELEVATE-2026-0528-G-JARVIS-WAKE-DEBUG -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2390,7 +2390,9 @@ function jrvSelectAgent(name, btn) {
 // works without saying "Jarvis" again. Recognition restarts automatically on
 // the periodic onend events the Web Speech API fires.
 
-const JRV_WAKE_RE = /\bjarvi[sz]\b/i; // tolerate "jarvis"/"jarviz" mishearings
+// Wake-word regex: tolerate every common Chrome mishearing for "Jarvis"
+// (jarviss, jarvys, jervis, jarvic, jarvist, jarviz, garvis, harvis)
+const JRV_WAKE_RE = /\b(j[aeo]rv[iy]s+t?|g[aeo]rv[iy]s+|h[ae]rv[iy]s+|jervic)\b/i;
 const JRV_FOLLOWUP_MS = 15000;
 
 function jrvTalk() {
@@ -2424,20 +2426,42 @@ function jrvStartAlwaysOn() {
 
   rec.onresult = (evt) => {
     let finalText = '';
+    let interimText = '';
     for (let i = evt.resultIndex; i < evt.results.length; i++) {
-      if (evt.results[i].isFinal) finalText += evt.results[i][0].transcript + ' ';
+      const result = evt.results[i];
+      if (result.isFinal) finalText += result[0].transcript + ' ';
+      else interimText += result[0].transcript + ' ';
     }
     finalText = finalText.trim().toLowerCase();
+    interimText = interimText.trim();
+
+    // Live preview — show what Chrome is hearing, in real time.
+    // This is the diagnostic that tells Travis whether the mic is picking him up at all.
+    const txEl = document.getElementById('jrvTranscript');
+    if (txEl && interimText && !finalText) {
+      const followUp = Date.now() < jrvState.followUpUntil;
+      const wakeHint = followUp ? '<span style="opacity:0.5">[follow-up window]</span>' : '<span style="opacity:0.5">listening…</span>';
+      txEl.innerHTML = wakeHint + ' <span class="jrv-transcript-you" style="opacity:0.7;font-style:italic;">' + escapeHtml(interimText) + '</span>';
+    }
+
     if (!finalText) return;
+    // Log every final transcript so the browser console shows what Chrome decided he said
+    try { console.log('[JARVIS heard]', finalText, 'wake-match:', JRV_WAKE_RE.test(finalText)); } catch (_) {}
     // Don't reprocess the same chunk if Chrome re-emits it on resume
     if (jrvState.consumedTranscripts.has(finalText)) return;
     jrvState.consumedTranscripts.add(finalText);
-    // Trim memory occasionally
     if (jrvState.consumedTranscripts.size > 80) jrvState.consumedTranscripts.clear();
 
     const inFollowUp = Date.now() < jrvState.followUpUntil;
     const wakeMatch = JRV_WAKE_RE.test(finalText);
-    if (!wakeMatch && !inFollowUp) return;
+
+    if (!wakeMatch && !inFollowUp) {
+      // Show what was heard so Travis can debug — fades after 2s
+      if (txEl) {
+        txEl.innerHTML = '<span style="opacity:0.45;font-style:italic;">Heard: "' + escapeHtml(finalText) + '" (no wake word)</span>';
+      }
+      return;
+    }
 
     // Greeting interceptor — only fires when wake word is present
     if (wakeMatch) {
@@ -2446,7 +2470,7 @@ function jrvStartAlwaysOn() {
     }
 
     // Strip the wake word from the command if present, then handle
-    const command = finalText.replace(/\bjarvi[sz]\b/gi, '').replace(/^[\s,.!?]+/, '').trim();
+    const command = finalText.replace(JRV_WAKE_RE, '').replace(/^[\s,.!?]+/, '').trim();
     if (!command) return; // they just said the name
     jrvProcessCommand(command);
   };
