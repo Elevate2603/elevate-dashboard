@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-J-JARVIS-FLAT -->
+<!-- ELEVATE-2026-0528-K-JARVIS-BIG -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2299,7 +2299,7 @@ function jrvInitSphere() {
 
   jrvSphereScene = new THREE.Scene();
   jrvSphereCamera = new THREE.PerspectiveCamera(45, w/h, 1, 1000);
-  jrvSphereCamera.position.z = 400;
+  jrvSphereCamera.position.z = 530;
   jrvSphereRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
   jrvSphereRenderer.setSize(w, h);
   jrvSphereRenderer.setClearColor(0x000000, 0);
@@ -2311,10 +2311,10 @@ function jrvInitSphere() {
   jrvSphereScene.add(jrvSphereInner);
   jrvSphereScene.add(jrvSphereOuter);
 
-  // ── LAYER 1 — tight defined particle sphere at center (original size) ──
+  // ── LAYER 1 — tight defined particle sphere at center (2x original) ──
   const N = 900;
   const positions = new Float32Array(N * 3);
-  const baseRadius = 80;
+  const baseRadius = 160;
   for (let i = 0; i < N; i++) {
     const u = Math.random(), v = Math.random();
     const theta = 2 * Math.PI * u;
@@ -2328,7 +2328,7 @@ function jrvInitSphere() {
   const sphereGeo = new THREE.BufferGeometry();
   sphereGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   jrvSphereMaterial = new THREE.PointsMaterial({
-    color: gold, size: 2.1, sizeAttenuation: true, transparent: true, opacity: 0.95
+    color: gold, size: 2.5, sizeAttenuation: true, transparent: true, opacity: 0.85
   });
   jrvSpherePoints = new THREE.Points(sphereGeo, jrvSphereMaterial);
   jrvSphereInner.add(jrvSpherePoints);
@@ -2336,8 +2336,8 @@ function jrvInitSphere() {
   // ── LAYER 2 — two bright partial-arc segments at opposite sides ──
   // Each arc spans ~60° on the XY ring at radius 58. Stacked as a line + an
   // additive-blended points layer to create a glowing presence without textures.
-  const arcRadius = 102;
-  const arcSegments = 32;
+  const arcRadius = 178;
+  const arcSegments = 40;
   for (const startDeg of [30, 210]) {
     const arcPos = [];
     for (let i = 0; i <= arcSegments; i++) {
@@ -2357,8 +2357,8 @@ function jrvInitSphere() {
   }
 
   // ── LAYER 3 — dashed ring at mid radius ──
-  const dashRadius = 125;
-  const dashTotal = 64;
+  const dashRadius = 196;
+  const dashTotal = 72;
   jrvSphereDashMat = new THREE.LineBasicMaterial({ color: gold, transparent: true, opacity: 0.55 });
   for (let i = 0; i < dashTotal; i++) {
     if (i % 2 !== 0) continue; // skip every other segment = dashed look
@@ -2373,8 +2373,8 @@ function jrvInitSphere() {
   }
 
   // ── LAYER 4 — outer dotted ring ──
-  const dotRadius = 150;
-  const dotCount = 80;
+  const dotRadius = 210;
+  const dotCount = 96;
   const dotPos = new Float32Array(dotCount * 3);
   for (let i = 0; i < dotCount; i++) {
     const a = (i / dotCount) * Math.PI * 2;
@@ -2388,9 +2388,9 @@ function jrvInitSphere() {
   jrvSphereOuter.add(new THREE.Points(dotGeo, jrvSphereDotMat));
 
   // ── LAYER 5 — spokes / tick marks radiating outward around the full ring ──
-  const spokeCount = 40;
-  const spokeInner = 156;
-  const spokeOuter = 166;
+  const spokeCount = 48;
+  const spokeInner = 217;
+  const spokeOuter = 230;
   const spokeGeo = new THREE.BufferGeometry();
   const spokePos = new Float32Array(spokeCount * 2 * 3);
   for (let i = 0; i < spokeCount; i++) {
@@ -2410,8 +2410,8 @@ function jrvInitSphere() {
   const coreGeo = new THREE.BufferGeometry();
   coreGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
   jrvSphereCoreMat = new THREE.PointsMaterial({
-    color: gold, size: 18, sizeAttenuation: true, transparent: true,
-    opacity: 0.0, blending: THREE.AdditiveBlending
+    color: gold, size: 36, sizeAttenuation: true, transparent: true,
+    opacity: 0.32, blending: THREE.AdditiveBlending
   });
   jrvSphereCore = new THREE.Points(coreGeo, jrvSphereCoreMat);
   jrvSphereInner.add(jrvSphereCore);
@@ -2434,37 +2434,52 @@ function jrvOnResize() {
 function jrvSphereAnimate() {
   if (!jrvSphereReady) return;
   requestAnimationFrame(jrvSphereAnimate);
+  const now = performance.now() * 0.001;
   const speakBoost = jrvState.speaking ? 1.7 : 1.0;
+
   // Counter-rotation — Z axis ONLY so the rings spin in plane, never tilt
   jrvSphereInner.rotation.z += 0.0028 * speakBoost;
   jrvSphereOuter.rotation.z -= 0.0020 * speakBoost;
-  // The center sphere is rotationally symmetric, so a slow Y spin on it keeps
-  // the particle cluster feeling alive without tilting any ring layers
-  if (jrvSpherePoints) {
-    jrvSpherePoints.rotation.y += 0.0014 * speakBoost;
-  }
-  // Brief momentary scale emphasis (greetings/ack); decays back to 1.0
+  if (jrvSpherePoints) jrvSpherePoints.rotation.y += 0.0014 * speakBoost;
+
+  // Momentary scale emphasis (greetings/ack); decays back to 1.0
   jrvSphereCurrentScale += (jrvSphereTargetScale - jrvSphereCurrentScale) * 0.08;
   if (jrvSphereInner) jrvSphereInner.scale.setScalar(jrvSphereCurrentScale);
 
-  // Talking pulse — particle scatter + core ignite/throb
+  // Talking pulse — full-sphere expansion + brightness, plus core throb
   if (jrvSpherePoints && jrvSphereBasePositions) {
-    const targetScatter = jrvState.speaking ? 1.28 : 1.0;
+    const targetScatter = jrvState.speaking ? 1.18 : 1.0;
     jrvState.currentScatter += (targetScatter - jrvState.currentScatter) * 0.06;
     const positions = jrvSpherePoints.geometry.attributes.position.array;
     for (let i = 0; i < positions.length; i++) positions[i] = jrvSphereBasePositions[i] * jrvState.currentScatter;
     jrvSpherePoints.geometry.attributes.position.needsUpdate = true;
   }
+
+  // Outer particle sphere — base size 2.5, grows during speech, pulses brighter on each word boundary
+  if (jrvSphereMaterial) {
+    const sizeTarget = jrvState.speaking ? 3.6 + jrvState.coreThrob * 1.8 : 2.5;
+    jrvSphereMaterial.size += (sizeTarget - jrvSphereMaterial.size) * 0.12;
+    const opacityTarget = jrvState.speaking ? Math.min(1.0, 0.95 + jrvState.coreThrob * 0.15) : 0.85;
+    jrvSphereMaterial.opacity += (opacityTarget - jrvSphereMaterial.opacity) * 0.15;
+  }
+
+  // Inner glow core — always visible (subtle breath at rest), dramatic when talking
   if (jrvSphereCoreMat) {
-    jrvSphereCoreMat.opacity += (jrvState.coreTargetOpacity - jrvSphereCoreMat.opacity) * 0.18;
-    // Throb decay — onboundary kicks coreThrob, this decays it
+    // Resting baseline = 0.32. Speaking baseline = whatever onstart set (0.92).
+    const restingOpacity = 0.30 + Math.sin(now * 1.4) * 0.06; // gentle breathing
+    const targetOp = jrvState.speaking ? jrvState.coreTargetOpacity : restingOpacity;
+    jrvSphereCoreMat.opacity += (targetOp - jrvSphereCoreMat.opacity) * 0.18;
+
+    // Size: breathes slowly at rest, throbs hard on word boundaries during speech
+    const restingSize = 36 + Math.sin(now * 1.4) * 3;
     if (jrvState.coreThrob > 0.01) {
-      jrvSphereCoreMat.size = 10 + jrvState.coreThrob * 22;
+      jrvSphereCoreMat.size = restingSize + jrvState.coreThrob * 48;
       jrvState.coreThrob *= 0.82;
     } else {
-      jrvSphereCoreMat.size = 10 + (jrvState.speaking ? 4 : 0);
+      jrvSphereCoreMat.size = restingSize + (jrvState.speaking ? 12 : 0);
     }
   }
+
   jrvSphereRenderer.render(jrvSphereScene, jrvSphereCamera);
 }
 
@@ -2837,16 +2852,17 @@ function jrvSpeakOut(text) {
     // Sphere talking-pulse hooks
     u.onstart = () => {
       jrvState.speaking = true;
-      jrvState.coreTargetOpacity = 0.92;
-      jrvState.coreThrob = 0.6; // initial ignite burst
+      jrvState.coreTargetOpacity = 0.95;
+      jrvState.coreThrob = 0.7; // initial ignite burst
     };
     u.onboundary = () => {
       // Throb the core on every word boundary so it visibly pulses with speech
-      jrvState.coreThrob = Math.min(1.6, jrvState.coreThrob + 0.55);
+      jrvState.coreThrob = Math.min(1.8, jrvState.coreThrob + 0.6);
     };
     const settle = () => {
       jrvState.speaking = false;
-      jrvState.coreTargetOpacity = 0;
+      // Resting baseline — orb stays visible with a gentle breath, just dimmer
+      jrvState.coreTargetOpacity = 0.30;
       jrvState.coreThrob = 0;
     };
     u.onend = settle;
@@ -2948,7 +2964,7 @@ const jrvState = {
   styleSamples: [], // rolling buffer of Travis's recent transcripts (max 25)
   // Sphere talking-pulse runtime state
   speaking: false,
-  coreTargetOpacity: 0,
+  coreTargetOpacity: 0.30, // resting glow baseline — orb is always visible
   coreThrob: 0,
   currentScatter: 1.0
 };
