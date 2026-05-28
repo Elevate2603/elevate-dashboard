@@ -198,13 +198,14 @@ function summarizeFollowUps(fu) {
   const out = [];
   const A = fu.lists.A, B = fu.lists.B, C = fu.lists.C, D = fu.lists.D;
   if (C && Array.isArray(C.items)) {
-    out.push(`-- List C (clients gone quiet, ${C.threshold_days || 21}+ days no activity): ${C.total ?? C.items.length} total`);
+    out.push(`-- List C (silent ${C.threshold_days || 21}+ days): ${C.total ?? C.items.length} total · top 12 by silence shown`);
     if (C.items.length) {
       C.items.slice(0, 12).forEach(i => {
-        out.push(`   • ${i.name || "(no name)"} @ ${i.company_name || "(no co)"} — ${i.days_since}d silent · ${i.email || "(no email)"}`);
+        const lastTouch = i.last_activity_type ? ` (last touch: ${i.last_activity_type})` : "";
+        out.push(`   • ${i.name || "(no name)"} @ ${i.company_name || "(no co)"} — ${i.days_since}d silent${lastTouch} · ${i.email || "(no email)"}`);
       });
     } else {
-      out.push("   (no clients past the threshold — all active accounts touched recently)");
+      out.push("   (no contacts past the threshold — all touched recently)");
     }
   }
   if (A && Array.isArray(A.items)) {

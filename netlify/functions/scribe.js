@@ -36,16 +36,26 @@ exports.handler = async (event) => {
     });
   }
   try {
+    // ?debug=1 returns the raw first-page RCRM response so we can see the actual contact shape
+    const params = new URLSearchParams(event.rawQuery || (event.queryStringParameters ? new URLSearchParams(event.queryStringParameters).toString() : ""));
+    if (params.get("debug") === "1") {
+      const r = await fetch(`${RCRM_BASE}/contacts?page=1&limit=2`, { headers: { Authorization: `Bearer ${process.env.RCRM_BEARER_TOKEN}` } });
+      const body = await r.text();
+      return jsonResp(200, { ok: true, status: r.status, body: safeJSON(body) });
+    }
+
     const asOf = new Date().toISOString();
+    const allContacts = await rcrmListContacts({});
     const [listC, listAPartial] = await Promise.all([
-      computeListC_clientsGoneQuiet(),
-      computeListA_inSequencePartial(),
+      Promise.resolve(computeListC_clientsGoneQuiet(allContacts)),
+      Promise.resolve(computeListA_inSequencePartial(allContacts)),
     ]);
     return jsonResp(200, {
       ok: true,
       asOf,
+      totalContactsScanned: allContacts.length,
       lists: {
-        A: listAPartial, // partial — accurate count, no reply detection yet
+        A: listAPartial,
         B: { items: [], note: "Live conversations require Outlook integration (Phase 3 Chunk 1)." },
         C: listC,
         D: { items: [], note: "Stalled-prospect revive list requires Outlook integration (Phase 3 Chunk 1)." },
@@ -56,58 +66,57 @@ exports.handler = async (event) => {
   }
 };
 
+function safeJSON(s) { try { return JSON.parse(s); } catch { return s; } }
+
 // ── List C: Clients gone quiet ─────────────────────────────────────────
-// Active-Client list members where last RCRM activity is older than STALE_DAYS.
-async function computeListC_clientsGoneQuiet() {
-  const contacts = await rcrmListContacts({ listId: ACTIVE_CLIENT_LIST });
+// Contacts where last RCRM activity is older than STALE_DAYS. Note: RCRM's
+// /v1/contacts?list_id= filter doesn't reliably honor list scoping in the public
+// REST, so this currently scans all contacts. Brain prompt limits output to top 2-3
+// in the daily report so noise doesn't matter much in practice.
+function computeListC_clientsGoneQuiet(contacts) {
   const now = Date.now();
-  const thresholdMs = STALE_DAYS * 86400000;
   const items = [];
   for (const c of contacts) {
-    const lastTs = parseLastActivity(c);
-    if (lastTs == null) continue;
-    const ageDays = Math.floor((now - lastTs) / 86400000);
+    const parsed = parseActivity(c);
+    if (parsed.ts == null) continue;
+    const ageDays = Math.floor((now - parsed.ts) / 86400000);
     if (ageDays < STALE_DAYS) continue;
     items.push({
       contact_id: c.id || c.slug || null,
       slug: c.slug || null,
       name: composeName(c),
       email: c.email || null,
-      company_name: (c.related_company && c.related_company.company_name) || c.company_name || null,
+      company_name: extractCompany(c),
+      last_activity_type: parsed.type, // "Email" / "Call" / "Note" / etc
       last_activity_date: c.last_activity_date || c.last_communication || c.updated_at || null,
       days_since: ageDays,
     });
   }
   items.sort((a, b) => b.days_since - a.days_since);
   return {
-    items: items.slice(0, 50),
+    items: items.slice(0, 30),
     total: items.length,
     threshold_days: STALE_DAYS,
-    note: items.length ? "Clients with no activity logged in 3+ weeks" : "All clear — every active client has been touched within 3 weeks",
+    note: items.length
+      ? `Contacts with no activity in ${STALE_DAYS}+ days (top 30 returned, sorted by silence length). Note: includes prospects, not just active clients — RCRM list filter doesn't reliably scope in the REST API yet.`
+      : "All clear — every contact touched recently",
   };
 }
 
-// ── List A: In sequence, awaiting first reply (partial) ────────────────
-// Without Outlook we can't confirm "no reply" — but we CAN list everyone currently
-// in a sequence as a rough A-list. Full filtering to "no human reply yet" comes
-// once Outlook is wired.
-async function computeListA_inSequencePartial() {
-  // Pull contacts. RCRM doesn't expose "in_sequence" as a top-level list filter
-  // in the public REST, so we filter client-side off the contact records.
-  const contacts = await rcrmListContacts({});
+function computeListA_inSequencePartial(contacts) {
   const items = contacts
-    .filter(c => c.current_active_sequence || c.in_sequence || c.sequence_id)
+    .filter(c => c.current_active_sequence || c.in_sequence || c.sequence_id || c.active_sequence)
     .map(c => ({
       contact_id: c.id || c.slug || null,
       slug: c.slug || null,
       name: composeName(c),
       email: c.email || null,
-      company_name: (c.related_company && c.related_company.company_name) || c.company_name || null,
-      active_sequence: c.current_active_sequence || c.active_sequence_name || null,
+      company_name: extractCompany(c),
+      active_sequence: c.current_active_sequence || c.active_sequence_name || c.active_sequence || null,
       enrolled_at: c.sequence_enrolled_at || c.last_sequence_event_at || null,
     }));
   return {
-    items: items.slice(0, 50),
+    items: items.slice(0, 30),
     total: items.length,
     note: "Counts of contacts currently in a sequence. Real 'no human reply' filtering arrives with Outlook (Phase 3 Chunk 2).",
   };
@@ -135,11 +144,19 @@ async function rcrmListContacts({ listId } = {}) {
   return all;
 }
 
-function parseLastActivity(c) {
-  const raw = c.last_activity_date || c.last_communication || c.updated_at || c.last_engagement_at;
-  if (!raw) return null;
+// Parse the activity field which RCRM returns as "Email on 2025-10-21 15:28:22".
+// Returns { type, ts } — type is "Email"/"Call"/"Note"/"" and ts is unix ms or null.
+function parseActivity(c) {
+  const raw = c.last_activity_date || c.last_communication || c.updated_at || c.last_engagement_at || "";
+  if (!raw) return { type: "", ts: null };
+  // Match e.g. "Call on 2024-09-13 13:30:00" or just "2024-09-13T..."
+  const m = String(raw).match(/^([A-Za-z]+)\s+on\s+(.+)$/);
+  if (m) {
+    const t = Date.parse(m[2]);
+    return { type: m[1], ts: isNaN(t) ? null : t };
+  }
   const t = Date.parse(raw);
-  return isNaN(t) ? null : t;
+  return { type: "", ts: isNaN(t) ? null : t };
 }
 
 function composeName(c) {
@@ -147,6 +164,29 @@ function composeName(c) {
   const last = c.last_name || c.lastname || "";
   const full = (first + " " + last).trim();
   return full || c.full_name || c.name || "(no name)";
+}
+
+// Try many candidate company fields. Falls back to capitalized email domain so
+// records aren't shown as "(no co)" when company isn't returned by the API.
+function extractCompany(c) {
+  const candidates = [
+    c.company_name,
+    c.company,
+    c.current_company,
+    c.current_employee_company_name,
+    c.position_company,
+    c.related_company && c.related_company.company_name,
+    c.related_company && c.related_company.name,
+    c.organization_name,
+    c.organization && c.organization.name,
+  ];
+  for (const v of candidates) if (v && typeof v === "string" && v.trim()) return v.trim();
+  // Email-domain fallback
+  if (c.email) {
+    const m = String(c.email).match(/@([^.]+)\./);
+    if (m) return m[1].charAt(0).toUpperCase() + m[1].slice(1);
+  }
+  return null;
 }
 
 function jsonResp(statusCode, body) {
