@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-V-SONG-RULES -->
+<!-- ELEVATE-2026-0528-W-SCRIBE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2171,6 +2171,7 @@ if (importDropEl) {
 const JRV_CONFIG = {
   DATA_URL: 'https://hook.us2.make.com/fbwggrimbt2iidjeckvs25sk61hej2lh', // Queue Fetch webhook → datastore 86836
   SIGNALS_URL: 'https://hook.us2.make.com/u5omv41orexphg4nxldq6f3vvxp67ygu', // Pending Retrieval Fetch → datastore 97143
+  SCRIBE_URL: '/.netlify/functions/scribe', // Phase 3 — RCRM/Outlook follow-up lists
   JARVIS_URL: '/.netlify/functions/jarvis', // Phase 2 brain. Empty string = force demo mode.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
   HISTORY_MAX: 20, // turns sent to brain each call
@@ -2213,6 +2214,7 @@ function jrvInit() {
   jrvInitSphere();
   jrvLoadQueueData();
   jrvLoadHiringSignals();
+  jrvLoadFollowUps();
   jrvCheckBrain();
   jrvPrimeVoices();
   jrvSetupAutoWake();
@@ -2286,6 +2288,19 @@ function jrvPrimeVoices() {
   if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = () => { /* list is now warm in cache */ };
   }
+}
+
+// SCRIBE — pull follow-up lists from RCRM (Outlook later). Lists A/B/C/D land here
+// and feed the daily report's CLIENT FOLLOW-UPS section.
+function jrvLoadFollowUps() {
+  if (!JRV_CONFIG.SCRIBE_URL) return;
+  fetch(JRV_CONFIG.SCRIBE_URL)
+    .then(r => r.ok ? r.json() : null)
+    .then(j => {
+      if (j && j.ok) jrvState.followUps = j;
+      else if (j && j.hint) console.warn('[SCRIBE]', j.error || 'error', '·', j.hint);
+    })
+    .catch(err => console.warn('[SCRIBE] fetch failed:', err && err.message));
 }
 
 // Pull hiring signals from datastore 97143 so JARVIS has them in context for every command.
@@ -2875,6 +2890,7 @@ function jrvProcessCommand(command) {
     counts: jrvState.counts,
     records: jrvState.records.slice(0, 30).map(r => ({ data: r.data || r })),
     hiringSignals: jrvState.hiringSignals.slice(0, 30),
+    followUps: jrvState.followUps,
     history: jrvState.history.slice(-JRV_CONFIG.HISTORY_MAX).map(t => ({ role: t.role, text: t.text })),
     styleSamples: jrvState.styleSamples,
     memoryFacts: jrvState.memoryFacts.map(f => f.text)
@@ -3203,6 +3219,7 @@ const jrvState = {
   counts: { new:0, staged:0, enrolled:0, approved:0, active:0 },
   records: [],
   hiringSignals: [],
+  followUps: null, // SCRIBE: { lists: { A,B,C,D }, asOf }
   history: [], // conversation memory: [{ role: "user"|"assistant", text, at }]
   memoryFacts: [], // long-term facts JARVIS extracts about Travis (persistent)
   brain: null,

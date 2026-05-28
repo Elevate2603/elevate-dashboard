@@ -64,6 +64,7 @@ exports.handler = async (event) => {
   const signalsSummary = summarizeSignals(context.hiringSignals || []);
   const styleSamples = summarizeStyleSamples(context.styleSamples || []);
   const memoryFacts = summarizeMemoryFacts(context.memoryFacts || []);
+  const followUpsSummary = summarizeFollowUps(context.followUps);
   // History is an array of { role: "user"|"assistant", text: "..." } — last ~20 turns.
   const recentTurns = (Array.isArray(context.history) ? context.history : []).slice(-20);
 
@@ -83,7 +84,7 @@ exports.handler = async (event) => {
         // Lower tokens = faster end-of-stream from Claude.
         max_tokens: /\b(report|brief|rundown|briefing|recap)\b/i.test(transcript) ? 700 : 350,
         system: ROUTING_PROMPT,
-        messages: buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary, signalsSummary, styleSamples, memoryFacts }),
+        messages: buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary, signalsSummary, styleSamples, memoryFacts, followUpsSummary }),
       }),
     });
   } catch (e) {
@@ -169,7 +170,7 @@ exports.handler = async (event) => {
 
 // Build the messages array sent to Claude. Conversation history gives JARVIS memory
 // so phrases like "those contacts" and "that company" resolve naturally.
-function buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary, signalsSummary, styleSamples, memoryFacts }) {
+function buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary, signalsSummary, styleSamples, memoryFacts, followUpsSummary }) {
   const msgs = [];
   // Replay recent turns so Claude has conversation memory across sessions
   for (const t of recentTurns) {
@@ -185,9 +186,37 @@ function buildClaudeMessages({ transcript, context, recentTurns, pipelineSummary
       (memoryFacts ? `=== LONG-TERM MEMORY ABOUT TRAVIS (durable facts you've learned) ===\n${memoryFacts}\n\n` : "") +
       `=== PIPELINE SNAPSHOT ===\n${pipelineSummary}\n\n` +
       `=== HIRING SIGNALS (live from elevate_pending_retrieval) ===\n${signalsSummary}\n\n` +
+      (followUpsSummary ? `=== SCRIBE — FOLLOW-UP LISTS (live from RCRM, Outlook joining in Phase 3 Chunk 2) ===\n${followUpsSummary}\n\n` : "") +
       (styleSamples ? `=== TRAVIS SPEECH SAMPLES (mirror this style) ===\n${styleSamples}\n` : "")
   });
   return msgs;
+}
+
+// Compact SCRIBE's lists into a Claude-readable block.
+function summarizeFollowUps(fu) {
+  if (!fu || !fu.ok || !fu.lists) return "";
+  const out = [];
+  const A = fu.lists.A, B = fu.lists.B, C = fu.lists.C, D = fu.lists.D;
+  if (C && Array.isArray(C.items)) {
+    out.push(`-- List C (clients gone quiet, ${C.threshold_days || 21}+ days no activity): ${C.total ?? C.items.length} total`);
+    if (C.items.length) {
+      C.items.slice(0, 12).forEach(i => {
+        out.push(`   • ${i.name || "(no name)"} @ ${i.company_name || "(no co)"} — ${i.days_since}d silent · ${i.email || "(no email)"}`);
+      });
+    } else {
+      out.push("   (no clients past the threshold — all active accounts touched recently)");
+    }
+  }
+  if (A && Array.isArray(A.items)) {
+    out.push(`-- List A (currently in sequence): ${A.total ?? A.items.length} total`);
+    if (A.items.length) A.items.slice(0, 8).forEach(i => {
+      out.push(`   • ${i.name || "(no name)"} — sequence: ${i.active_sequence || "?"} · ${i.email || ""}`);
+    });
+    if (A.note) out.push(`   (${A.note})`);
+  }
+  if (B) out.push(`-- List B (live conversations): ${B.note || "Outlook required."}`);
+  if (D) out.push(`-- List D (stalled prospects to revive): ${D.note || "Outlook required."}`);
+  return out.join("\n");
 }
 
 // Format the long-term memory facts into a compact block.
@@ -319,8 +348,8 @@ Daily report shape (LEAN — overview only):
 STRICT RULES for daily_report:
 - HIRING SIGNALS section: include ONLY 1 or 2 hot leads — the highest-scored signals from the snapshot. ONE sentence WHY per lead. Don't list more than 2. Other signals roll up into the count in the section title ("HIRING SIGNALS · 12 total").
 - APPROVAL QUEUE: just the count + a short persona-spread summary line. No individual contacts in the overview.
-- CLIENT FOLLOW-UPS: For now (Phase 3 not built), say "All clear" with a note that live tracking comes in Phase 3. When wired, list specific accounts past 3 weeks of silence with the why.
-- PIPELINE · POTENTIAL CLIENTS: Same — "All clear" placeholder noting Phase 3, with one-line explanation. When wired, list active negotiations with action needed.
+- CLIENT FOLLOW-UPS: Use the live SCRIBE List C (clients gone quiet) if present in context. If C.items has entries, list the top 2-3 with name/company/days_since. If empty, say "All clear — every active client touched within 3 weeks." If SCRIBE returned no data at all, say "RCRM tracking is wiring up — confirmation pending."
+- PIPELINE · POTENTIAL CLIENTS: Use SCRIBE List A (currently in sequence). Show count + the longest-in-sequence name. Full "no human reply" filtering arrives with Outlook (Phase 3 Chunk 2) — be honest if the data is partial.
 - The "speak" field is TIGHT — 25-35 words, like a chief of staff giving you the headlines in an elevator. Example: "Alright Travis, 47 in the queue, 12 hiring signals, top hot lead is NEXTSTAR Energy in Windsor. Clients all clear, pipeline all clear. Anything specific you want to dig into?"
 - Always end speak with an open-ended invite: "Anything you want to dig into?" / "What do you want to see deeper?" / "Where do you want to go from here?" — so Travis knows he can drill in.
 
