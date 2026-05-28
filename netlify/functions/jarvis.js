@@ -201,11 +201,12 @@ function summarizeFollowUps(fu) {
     out.push(`-- List C (companies silent ${C.threshold_days || 21}+ days at the company level): ${C.total ?? C.items.length} total · top 12 shown`);
     if (C.items.length) {
       C.items.slice(0, 12).forEach(i => {
-        const lastTouch = i.most_recent_activity_type ? `, last touch was a ${String(i.most_recent_activity_type).toLowerCase()} to ${i.most_recent_contact || "?"}` : "";
+        const src = i.most_recent_activity_source ? ` [${i.most_recent_activity_source}]` : "";
+        const lastTouch = i.most_recent_activity_type ? `, last was a ${String(i.most_recent_activity_type).toLowerCase()}${src} to ${i.most_recent_contact || "?"}` : "";
         out.push(`   • ${i.company_name || "(no co)"} — ${i.days_since}d silent (${i.contacts_count} contacts in RCRM${lastTouch})`);
       });
     } else {
-      out.push("   (no companies past the threshold — all accounts touched recently)");
+      out.push("   (no companies past the threshold — RCRM + Outlook combined)");
     }
   }
   if (A && Array.isArray(A.items)) {

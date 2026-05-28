@@ -26,6 +26,9 @@ const ACTIVE_CLIENT_LIST = "166186"; // per CLAUDE.md — Active Client list ID 
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 5;       // safety cap so a single call doesn't burn all rate budget
 
+const OUTLOOK_USER = process.env.OUTLOOK_USER_EMAIL || "touellette@teamelevate.ca";
+const OUTLOOK_LOOKBACK_DAYS = 90; // pull last 90 days of mail to merge with RCRM activity
+
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: CORS_HEADERS, body: "" };
   if (!process.env.RCRM_BEARER_TOKEN) {
@@ -45,20 +48,32 @@ exports.handler = async (event) => {
     }
 
     const asOf = new Date().toISOString();
-    const allContacts = await rcrmListContacts({});
-    const [listC, listAPartial] = await Promise.all([
-      Promise.resolve(computeListC_clientsGoneQuiet(allContacts)),
-      Promise.resolve(computeListA_inSequencePartial(allContacts)),
+    // Pull RCRM + Outlook in parallel — Outlook only runs if all three env vars set
+    const [allContacts, outlookActivity] = await Promise.all([
+      rcrmListContacts({}),
+      pullOutlookActivity().catch(e => ({ error: String(e && e.message || e), byEmail: new Map() })),
     ]);
+    const outlookByEmail = outlookActivity.byEmail || new Map();
+    const outlookErr = outlookActivity.error || null;
+
+    const listC = computeListC_clientsGoneQuiet(allContacts, outlookByEmail);
+    const listAPartial = computeListA_inSequencePartial(allContacts);
+
     return jsonResp(200, {
       ok: true,
       asOf,
       totalContactsScanned: allContacts.length,
+      outlook: {
+        connected: !outlookErr && outlookActivity.totalMessages > 0,
+        totalMessagesPulled: outlookActivity.totalMessages || 0,
+        lookbackDays: OUTLOOK_LOOKBACK_DAYS,
+        error: outlookErr,
+      },
       lists: {
         A: listAPartial,
-        B: { items: [], note: "Live conversations require Outlook integration (Phase 3 Chunk 1)." },
+        B: { items: [], note: "Live conversations: pending Outlook reply-detection layer (next pass)." },
         C: listC,
-        D: { items: [], note: "Stalled-prospect revive list requires Outlook integration (Phase 3 Chunk 1)." },
+        D: { items: [], note: "Stalled-prospect revive list: pending Outlook reply-detection layer." },
       },
     });
   } catch (e) {
@@ -73,40 +88,52 @@ function safeJSON(s) { try { return JSON.parse(s); } catch { return s; } }
 // MOST RECENT contact activity (across ALL its contacts) is older than
 // STALE_DAYS. As long as Travis has talked to anyone at the company recently,
 // the company is fine. Returns company-centric rows, not contact rows.
-function computeListC_clientsGoneQuiet(contacts) {
+function computeListC_clientsGoneQuiet(contacts, outlookByEmail) {
   const now = Date.now();
-  // Group contacts by company. Key = exact company_name string (or extracted/fallback).
+  outlookByEmail = outlookByEmail || new Map();
   const byCompany = new Map();
-  for (const c of contacts) {
-    const company = extractCompany(c);
-    if (!company) continue; // skip contacts with no company at all
-    const parsed = parseActivity(c);
-    if (parsed.ts == null) continue;
-    if (!byCompany.has(company)) {
-      byCompany.set(company, { company_name: company, contacts: [], most_recent: null });
-    }
+
+  function registerActivity(company, contactInfo) {
+    if (!byCompany.has(company)) byCompany.set(company, { company_name: company, contacts: [], most_recent: null });
     const bucket = byCompany.get(company);
-    bucket.contacts.push({
-      name: composeName(c),
-      email: c.email || null,
-      slug: c.slug || null,
-      activity_ts: parsed.ts,
-      activity_type: parsed.type,
-      activity_raw: c.last_activity_date || c.last_communication || c.updated_at || null,
-    });
-    if (!bucket.most_recent || parsed.ts > bucket.most_recent.activity_ts) {
+    bucket.contacts.push(contactInfo);
+    if (!bucket.most_recent || contactInfo.activity_ts > bucket.most_recent.activity_ts) {
       bucket.most_recent = {
-        contact_name: composeName(c),
-        contact_email: c.email || null,
-        contact_slug: c.slug || null,
-        activity_ts: parsed.ts,
-        activity_type: parsed.type,
-        activity_raw: c.last_activity_date || c.last_communication || c.updated_at || null,
+        contact_name: contactInfo.name,
+        contact_email: contactInfo.email,
+        contact_slug: contactInfo.slug || null,
+        activity_ts: contactInfo.activity_ts,
+        activity_type: contactInfo.activity_type,
+        activity_source: contactInfo.activity_source, // "RCRM" or "Outlook"
       };
     }
   }
 
-  // Now flag companies whose MOST RECENT contact activity is past threshold
+  for (const c of contacts) {
+    const company = extractCompany(c);
+    if (!company) continue;
+    const email = (c.email || "").toLowerCase().trim();
+
+    // RCRM logged activity
+    const parsed = parseActivity(c);
+    if (parsed.ts != null) {
+      registerActivity(company, {
+        name: composeName(c), email, slug: c.slug || null,
+        activity_ts: parsed.ts, activity_type: parsed.type, activity_source: "RCRM",
+      });
+    }
+
+    // Outlook activity for this contact's email (sent OR received-from)
+    if (email && outlookByEmail.has(email)) {
+      const ob = outlookByEmail.get(email);
+      registerActivity(company, {
+        name: composeName(c), email, slug: c.slug || null,
+        activity_ts: ob.ts, activity_type: ob.direction === "out" ? "Outlook-sent" : "Outlook-received",
+        activity_source: "Outlook",
+      });
+    }
+  }
+
   const items = [];
   for (const bucket of byCompany.values()) {
     if (!bucket.most_recent) continue;
@@ -118,7 +145,8 @@ function computeListC_clientsGoneQuiet(contacts) {
       most_recent_contact: bucket.most_recent.contact_name,
       most_recent_email: bucket.most_recent.contact_email,
       most_recent_activity_type: bucket.most_recent.activity_type,
-      most_recent_activity_date: bucket.most_recent.activity_raw,
+      most_recent_activity_source: bucket.most_recent.activity_source,
+      most_recent_activity_ts: bucket.most_recent.activity_ts,
       days_since: ageDays,
     });
   }
@@ -128,8 +156,8 @@ function computeListC_clientsGoneQuiet(contacts) {
     total: items.length,
     threshold_days: STALE_DAYS,
     note: items.length
-      ? `Companies where the MOST RECENT contact activity is ${STALE_DAYS}+ days old (top 30 by silence). Aggregated across all contacts at each company — if anyone at the company was touched recently, the company isn't flagged.`
-      : "All clear — every company has had a contact touched within 3 weeks",
+      ? `Companies where MAX(RCRM activity, Outlook activity) is ${STALE_DAYS}+ days old. Joins RCRM + Outlook so an unlogged Outlook email still counts as touching the company.`
+      : "All clear — every company touched recently across RCRM + Outlook",
   };
 }
 
@@ -217,6 +245,102 @@ function extractCompany(c) {
     if (m) return m[1].charAt(0).toUpperCase() + m[1].slice(1);
   }
   return null;
+}
+
+// ── Outlook via Microsoft Graph (Phase 3 Chunk 1) ──────────────────────
+// App-only token via client credentials. Pulls SENT items (Travis's outreach) and
+// RECEIVED items (replies + auto-replies). Returns a per-email map of the most
+// recent activity timestamp + direction — joined into List C aggregation so
+// unlogged Outlook activity still counts as touching a company.
+async function pullOutlookActivity() {
+  const tenant = process.env.OUTLOOK_TENANT_ID;
+  const clientId = process.env.OUTLOOK_CLIENT_ID;
+  const secret = process.env.OUTLOOK_CLIENT_SECRET;
+  if (!tenant || !clientId || !secret) {
+    return { byEmail: new Map(), totalMessages: 0, error: null }; // silent skip when not configured
+  }
+  // Token
+  const tokenResp = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: clientId,
+      client_secret: secret,
+      scope: "https://graph.microsoft.com/.default",
+    }),
+  });
+  if (!tokenResp.ok) {
+    const errBody = await tokenResp.text();
+    throw new Error(`Outlook token request failed (${tokenResp.status}): ${errBody.slice(0, 240)}`);
+  }
+  const tokenData = await tokenResp.json();
+  const token = tokenData.access_token;
+  if (!token) throw new Error("Outlook token response had no access_token");
+
+  const cutoffIso = new Date(Date.now() - OUTLOOK_LOOKBACK_DAYS * 86400000).toISOString();
+  // Pull SENT items (outbound) — these are Travis touching companies
+  const sentMsgs = await graphFetchAll(token, `/v1.0/users/${encodeURIComponent(OUTLOOK_USER)}/mailFolders/SentItems/messages?$top=200&$select=toRecipients,subject,sentDateTime&$filter=sentDateTime ge ${cutoffIso}&$orderby=sentDateTime desc`);
+  // Pull INBOX messages (received) — count only human, not auto-replies
+  const inboxMsgs = await graphFetchAll(token, `/v1.0/users/${encodeURIComponent(OUTLOOK_USER)}/mailFolders/Inbox/messages?$top=200&$select=from,subject,receivedDateTime,internetMessageHeaders&$filter=receivedDateTime ge ${cutoffIso}&$orderby=receivedDateTime desc`);
+
+  const byEmail = new Map(); // email (lower) -> { ts, direction, subject }
+  function note(email, ts, direction, subject) {
+    if (!email) return;
+    const key = email.toLowerCase().trim();
+    const prev = byEmail.get(key);
+    if (!prev || ts > prev.ts) byEmail.set(key, { ts, direction, subject });
+  }
+  for (const m of sentMsgs) {
+    const ts = Date.parse(m.sentDateTime || "");
+    if (isNaN(ts)) continue;
+    const recipients = Array.isArray(m.toRecipients) ? m.toRecipients : [];
+    for (const r of recipients) {
+      const addr = r && r.emailAddress && r.emailAddress.address;
+      if (addr) note(addr, ts, "out", m.subject || "");
+    }
+  }
+  for (const m of inboxMsgs) {
+    if (isAutoReply(m)) continue; // auto-replies don't count as touching activity
+    const ts = Date.parse(m.receivedDateTime || "");
+    if (isNaN(ts)) continue;
+    const fromAddr = m.from && m.from.emailAddress && m.from.emailAddress.address;
+    if (fromAddr) note(fromAddr, ts, "in", m.subject || "");
+  }
+  return { byEmail, totalMessages: sentMsgs.length + inboxMsgs.length, error: null };
+}
+
+async function graphFetchAll(token, path) {
+  let url = `https://graph.microsoft.com${path}`;
+  const all = [];
+  for (let i = 0; i < 5; i++) { // cap pages so a single call can't run away
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(`Graph ${path.slice(0, 60)}... returned ${r.status}: ${t.slice(0, 240)}`);
+    }
+    const data = await r.json();
+    if (Array.isArray(data.value)) all.push(...data.value);
+    if (!data["@odata.nextLink"]) break;
+    url = data["@odata.nextLink"];
+  }
+  return all;
+}
+
+// Auto-reply heuristic — headers first (most reliable), then subject patterns.
+// Body patterns + Claude judging are saved for a future pass.
+function isAutoReply(msg) {
+  const headers = Array.isArray(msg.internetMessageHeaders) ? msg.internetMessageHeaders : [];
+  for (const h of headers) {
+    const name = (h.name || "").toLowerCase();
+    const value = (h.value || "").toLowerCase();
+    if (name === "auto-submitted" && /auto-(replied|generated)/.test(value)) return true;
+    if (name === "x-autoreply" || name === "x-autorespond") return true;
+    if (name === "precedence" && /(auto_reply|bulk)/.test(value)) return true;
+  }
+  const subj = (msg.subject || "").toLowerCase();
+  if (/automatic reply|out of office|out-of-office|autoresponder|away from (the )?office/i.test(subj)) return true;
+  return false;
 }
 
 function jsonResp(statusCode, body) {
