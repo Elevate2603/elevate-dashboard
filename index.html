@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-U-MEMORY -->
+<!-- ELEVATE-2026-0528-V-SONG-RULES -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2775,8 +2775,11 @@ function jrvMarkSongPlayedToday() {
   try { localStorage.setItem(JRV_SONG_DATE_KEY, new Date().toDateString()); } catch (_) {}
 }
 
-function jrvPlayBgSong() {
-  if (!jrvShouldPlaySongToday()) return; // once per calendar day
+// force=true bypasses the daily gate (used for "Good morning Jarvis" — always plays).
+// force=false (default) means "play if not already played today" — used for first
+// login of the calendar day regardless of time of day.
+function jrvPlayBgSong(force) {
+  if (!force && !jrvShouldPlaySongToday()) return;
   try {
     if (!jrvBgSongAudio) {
       jrvBgSongAudio = new Audio(JRV_SONG_URL);
@@ -2815,12 +2818,13 @@ const JRV_ACKS = [
 ];
 
 function jrvAcknowledge() {
+  // First interaction of the calendar day plays the song (date-gated internally).
+  // Separate from the 5h-gap rule which only governs the LONGER spoken greeting.
+  jrvPlayBgSong();
   let reply;
-  // 5-hour-gap rule — if it's been a while, lead with a time-of-day greeting + song
   if (jrvFirstOfDay()) {
     const tod = jrvTimeOfDay();
     reply = `Good ${tod}, Travis. It's a great day for sales, let's get shit going. What can I do for you?`;
-    jrvPlayBgSong();
   } else {
     reply = JRV_ACKS[Math.floor(Math.random() * JRV_ACKS.length)];
   }
@@ -2834,8 +2838,9 @@ function jrvAcknowledge() {
 
 function jrvProcessGreeting(period, originalText) {
   jrvCaptureStyle(originalText);
-  // Morning greeting OR first interaction in 5+ hours kicks off the wake-up song
-  if (period === 'morning' || jrvFirstOfDay()) jrvPlayBgSong();
+  // "Good morning Jarvis" ALWAYS plays the song. Any other greeting that happens
+  // to be the first interaction of the calendar day plays it too (date-gated).
+  jrvPlayBgSong(period === 'morning');
   jrvMarkInteraction();
   const reply = "Good " + period + ", Travis. Great day for sales. Let's kick ass today!";
   const tx = document.getElementById('jrvTranscript');
@@ -2851,6 +2856,9 @@ function jrvProcessGreeting(period, originalText) {
 
 function jrvProcessCommand(command) {
   jrvCaptureStyle(command);
+  // First interaction of the calendar day plays the song (date-gated internally).
+  // Covers the case where Travis logs in and dives straight into a command.
+  jrvPlayBgSong();
   jrvMarkInteraction();
   // Persistent conversation memory — survives refresh, builds across sessions
   jrvPushHistory('user', command);
@@ -3261,7 +3269,8 @@ function jrvProcessSpecialPhrase(key, originalText) {
     if (jrvFirstOfDay()) reply += " It's a great day for sales, let's get shit going.";
   }
   if (!reply) return;
-  if (jrvFirstOfDay()) jrvPlayBgSong();
+  // First interaction of the calendar day plays the song; otherwise gate blocks
+  jrvPlayBgSong();
   jrvMarkInteraction();
   jrvSphereTargetScale = 1.25;
   setTimeout(() => { jrvSphereTargetScale = 1.0; }, 1200);
