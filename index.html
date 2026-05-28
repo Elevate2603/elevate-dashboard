@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-O-JARVIS-INTERRUPT -->
+<!-- ELEVATE-2026-0528-P-DAILY-REPORT -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -580,6 +580,20 @@
   .jrv-modal-row-name { color: var(--text); font-size:13px; font-weight:600; }
   .jrv-modal-row-meta { color: var(--text-muted); font-size:11px; margin-top:2px; }
   .jrv-modal-row-badge { background: rgba(200,130,10,0.15); color: var(--gold); padding:4px 10px; border-radius:4px; font-size:10px; font-family:'Consolas', monospace; letter-spacing:0.1em; }
+
+  /* Daily report — wider modal with stacked sections */
+  .jrv-modal-wide { max-width: 760px; }
+  .jrv-report-section { margin-bottom:18px; }
+  .jrv-report-section:last-child { margin-bottom:0; }
+  .jrv-report-section-title { color: var(--gold); font-family:'Consolas', monospace; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+  .jrv-report-section-items { display:flex; flex-direction:column; gap:8px; }
+  .jrv-report-item { background: var(--dark3); border:1px solid var(--border); border-radius:8px; padding:10px 12px; transition: border-color 0.15s; }
+  .jrv-report-item:hover { border-color: var(--gold); }
+  .jrv-report-item-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .jrv-report-item-name { color: var(--text); font-size:13px; font-weight:600; }
+  .jrv-report-item-meta { color: var(--text-muted); font-size:11px; margin-top:3px; font-family:'Consolas', monospace; letter-spacing:0.04em; }
+  .jrv-report-item-why { color: var(--text); font-size:11px; margin-top:6px; padding-top:6px; border-top:1px dashed var(--border); line-height:1.4; }
+  .jrv-report-item-why strong { color: var(--gold); font-family:'Consolas', monospace; font-size:9px; letter-spacing:0.18em; }
 
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -2864,6 +2878,42 @@ function jrvProcessCommand(command) {
 function jrvShowUI(ui) {
   if (!ui || !ui.type) return;
   if (ui.type === 'stats_modal') jrvShowStatsModal(ui);
+  else if (ui.type === 'daily_report') jrvShowDailyReport(ui);
+}
+
+function jrvShowDailyReport(ui) {
+  jrvCloseModal();
+  const overlay = document.createElement('div');
+  overlay.className = 'jrv-modal-overlay';
+  overlay.id = 'jrvModalOverlay';
+  overlay.onclick = (e) => { if (e.target === overlay) jrvCloseModal(); };
+  const sections = Array.isArray(ui.sections) ? ui.sections : [];
+  const sectionsHtml = sections.map(s => {
+    const items = Array.isArray(s.items) ? s.items : [];
+    const itemsHtml = items.map(it => `
+      <div class="jrv-report-item">
+        <div class="jrv-report-item-head">
+          <span class="jrv-report-item-name">${escapeHtml(it.name || '')}</span>
+          ${it.badge ? `<span class="jrv-modal-row-badge">${escapeHtml(it.badge)}</span>` : ''}
+        </div>
+        ${it.meta ? `<div class="jrv-report-item-meta">${escapeHtml(it.meta)}</div>` : ''}
+        ${it.why ? `<div class="jrv-report-item-why"><strong>WHY:</strong> ${escapeHtml(it.why)}</div>` : ''}
+      </div>`).join('');
+    return `<div class="jrv-report-section">
+      <div class="jrv-report-section-title">${escapeHtml(s.title || '')}</div>
+      <div class="jrv-report-section-items">${itemsHtml || '<div class="jrv-log-empty">— nothing here —</div>'}</div>
+    </div>`;
+  }).join('');
+  overlay.innerHTML = `
+    <div class="jrv-modal jrv-modal-wide">
+      <div class="jrv-modal-head">
+        <div class="jrv-modal-title">${escapeHtml(ui.title || 'Daily Report')}</div>
+        <button class="jrv-modal-close" onclick="jrvCloseModal()">×</button>
+      </div>
+      <div class="jrv-modal-body">${sectionsHtml}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.addEventListener('keydown', jrvModalKey);
 }
 
 function jrvShowStatsModal(ui) {

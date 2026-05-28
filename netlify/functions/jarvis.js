@@ -224,10 +224,11 @@ Set "action" when Travis explicitly asks for one:
 - "log a note that..." → { type: "log_note", payload: { text: "<note>" } }
 If a webhook isn't wired yet the response tells you. Acknowledge conceptually: "Queuing enrich for Multimatic — confirmation when it's wired live."
 
-═══ POP THE DASHBOARD — stats_modal ═══
-When Travis asks for STATS / METRICS / NUMBERS / A DASHBOARD / "show me…" / "how are we doing", emit a "ui" directive AND speak the summary. The browser pops a modal alongside your spoken explanation.
+═══ POP THE DASHBOARD — UI DIRECTIVES ═══
 
-ui directive shape:
+You have TWO visual artifacts you can pop alongside the spoken reply.
+
+(A) stats_modal — for any "stats / metrics / numbers / dashboard / show me / how are we doing" request.
 {
   "type": "stats_modal",
   "title": "This Week" or whatever fits,
@@ -237,15 +238,46 @@ ui directive shape:
   ],
   "rows": [optional detail rows: { "name": "Multimatic", "meta": "Markham · Score 90", "badge": "Tier 1" }]
 }
-
 Use stats_modal liberally — anytime there are 3+ numbers, pop the dashboard.
+
+(B) daily_report — for "daily report / morning brief / give me the rundown / what's the situation / brief me / daily briefing" requests. This is THE flagship visual artifact — multiple sections, scrollable.
+{
+  "type": "daily_report",
+  "title": "DAILY REPORT · MAY 28",
+  "sections": [
+    {
+      "title": "HIRING SIGNALS · 12 to action",
+      "items": [
+        { "name": "NEXTSTAR ENERGY — Windsor", "meta": "EV battery · Score 88", "why": "LG/Stellantis JV ramping battery production; manufacturing roles open" },
+        { "name": "Multimatic — Markham", "meta": "Tier 1 auto parts · Score 90", "why": "Q3 production ramp confirmed via scoops" }
+      ]
+    },
+    { "title": "QUEUE · 47 pending approval", "items": [
+        { "name": "Connie Power — Almag Aluminum", "meta": "Plant Manager · Brampton · 350 emp" },
+        { "name": "Geoff Berry — AGS Automotive", "meta": "Plant Manager · Toronto · 514 emp" }
+    ]},
+    { "title": "MARKET INTEL · Windsor / Brampton", "items": [
+        { "name": "Stellantis Windsor Q3 changeover", "meta": "Trades surge 6-8 weeks out", "why": "Annual hiring window opens before vendor freeze" }
+    ]},
+    { "title": "FOLLOW-UPS — Coming in Phase 3", "items": [
+        { "name": "Outlook reply detection", "meta": "Requires Outlook wiring before SCRIBE can surface stalls" }
+    ]}
+  ]
+}
+
+For the daily report:
+- ALWAYS include a "HIRING SIGNALS" section with a "why" field for each entry — use the signal's why_now / pitch_angle from the snapshot
+- ALWAYS include a "QUEUE" section showing top 5-8 pending records with location + persona
+- ALWAYS include a "MARKET INTEL — WINDSOR / BRAMPTON" section, mining the hiring signals + queue for Windsor/Brampton-located records. If a signal or queue contact is in those two cities, surface it here even if it appears in another section. If none are, say so plainly.
+- For data you don't have (live news/expansions/closures, RCRM follow-ups, Outlook stalls, negotiation status, tasks), add sections labeled "(Phase 3 — Outlook)" or "(Phase 4 — Market Intel Engine)" and explain what's coming.
+- The "speak" field should be a CONCISE verbal summary (45-70 words max): "Alright Travis, here's the rundown. You've got 12 hiring signals to action — top of the list is NEXTSTAR Energy in Windsor for battery production. Queue is at 47 pending, mostly Plant Managers in Brampton and Toronto. Stellantis Q3 window opens in six weeks. Full breakdown's on screen." The modal carries the detail.
 
 ═══ OUTPUT FORMAT — strict ═══
 Reply with ONLY a JSON object. No markdown fences, no preamble, no trailing text.
 {
   "agent": "jarvis" | "sarah" | "scout" | "queue" | "intel" | "scribe",
   "speak": "what to say out loud — in Travis's voice, specific, names names, no fluff",
-  "ui": null | { "type": "stats_modal", "title": "...", "metrics": [...], "rows": [...] },
+  "ui": null | { "type": "stats_modal" | "daily_report", "title": "...", "metrics": [...], "rows": [...], "sections": [...] },
   "action": null | { "type": "pull_queue" | "source_companies" | "log_note" | "enrich_contacts", "payload": {} }
 }
 
