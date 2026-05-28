@@ -25,3 +25,8 @@ Jarvis Docs/
 SCRIBE_EXPORT.md
 SESSION_HANDOFF.md
 PROPOSED_SCENARIO_CHANGES.md
+voice/models/
+voice/state.json
+voice/.env
+__pycache__/
+*.pyc

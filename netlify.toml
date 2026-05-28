@@ -1,10 +1,13 @@
 # Netlify build + functions config for Elevate dashboard
 # Static site (no build step) — index.html is published as-is.
-# Functions live in netlify/functions/.
+# Functions live in netlify/functions/ (Node, regular Lambda).
+# Edge Functions live in netlify/edge-functions/ (Deno, streaming-capable).
+# jarvis-stream.js declares its own path via `export const config` in-file.
 
 [build]
   publish = "."
   functions = "netlify/functions"
+  edge_functions = "netlify/edge-functions"
 
 # Bump function timeout so Claude Opus has room to think (default is 10s; max on free is 26s)
 [functions]
