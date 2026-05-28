@@ -198,14 +198,14 @@ function summarizeFollowUps(fu) {
   const out = [];
   const A = fu.lists.A, B = fu.lists.B, C = fu.lists.C, D = fu.lists.D;
   if (C && Array.isArray(C.items)) {
-    out.push(`-- List C (silent ${C.threshold_days || 21}+ days): ${C.total ?? C.items.length} total · top 12 by silence shown`);
+    out.push(`-- List C (companies silent ${C.threshold_days || 21}+ days at the company level): ${C.total ?? C.items.length} total · top 12 shown`);
     if (C.items.length) {
       C.items.slice(0, 12).forEach(i => {
-        const lastTouch = i.last_activity_type ? ` (last touch: ${i.last_activity_type})` : "";
-        out.push(`   • ${i.name || "(no name)"} @ ${i.company_name || "(no co)"} — ${i.days_since}d silent${lastTouch} · ${i.email || "(no email)"}`);
+        const lastTouch = i.most_recent_activity_type ? `, last touch was a ${String(i.most_recent_activity_type).toLowerCase()} to ${i.most_recent_contact || "?"}` : "";
+        out.push(`   • ${i.company_name || "(no co)"} — ${i.days_since}d silent (${i.contacts_count} contacts in RCRM${lastTouch})`);
       });
     } else {
-      out.push("   (no contacts past the threshold — all touched recently)");
+      out.push("   (no companies past the threshold — all accounts touched recently)");
     }
   }
   if (A && Array.isArray(A.items)) {
@@ -349,7 +349,7 @@ Daily report shape (LEAN — overview only):
 STRICT RULES for daily_report:
 - HIRING SIGNALS section: include ONLY 1 or 2 hot leads — the highest-scored signals from the snapshot. ONE sentence WHY per lead. Don't list more than 2. Other signals roll up into the count in the section title ("HIRING SIGNALS · 12 total").
 - APPROVAL QUEUE: just the count + a short persona-spread summary line. No individual contacts in the overview.
-- CLIENT FOLLOW-UPS: Use the live SCRIBE List C (clients gone quiet) if present in context. If C.items has entries, list the top 2-3 with name/company/days_since. If empty, say "All clear — every active client touched within 3 weeks." If SCRIBE returned no data at all, say "RCRM tracking is wiring up — confirmation pending."
+- CLIENT FOLLOW-UPS: Use SCRIBE List C — note it's COMPANY-LEVEL aggregation (a company is flagged only when the MOST RECENT activity across ALL its contacts is past the threshold). If C.items has entries, list top 2-3 COMPANIES (not individual contacts) with days_since + most_recent_contact name. Format: "Almag Aluminum hasn't been touched in 257 days — last contact was an email to Connie Power." If empty, say "All clear — every company touched within 3 weeks." If SCRIBE returned no data at all, say "RCRM tracking is wiring up — confirmation pending."
 - PIPELINE · POTENTIAL CLIENTS: Use SCRIBE List A (currently in sequence). Show count + the longest-in-sequence name. Full "no human reply" filtering arrives with Outlook (Phase 3 Chunk 2) — be honest if the data is partial.
 - The "speak" field is TIGHT — 25-35 words, like a chief of staff giving you the headlines in an elevator. Example: "Alright Travis, 47 in the queue, 12 hiring signals, top hot lead is NEXTSTAR Energy in Windsor. Clients all clear, pipeline all clear. Anything specific you want to dig into?"
 - Always end speak with an open-ended invite: "Anything you want to dig into?" / "What do you want to see deeper?" / "Where do you want to go from here?" — so Travis knows he can drill in.

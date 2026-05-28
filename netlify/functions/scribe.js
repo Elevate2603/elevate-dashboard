@@ -68,27 +68,57 @@ exports.handler = async (event) => {
 
 function safeJSON(s) { try { return JSON.parse(s); } catch { return s; } }
 
-// ── List C: Clients gone quiet ─────────────────────────────────────────
-// Contacts where last RCRM activity is older than STALE_DAYS. Note: RCRM's
-// /v1/contacts?list_id= filter doesn't reliably honor list scoping in the public
-// REST, so this currently scans all contacts. Brain prompt limits output to top 2-3
-// in the daily report so noise doesn't matter much in practice.
+// ── List C: Companies gone quiet ───────────────────────────────────────
+// Company-level aggregation — a company only counts as "gone quiet" if its
+// MOST RECENT contact activity (across ALL its contacts) is older than
+// STALE_DAYS. As long as Travis has talked to anyone at the company recently,
+// the company is fine. Returns company-centric rows, not contact rows.
 function computeListC_clientsGoneQuiet(contacts) {
   const now = Date.now();
-  const items = [];
+  // Group contacts by company. Key = exact company_name string (or extracted/fallback).
+  const byCompany = new Map();
   for (const c of contacts) {
+    const company = extractCompany(c);
+    if (!company) continue; // skip contacts with no company at all
     const parsed = parseActivity(c);
     if (parsed.ts == null) continue;
-    const ageDays = Math.floor((now - parsed.ts) / 86400000);
-    if (ageDays < STALE_DAYS) continue;
-    items.push({
-      contact_id: c.id || c.slug || null,
-      slug: c.slug || null,
+    if (!byCompany.has(company)) {
+      byCompany.set(company, { company_name: company, contacts: [], most_recent: null });
+    }
+    const bucket = byCompany.get(company);
+    bucket.contacts.push({
       name: composeName(c),
       email: c.email || null,
-      company_name: extractCompany(c),
-      last_activity_type: parsed.type, // "Email" / "Call" / "Note" / etc
-      last_activity_date: c.last_activity_date || c.last_communication || c.updated_at || null,
+      slug: c.slug || null,
+      activity_ts: parsed.ts,
+      activity_type: parsed.type,
+      activity_raw: c.last_activity_date || c.last_communication || c.updated_at || null,
+    });
+    if (!bucket.most_recent || parsed.ts > bucket.most_recent.activity_ts) {
+      bucket.most_recent = {
+        contact_name: composeName(c),
+        contact_email: c.email || null,
+        contact_slug: c.slug || null,
+        activity_ts: parsed.ts,
+        activity_type: parsed.type,
+        activity_raw: c.last_activity_date || c.last_communication || c.updated_at || null,
+      };
+    }
+  }
+
+  // Now flag companies whose MOST RECENT contact activity is past threshold
+  const items = [];
+  for (const bucket of byCompany.values()) {
+    if (!bucket.most_recent) continue;
+    const ageDays = Math.floor((now - bucket.most_recent.activity_ts) / 86400000);
+    if (ageDays < STALE_DAYS) continue;
+    items.push({
+      company_name: bucket.company_name,
+      contacts_count: bucket.contacts.length,
+      most_recent_contact: bucket.most_recent.contact_name,
+      most_recent_email: bucket.most_recent.contact_email,
+      most_recent_activity_type: bucket.most_recent.activity_type,
+      most_recent_activity_date: bucket.most_recent.activity_raw,
       days_since: ageDays,
     });
   }
@@ -98,8 +128,8 @@ function computeListC_clientsGoneQuiet(contacts) {
     total: items.length,
     threshold_days: STALE_DAYS,
     note: items.length
-      ? `Contacts with no activity in ${STALE_DAYS}+ days (top 30 returned, sorted by silence length). Note: includes prospects, not just active clients — RCRM list filter doesn't reliably scope in the REST API yet.`
-      : "All clear — every contact touched recently",
+      ? `Companies where the MOST RECENT contact activity is ${STALE_DAYS}+ days old (top 30 by silence). Aggregated across all contacts at each company — if anyone at the company was touched recently, the company isn't flagged.`
+      : "All clear — every company has had a contact touched within 3 weeks",
   };
 }
 
