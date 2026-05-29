@@ -14,7 +14,11 @@ const CORS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-const MODEL = process.env.MARKET_INTEL_MODEL || "claude-sonnet-4-6";
+// Haiku 4.5 has higher TPM rate limits than Sonnet/Opus at the same tier, and the
+// task is essentially "extract + format" — web_search returns the actual data, the
+// model just needs to organize it into the JSON shape. Haiku is fine for that and
+// keeps cost down for daily refreshes.
+const MODEL = process.env.MARKET_INTEL_MODEL || "claude-haiku-4-5-20251001";
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: CORS, body: "" };
