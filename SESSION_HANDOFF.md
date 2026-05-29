@@ -1,5 +1,55 @@
 # Session Handoff
 
+## 2026-05-29 Session (Part 2) — Email Triage + Task Persistence shipped
+
+### What Was Done
+
+Extended the morning brief pipeline with per-email classification and durable task persistence. Each inbound is classified by Haiku 4.5 into one of four buckets (real_conversation, sales_pitch_at_him, marketing_or_newsletter, automated_notification); only real_conversation survives. Survivors get a second Haiku pass to extract a structured task (text, due hint, keywords, sender). Tasks land in a new `elevate_tasks` datastore with dedup by Outlook message ID. The Brief Assembler now folds open task count + top three task names into the Opus narration.
+
+**New data layer:**
+- `elevate_tasks_struct` (385290) → `elevate_tasks` [103655] — 11 fields per task: task_text, source_email_id, sender_email, sender_name, topic_keywords array, created_at, due_hint, status, last_referenced_at, related_email_count, followup_notes. Key = Outlook message ID for O(1) dedup.
+- `elevate_classifier_response_struct` (385292) and `elevate_task_extraction_response_struct` (385293) — typed shapes for parsing Anthropic responses.
+
+**New scenarios:**
+- `5230413` Task Complete (webhook on hook 2382155, URL `https://hook.us2.make.com/71f5tfgy3fidl8ble4riwqio6cupomnu`) — accepts `{task_id}` POST, sets `status="complete"` on that record. Browser checkbox + voice command will call this in Part 2.
+- `5229661` Outlook Inbox Triage — rewritten to: midnight-Toronto filter, BasicFeeder iteration over today's 50 inbox messages, json:CreateJSON to escape values into the Anthropic body (avoids the jsonStringBodyContent quote-collision problem), classifier call, markdown strip (Haiku wraps in ` ```json ` despite "no markdown" instruction), json:ParseJSON with `builtin:Ignore` error handler so malformed bundles drop silently, filter to real_conversation only, second Anthropic pass for task extraction, AddRecord on elevate_tasks with `overwrite:false` for source_email_id dedup. 202 ops on a 50-message inbox.
+- `5229677` Brief Assembler — added SearchRecord on elevate_tasks where `status=open`, BasicAggregator (note: output is wrapped in `aggregate.X`, so access is `4.array[N].aggregate.task_text` not `4.array[N].task_text`; SearchRecord fields likewise come through as `3.data.X` not `3.X`), SetVariables to extract top-3 task strings, prompt extended with a fifth "Open Tasks" lane.
+
+**Dashboard:**
+- No edits this session — Part 2 (UI restructure: Agents to top tab strip, left rail to TASKS panel) is the next build, queued behind data layer verification per Travis's "data first, then UI" rule.
+
+### Architecture decisions made under fire
+
+- **Hard-exclusion IML filter abandoned for v1.** Original spec had a no-AI-cost header/sender/subject filter (List-Unsubscribe, Precedence:bulk, noreply sender, Unsubscribe in subject etc.). The chained IML expression triggered "3 problem(s)" validation errors. Saving ~$0.04/morning in Haiku tokens wasn't worth the complexity. All emails go to Haiku; the classifier filter does the work.
+- **`json:CreateJSON` over `jsonStringBodyContent` for per-email Anthropic calls.** Email subjects with quotes/newlines break manual JSON construction. CreateJSON auto-escapes the values into a valid body, sent as `contentType:custom, rawBodyContent:{{3.json}}`.
+- **`builtin:Ignore` error handler on ParseJSON.** Haiku occasionally returns markdown-wrapped JSON (` ```json {...} ``` `) even with strict-mode instructions. Strip step handles most cases, Ignore catches the rest. Failed bundles drop silently; scenario keeps running.
+- **Dedup is source_email_id only.** Original spec wanted "sender + keyword overlap" matching for follow-up bumping. Deferred — added complexity for marginal value at v1 inbox volume. Each task is one email; revisit when manual cleanup gets tedious.
+- **Make IML field-access gotchas (now scribed):** SearchRecord output is `N.data.X` not `N.X`. BasicAggregator output is `N.array[i].aggregate.X` not `N.array[i].X`. Both verified empirically by storing `json:TransformToJSON({{4.array}})` to the cache and curling it back.
+
+### Verification
+
+Live test 2026-05-29:
+- Outlook scenario ran on 50-message inbox: status 1, 202 operations, zero new tasks (today's inbox was all automated noise — classifier correctly rejected everything).
+- Injected 2 test tasks directly into datastore 103655: "Reply to Bryce at Stellantis Windsor about Q3 trades pre-sourcing window" + "Send proposal to Mike at GFL Environmental for sorter staffing".
+- Triggered Brief Assembler: produced a 214-word narration ending with "Priority one is Bryce Bachynski at Stellantis Windsor… Second is the proposal to Mike at GFL Environmental… Call to action. Clear Bryce at Stellantis first, then fire the GFL proposal before ten. Let's elevate."
+- Brief Fetch webhook serves the narration cleanly.
+
+### Cost per morning
+
+- Classifier: 50 Haiku calls × ~$0.001 each = $0.05
+- Task extraction: ~3-5 Haiku calls per morning (assuming most aren't real_conversation) × $0.002 = $0.01
+- Assembler: 1 Opus 4.7 call = $0.05
+- Total: ~$0.11/morning vs $0.06 for the previous version
+
+### Next Steps
+
+1. [ ] Part 2: dashboard layout restructure (Agents → top tab strip, left rail → TASKS panel, modal expand for >4 tasks, checkbox + voice complete). Design proposal coming next message.
+2. [ ] Test tasks `test-task-001` and `test-task-002` left in 103655 for Part 2 UI dev. Delete or mark complete after Travis confirms Part 2 displays them correctly.
+3. [ ] Future: re-add hard-exclusion filter when inbox volume grows enough that $0.05/morning matters.
+4. [ ] Future: add sender + keyword overlap dedup to merge follow-up emails into existing tasks (memory-style behavior).
+
+---
+
 ## 2026-05-29 Session — JARVIS Morning Brief shipped end-to-end (open item #89 resolved)
 
 ### What Was Done
