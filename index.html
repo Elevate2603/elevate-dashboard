@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0529-AP-ACTIVE-CLIENT-COMPANY-DRIVEN -->
+<!-- ELEVATE-2026-0529-AQ-MORNING-BRIEF -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -692,6 +692,19 @@
   .jrv-log-item { background: var(--dark3); border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:11px; line-height:1.4; }
   .jrv-log-time { color: var(--text-muted); font-family:'Consolas', monospace; font-size:10px; letter-spacing:0.08em; }
   .jrv-log-name { color: var(--text); font-weight:600; }
+
+  .jrv-brief-card { background: var(--dark3); border:1px solid var(--border); border-radius:8px; padding:10px 12px; display:flex; flex-direction:column; gap:8px; font-size:11px; line-height:1.45; }
+  .jrv-brief-empty { color: var(--text-muted); font-size:11px; text-align:center; padding:6px 0; }
+  .jrv-brief-row { display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .jrv-brief-label { color: var(--text-muted); text-transform:uppercase; letter-spacing:0.1em; font-family:'Consolas', monospace; font-size:10px; }
+  .jrv-brief-val { color: var(--text); font-weight:600; }
+  .jrv-brief-hot { background: rgba(200,130,10,0.08); border-left:2px solid var(--gold); padding:6px 8px; font-size:11px; border-radius:0 4px 4px 0; }
+  .jrv-brief-hot-from { color: var(--gold); font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:0.08em; }
+  .jrv-brief-hot-subj { color: var(--text); margin-top:2px; }
+  .jrv-brief-hot-why { color: var(--text-muted); font-style:italic; font-size:10px; margin-top:2px; }
+  .jrv-brief-refresh { background: none; border:1px solid rgba(200,130,10,0.4); color: var(--gold); font-size:10px; padding:3px 8px; margin-left:6px; border-radius:3px; cursor:pointer; font-family:inherit; }
+  .jrv-brief-play { background: var(--gold); color:#000; border:none; border-radius:4px; padding:6px 10px; font-size:10px; letter-spacing:0.08em; font-weight:700; cursor:pointer; text-transform:uppercase; width:100%; margin-top:4px; }
+  .jrv-brief-play:hover { filter:brightness(1.1); }
   .jrv-log-meta { color: var(--text-muted); margin-top:2px; }
   .jrv-log-empty { color: var(--text-muted); font-style:italic; font-size:11px; padding:8px; text-align:center; }
 
@@ -820,9 +833,13 @@
         </div>
       </section>
 
-      <!-- RIGHT RAIL: PIPELINE + RECENT (Market Hot Spots lives in its own full-width row below) -->
+      <!-- RIGHT RAIL: MORNING BRIEF + PIPELINE + RECENT (Market Hot Spots lives in its own full-width row below) -->
       <aside class="jrv-rail">
-        <div class="jrv-rail-title">Pipeline</div>
+        <div class="jrv-rail-title">Morning Brief · <span id="jrvBriefDate" style="font-size:10px;font-weight:normal;opacity:0.5;letter-spacing:0.04em;">—</span></div>
+        <div class="jrv-brief-card" id="jrvBriefCard">
+          <div class="jrv-brief-empty">Brief generates at 7:55am. <button class="jrv-brief-refresh" onclick="jrvLoadMorningBrief(true)">Fetch &#8635;</button></div>
+        </div>
+        <div class="jrv-rail-title" style="margin-top:14px;">Pipeline</div>
         <div class="jrv-stage-row" id="jrvStageNew"><span class="jrv-stage-label">NEW LEAD</span><span class="jrv-stage-count">—</span></div>
         <div class="jrv-stage-row" id="jrvStageStaged"><span class="jrv-stage-label">STAGED</span><span class="jrv-stage-count">—</span></div>
         <div class="jrv-stage-row" id="jrvStageEnrolled"><span class="jrv-stage-label">IN SEQUENCE</span><span class="jrv-stage-count">—</span></div>
@@ -2427,6 +2444,9 @@ const JRV_CONFIG = {
   MARKET_INTEL_URL:      'https://hook.us2.make.com/v7qngbadothuecm06p7cmoh35h2s8d0d',
   MARKET_INTEL_FALLBACK: '/.netlify/functions/market-hotspots',
   MARKET_INTEL_CACHE_KEY: 'jrv_market_intel_v1',
+  // Morning Brief — Brief Fetch webhook (Make scenario 5229693), reads elevate_morning_brief_cache.
+  // Pull scenarios stagger 7:30 (Active Clients), 7:45 (Outlook Triage), 7:55 (Assembler).
+  BRIEF_URL: 'https://hook.us2.make.com/1u4418ksb6jkc37lpbrylswtuj9hl56m',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -2471,6 +2491,7 @@ function jrvInit() {
   jrvLoadQueueData();
   jrvLoadHiringSignals();
   jrvLoadMarketIntel();
+  jrvLoadMorningBrief();
   jrvLoadFollowUps();
   jrvCheckBrain();
   jrvPrimeVoices();
@@ -2657,6 +2678,105 @@ function jrvSetMarketIntelStatus(msg) {
 }
 
 function jrvRefreshMarketIntel() { jrvLoadMarketIntel(true); }
+
+// ════════════════════════════════════════════════════════════════════════
+// MORNING BRIEF — fetch the 7:55am cached brief, render the right-rail card,
+// queue the narration after the morning greeting on the first wake of the day.
+// ════════════════════════════════════════════════════════════════════════
+
+let jrvBriefData = null;
+const JRV_BRIEF_SPOKEN_KEY = 'jrv_brief_spoken_date_v1';
+
+function jrvBriefSpokenToday() {
+  try { return localStorage.getItem(JRV_BRIEF_SPOKEN_KEY) === new Date().toDateString(); }
+  catch (_) { return false; }
+}
+function jrvMarkBriefSpoken() {
+  try { localStorage.setItem(JRV_BRIEF_SPOKEN_KEY, new Date().toDateString()); } catch (_) {}
+}
+
+// Queue an utterance WITHOUT cancelling — chains after current speech instead of
+// replacing it. SpeechSynthesis natively queues when you call speak() repeatedly
+// without an intervening cancel(). Used to play "Here is today's brief" + the
+// 75-second narration right after the greeting reply finishes.
+function jrvQueueSpeak(text) {
+  try {
+    if (!('speechSynthesis' in window)) return;
+    const clean = jrvSanitizeSpeak(text);
+    if (!clean) return;
+    const u = new SpeechSynthesisUtterance(clean);
+    u.rate = 1.0; u.pitch = 0.95; u.volume = 1.0;
+    const voices = speechSynthesis.getVoices();
+    const savedName = localStorage.getItem(JRV_VOICE_KEY);
+    let pick = savedName ? voices.find(v => v.name === savedName) : null;
+    if (!pick) {
+      pick = voices.find(v => /male/i.test(v.name) && /en/i.test(v.lang)) ||
+             voices.find(v => /david|daniel|google uk english male/i.test(v.name)) ||
+             voices.find(v => /en-GB|en-US/i.test(v.lang));
+    }
+    if (pick) u.voice = pick;
+    speechSynthesis.speak(u);
+  } catch (_) {}
+}
+
+function jrvLoadMorningBrief(force) {
+  if (!JRV_CONFIG.BRIEF_URL) return;
+  const url = JRV_CONFIG.BRIEF_URL + (force ? '?t=' + Date.now() : '');
+  fetch(url, { method: 'GET' })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (!data || !data.brief_date) { jrvBriefData = null; jrvRenderBriefCard(); return; }
+      // Outer wrapper has *_json fields as serialized strings — parse them.
+      const safe = (s, fb) => { try { return JSON.parse(s); } catch (_) { return fb; } };
+      jrvBriefData = {
+        brief_date: data.brief_date,
+        generated_at: data.generated_at,
+        narration_text: data.narration_text || '',
+        active_clients: safe(data.active_clients_json, []),
+        outlook: safe(data.outlook_json, {}),
+        market_intel: safe(data.market_intel_json, {})
+      };
+      jrvRenderBriefCard();
+    })
+    .catch(e => { console.warn('[brief] fetch failed', e); jrvBriefData = null; jrvRenderBriefCard(); });
+}
+
+function jrvRenderBriefCard() {
+  const card = document.getElementById('jrvBriefCard');
+  const dateEl = document.getElementById('jrvBriefDate');
+  if (!card) return;
+  if (!jrvBriefData) {
+    card.innerHTML = '<div class="jrv-brief-empty">Brief generates at 7:55am. <button class="jrv-brief-refresh" onclick="jrvLoadMorningBrief(true)">Fetch &#8635;</button></div>';
+    if (dateEl) dateEl.textContent = '—';
+    return;
+  }
+  const b = jrvBriefData;
+  if (dateEl) dateEl.textContent = b.brief_date || '—';
+  const acCount = Array.isArray(b.active_clients) ? b.active_clients.length : 0;
+  const ob = b.outlook || {};
+  const sum = ob.summary || {};
+  const hot = Array.isArray(ob.hot_threads) ? ob.hot_threads.slice(0, 2) : [];
+  let html = '';
+  html += '<div class="jrv-brief-row"><span class="jrv-brief-label">Active Clients</span><span class="jrv-brief-val">' + acCount + '</span></div>';
+  html += '<div class="jrv-brief-row"><span class="jrv-brief-label">Inbox 24h</span><span class="jrv-brief-val">' + (sum.human || 0) + ' human &middot; ' + (sum.autoreply || 0) + ' auto</span></div>';
+  hot.forEach(t => {
+    html += '<div class="jrv-brief-hot">';
+    html += '<div class="jrv-brief-hot-from">' + escapeHtml(t.from || '') + '</div>';
+    html += '<div class="jrv-brief-hot-subj">' + escapeHtml(t.subject || '') + '</div>';
+    if (t.why_hot) html += '<div class="jrv-brief-hot-why">' + escapeHtml(t.why_hot) + '</div>';
+    html += '</div>';
+  });
+  if (b.narration_text) {
+    html += '<button class="jrv-brief-play" onclick="jrvPlayBriefNarration()">&#9654; Hear the Brief</button>';
+  }
+  card.innerHTML = html;
+}
+
+function jrvPlayBriefNarration() {
+  if (!jrvBriefData || !jrvBriefData.narration_text) return;
+  jrvSpeakOut(jrvBriefData.narration_text);
+  jrvMarkBriefSpoken();
+}
 
 // ════════════════════════════════════════════════════════════════════════
 // MARKET HOT SPOTS — aggregate signals by city + profession, render map + pie
@@ -3648,6 +3768,12 @@ function jrvProcessGreeting(period, originalText) {
   jrvSphereTargetScale = 1.25;
   setTimeout(() => { jrvSphereTargetScale = 1.05; }, 1200);
   jrvSpeakOut(reply);
+  // Morning brief — once per calendar day, queued right after the greeting reply
+  if (period === 'morning' && jrvBriefData && jrvBriefData.narration_text && !jrvBriefSpokenToday()) {
+    jrvQueueSpeak("Here is today's brief.");
+    jrvQueueSpeak(jrvBriefData.narration_text);
+    jrvMarkBriefSpoken();
+  }
   jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
 }
 
