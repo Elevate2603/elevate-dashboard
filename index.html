@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-AF-MARKET-INTEL-LIVE -->
+<!-- ELEVATE-2026-0528-AG-MARKET-INTEL-MONTHLY -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2236,7 +2236,9 @@ const JRV_CONFIG = {
   JARVIS_URL: '/.netlify/functions/jarvis', // Phase 2 brain. Empty string = force demo mode.
   MARKET_INTEL_URL: '/.netlify/functions/market-hotspots', // Job Bank + news scan via Claude web search
   MARKET_INTEL_CACHE_KEY: 'jrv_market_intel_v1',
-  MARKET_INTEL_TTL_MS: 24 * 60 * 60 * 1000, // 24h — refresh once a day on first load
+  // Monthly refresh — the labor market doesn't change enough day-to-day to justify
+  // daily token spend. First dashboard load of any new calendar month triggers a fresh
+  // fetch; everything else this month uses the cached payload. Manual ↻ still works.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
   HISTORY_MAX: 20, // turns sent to brain each call
   HISTORY_STORE_MAX: 60, // turns kept in localStorage across sessions
@@ -2396,12 +2398,13 @@ function jrvLoadMarketIntel(force) {
     jrvRenderMarketHotSpots();
   }
 
-  const ageMs = cached && cached.fetched_at ? Date.now() - new Date(cached.fetched_at).getTime() : Infinity;
-  if (!force && cached && ageMs < JRV_CONFIG.MARKET_INTEL_TTL_MS) return;
+  // Skip the fetch when we have a cached payload from the current calendar month.
+  // Anything older — or a brand-new month — triggers a refresh.
+  if (!force && cached && cached.ok && jrvSameCalendarMonth(cached.fetched_at)) return;
 
   // Fetch fresh — set a visible loading hint if we have nothing to paint
   if (!cached || !cached.ok) jrvSetMarketIntelStatus('Researching live hiring data…');
-  else jrvSetMarketIntelStatus('Refreshing live data…');
+  else jrvSetMarketIntelStatus('Refreshing monthly snapshot…');
 
   fetch(JRV_CONFIG.MARKET_INTEL_URL, { method: 'GET' })
     .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j)))
@@ -2420,6 +2423,14 @@ function jrvLoadMarketIntel(force) {
     });
 }
 
+// Same-month check so the monthly cache only triggers a refetch when a new calendar
+// month begins (or on a forced manual refresh). Local timezone — fine for Travis.
+function jrvSameCalendarMonth(iso) {
+  if (!iso) return false;
+  const a = new Date(iso), b = new Date();
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+}
+
 function jrvSetMarketIntelStatus(msg) {
   const el = document.getElementById('jrvMhsStatus');
   if (!el) return;
@@ -2427,7 +2438,8 @@ function jrvSetMarketIntelStatus(msg) {
     const intel = jrvState.marketIntel;
     if (intel && intel.fetched_at) {
       const dt = new Date(intel.fetched_at);
-      el.textContent = `Updated ${dt.toLocaleDateString('en-CA', { month:'short', day:'numeric' })} ${dt.toLocaleTimeString('en-CA', { hour:'2-digit', minute:'2-digit' })} · ${intel.source || ''}`;
+      const month = dt.toLocaleDateString('en-CA', { month: 'long' });
+      el.textContent = `${month} snapshot · refreshes 1st of each month`;
     } else {
       el.textContent = '';
     }
