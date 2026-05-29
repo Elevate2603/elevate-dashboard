@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-X-SPHERE-RESIZE -->
+<!-- ELEVATE-2026-0528-Y-SONG-MIC-GATE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2752,6 +2752,9 @@ function jrvStartAlwaysOn() {
   };
 
   rec.onend = () => {
+    // Skip auto-restart while the wake-up song is playing — jrvOnSongEnded will
+    // bring the recognition back online when the song stops.
+    if (jrvState.songPlaying) return;
     if (jrvState.alwaysOn) {
       try { rec.start(); } catch (_) { /* already running on some browsers */ }
     }
@@ -2793,7 +2796,9 @@ function jrvMatchGreeting(text) {
 const JRV_SONG_URL = 'Fortunate Son (CCR) - QuickSounds.com.mp3';
 const JRV_SONG_VOLUME = 0.30;
 const JRV_SONG_DATE_KEY = 'jrv_song_played_date_v1';
+const JRV_SONG_MAX_MS = 10000;   // hard-stop the song after 10s — long enough for vibe, short enough to get back to work
 let jrvBgSongAudio = null;
+let jrvBgSongStopTimer = null;
 
 function jrvShouldPlaySongToday() {
   const today = new Date().toDateString();
@@ -2815,21 +2820,48 @@ function jrvPlayBgSong(force) {
       jrvBgSongAudio = new Audio(JRV_SONG_URL);
       jrvBgSongAudio.volume = JRV_SONG_VOLUME;
       jrvBgSongAudio.preload = 'auto';
+      // When the song finishes (naturally or via our 10s cap), restore the mic.
+      jrvBgSongAudio.addEventListener('ended', jrvOnSongEnded);
+      jrvBgSongAudio.addEventListener('pause', jrvOnSongEnded);
     } else {
       jrvBgSongAudio.currentTime = 0;
       jrvBgSongAudio.volume = JRV_SONG_VOLUME;
     }
+    // Mark the song as actively playing so the SpeechRecognition handlers ignore
+    // the audio bleeding into the mic. Abort any in-flight recognition session
+    // so Chrome stops sending us transcripts of the song lyrics.
+    jrvState.songPlaying = true;
+    if (jrvState.recognition) {
+      try { jrvState.recognition.abort(); } catch (_) {}
+    }
     const p = jrvBgSongAudio.play();
     if (p && typeof p.catch === 'function') p.catch(err => console.warn('[JARVIS] song play blocked:', err && err.message));
     jrvMarkSongPlayedToday();
+    // Hard cap the song at 10 seconds — long enough for the vibe, short enough
+    // that the mic comes back online quickly.
+    if (jrvBgSongStopTimer) clearTimeout(jrvBgSongStopTimer);
+    jrvBgSongStopTimer = setTimeout(jrvStopBgSong, JRV_SONG_MAX_MS);
   } catch (e) {
     console.warn('[JARVIS] song setup failed:', e && e.message);
   }
 }
 
 function jrvStopBgSong() {
+  if (jrvBgSongStopTimer) { clearTimeout(jrvBgSongStopTimer); jrvBgSongStopTimer = null; }
   if (jrvBgSongAudio) {
     try { jrvBgSongAudio.pause(); jrvBgSongAudio.currentTime = 0; } catch (_) {}
+  }
+  // jrvOnSongEnded fires from the 'pause' event handler and handles mic restore.
+}
+
+// Called when the song ends — naturally, via our 10s timer, or via cancel.
+// Clears the "songPlaying" flag and lets the SpeechRecognition resume.
+function jrvOnSongEnded() {
+  if (!jrvState.songPlaying) return;
+  jrvState.songPlaying = false;
+  if (jrvState.alwaysOn && jrvState.recognition) {
+    try { jrvState.recognition.start(); }
+    catch (_) { /* may already be restarting via onend handler — that's fine */ }
   }
 }
 
