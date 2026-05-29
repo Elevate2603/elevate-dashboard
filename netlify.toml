@@ -16,6 +16,10 @@
 [functions."jarvis"]
   timeout = 26
 
+# Market Hot Spots intel — Claude with web_search tool may take 15–25s on cold runs
+[functions."market-hotspots"]
+  timeout = 26
+
 # Static asset cache headers (long for static images, short for index.html so deploys appear instantly)
 [[headers]]
   for = "/index.html"

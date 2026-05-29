@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-AE-MARKET-HOTSPOTS-V2 -->
+<!-- ELEVATE-2026-0528-AF-MARKET-INTEL-LIVE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -729,7 +729,10 @@
         </div>
         <div class="jrv-mhs-areas" id="jrvMhsAreas"></div>
         <div id="jrvMhsAreaDetailWrap"></div>
-        <div class="jrv-mhs-source-note">Live from hiring signals · external sources (Job Bank, news) coming next</div>
+        <div class="jrv-mhs-source-note" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <span id="jrvMhsStatus">Loading…</span>
+          <button onclick="jrvRefreshMarketIntel()" title="Refresh live data" style="background:none;border:1px solid var(--border);color:var(--gold);font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer;">↻</button>
+        </div>
 
         <div class="jrv-rail-title" style="margin-top:14px;">Hot Hiring Positions</div>
         <div class="jrv-mhs-bars" id="jrvMhsBars">
@@ -2231,6 +2234,9 @@ const JRV_CONFIG = {
   SIGNALS_URL: 'https://hook.us2.make.com/u5omv41orexphg4nxldq6f3vvxp67ygu', // Pending Retrieval Fetch → datastore 97143
   SCRIBE_URL: '/.netlify/functions/scribe', // Phase 3 — RCRM/Outlook follow-up lists
   JARVIS_URL: '/.netlify/functions/jarvis', // Phase 2 brain. Empty string = force demo mode.
+  MARKET_INTEL_URL: '/.netlify/functions/market-hotspots', // Job Bank + news scan via Claude web search
+  MARKET_INTEL_CACHE_KEY: 'jrv_market_intel_v1',
+  MARKET_INTEL_TTL_MS: 24 * 60 * 60 * 1000, // 24h — refresh once a day on first load
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
   HISTORY_MAX: 20, // turns sent to brain each call
   HISTORY_STORE_MAX: 60, // turns kept in localStorage across sessions
@@ -2272,6 +2278,7 @@ function jrvInit() {
   jrvInitSphere();
   jrvLoadQueueData();
   jrvLoadHiringSignals();
+  jrvLoadMarketIntel();
   jrvLoadFollowUps();
   jrvCheckBrain();
   jrvPrimeVoices();
@@ -2374,6 +2381,63 @@ function jrvLoadHiringSignals() {
     .catch(() => { jrvState.hiringSignals = []; jrvRenderMarketHotSpots(); });
 }
 
+// Live market intel — Job Bank Canada + news + Indeed via Claude web_search.
+// Cache in localStorage for 24h. Stale-while-revalidate: paint cached data instantly,
+// then refresh in the background if older than TTL.
+function jrvLoadMarketIntel(force) {
+  let cached = null;
+  try {
+    const raw = localStorage.getItem(JRV_CONFIG.MARKET_INTEL_CACHE_KEY);
+    if (raw) cached = JSON.parse(raw);
+  } catch (_) {}
+
+  if (cached && cached.ok && Array.isArray(cached.areas)) {
+    jrvState.marketIntel = cached;
+    jrvRenderMarketHotSpots();
+  }
+
+  const ageMs = cached && cached.fetched_at ? Date.now() - new Date(cached.fetched_at).getTime() : Infinity;
+  if (!force && cached && ageMs < JRV_CONFIG.MARKET_INTEL_TTL_MS) return;
+
+  // Fetch fresh — set a visible loading hint if we have nothing to paint
+  if (!cached || !cached.ok) jrvSetMarketIntelStatus('Researching live hiring data…');
+  else jrvSetMarketIntelStatus('Refreshing live data…');
+
+  fetch(JRV_CONFIG.MARKET_INTEL_URL, { method: 'GET' })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j)))
+    .then(data => {
+      if (!data || !data.ok) throw new Error(data && data.error || 'No data');
+      jrvState.marketIntel = data;
+      try { localStorage.setItem(JRV_CONFIG.MARKET_INTEL_CACHE_KEY, JSON.stringify(data)); } catch (_) {}
+      jrvRenderMarketHotSpots();
+      jrvSetMarketIntelStatus(null);
+    })
+    .catch(err => {
+      const msg = (err && err.error) || (err && err.message) || String(err);
+      console.warn('[Market Intel] fetch failed:', msg);
+      // Keep showing cached data if we have it
+      jrvSetMarketIntelStatus(cached && cached.ok ? `Live refresh failed: ${msg}` : `Could not load live intel: ${msg}`);
+    });
+}
+
+function jrvSetMarketIntelStatus(msg) {
+  const el = document.getElementById('jrvMhsStatus');
+  if (!el) return;
+  if (!msg) {
+    const intel = jrvState.marketIntel;
+    if (intel && intel.fetched_at) {
+      const dt = new Date(intel.fetched_at);
+      el.textContent = `Updated ${dt.toLocaleDateString('en-CA', { month:'short', day:'numeric' })} ${dt.toLocaleTimeString('en-CA', { hour:'2-digit', minute:'2-digit' })} · ${intel.source || ''}`;
+    } else {
+      el.textContent = '';
+    }
+  } else {
+    el.textContent = msg;
+  }
+}
+
+function jrvRefreshMarketIntel() { jrvLoadMarketIntel(true); }
+
 // ════════════════════════════════════════════════════════════════════════
 // MARKET HOT SPOTS — aggregate signals by city + profession, render map + pie
 // ════════════════════════════════════════════════════════════════════════
@@ -2472,8 +2536,32 @@ function jrvMhsExtractTitles(d) {
 }
 
 function jrvComputeMarketHotSpots() {
+  // Preferred path: live market intel from the Netlify function (Job Bank + news + Indeed).
+  // It already comes ranked + shaped, so we just normalize and return.
+  const intel = jrvState.marketIntel;
+  if (intel && Array.isArray(intel.areas) && intel.areas.length) {
+    const areas = intel.areas.slice(0, 5).map(a => ({
+      key: (a.key || a.name || '').toString().toLowerCase().trim(),
+      name: a.name || jrvTitleCase(a.key || ''),
+      count: Number(a.job_count) || 0,
+      score: Number(a.job_count) || 0,
+      industries: new Map((a.top_industries || []).map(i => [i, 1])),
+      titles: new Map((a.top_roles || []).map(t => [t, 1])),
+      companies: [],
+      whys: a.why_now ? [a.why_now] : [],
+    }));
+    const professions = (intel.roles || []).slice(0, 10).map(r => ({
+      title: r.title || '',
+      count: Number(r.job_count) || 0,
+      areas: new Map((r.top_areas || []).map(c => [String(c).toLowerCase(), 1])),
+      why_now: r.why_now || '',
+    }));
+    return { areas, professions };
+  }
+
+  // Fallback: aggregate from the existing ZoomInfo hiring signals when live intel
+  // hasn't loaded yet. Same shape as the live path so the renderers don't care.
   const signals = (jrvState.hiringSignals || []).map(r => (r && r.aggregate) ? r.aggregate : r).filter(r => r && r.data);
-  // Areas — group by city
   const areaMap = new Map();
   for (const r of signals) {
     const d = r.data || {};
@@ -2494,8 +2582,6 @@ function jrvComputeMarketHotSpots() {
     if (d.why_now) a.whys.push(d.why_now);
   }
   const areas = Array.from(areaMap.values()).sort((a, b) => b.count - a.count || b.score - a.score);
-
-  // Professions — top 10 titles across all signals
   const profMap = new Map();
   for (const r of signals) {
     for (const t of jrvMhsExtractTitles(r.data || {})) {
@@ -2637,11 +2723,12 @@ function jrvMhsProfClick(title) {
   const p = professions.find(x => x.title === title);
   if (!p) return;
   document.querySelectorAll('.jrv-mhs-bar-row').forEach(r => r.classList.toggle('active', r.dataset.prof === title));
-  const topAreas = Array.from(p.areas.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${jrvTitleCase(k)} (${v})`);
+  const topAreas = Array.from(p.areas.keys()).slice(0, 5).map(k => jrvTitleCase(k));
   jrvMhsAskBrain('profession', {
     title: p.title,
-    signal_count: p.count,
+    job_count: p.count,
     top_areas: topAreas,
+    why_now_hint: p.why_now || '',
   }, 'jrvMhsProfDetailWrap');
 }
 
@@ -2660,17 +2747,20 @@ function jrvMhsAskBrain(kind, payload, targetWrapId) {
   `;
 
   const transcriptKind = kind === 'area' ? 'MARKET HOT SPOT — AREA' : 'MARKET HOT SPOT — PROFESSION';
+  const subject = kind === 'area' ? payload.name : payload.title;
+  const count = payload.signal_count || payload.job_count;
   const transcript =
     `${transcriptKind} CLICK · Travis wants a tight breakdown.\n\n` +
-    `Subject: ${kind === 'area' ? payload.name : payload.title}\n` +
-    `Signal count: ${payload.signal_count}\n` +
+    `Subject: ${subject}\n` +
+    (count ? `Posted jobs / signal count: ${count}\n` : '') +
     (kind === 'area'
       ? `Top industries: ${(payload.industries || []).join(', ') || '(unknown)'}\n` +
         `Top roles: ${(payload.roles || []).join(', ') || '(unknown)'}\n` +
-        `Active companies: ${(payload.companies || []).join(', ') || '(unknown)'}\n` +
+        (payload.companies && payload.companies.length ? `Active companies: ${payload.companies.join(', ')}\n` : '') +
         `Sample why_now phrases: ${(payload.why_now_samples || []).map(w => `"${w}"`).join(' | ') || '(none)'}\n\n` +
         `Write a tight ~70-word INTEL briefing on what's driving this area right now. Lead with the strongest catalyst (plant, expansion, contract, sector trend). Name companies if relevant. Mention the dominant role/skill demand. Plain prose, no bullets, no markdown. Set agent="intel".`
-      : `Active hiring areas: ${(payload.top_areas || []).join(', ') || '(unknown)'}\n\n` +
+      : `Active hiring areas: ${(payload.top_areas || []).join(', ') || '(unknown)'}\n` +
+        (payload.why_now_hint ? `Why_now hint from live data: "${payload.why_now_hint}"\n` : '') + '\n' +
         `Write a tight ~70-word INTEL briefing on why ${payload.title} is one of the hottest roles right now. Mention which sectors drive it and which Ontario regions concentrate the demand. Plain prose, no bullets, no markdown. Set agent="intel".`
     );
 
