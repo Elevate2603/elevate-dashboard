@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0529-AW-PER-AGENT-VOICES -->
+<!-- ELEVATE-2026-0529-AX-ALL-VOICES-VISIBLE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -762,7 +762,9 @@
   .jrv-voice-row:hover { background:rgba(200,130,10,0.08); border-left-color:var(--gold); }
   .jrv-voice-row.active { background:rgba(200,130,10,0.16); border-left-color:var(--gold); color:var(--gold); }
   .jrv-voice-row.active::before { content:'\2713 '; color:var(--gold); margin-right:4px; }
-  .jrv-voice-name { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:8px; }
+  .jrv-voice-name { flex:1; min-width:0; padding-right:8px; display:flex; flex-direction:column; gap:1px; }
+  .jrv-voice-name-text { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .jrv-voice-lang-tag { color:var(--text-muted); font-size:9px; letter-spacing:0.06em; text-transform:uppercase; }
   .jrv-voice-preview-btn { background:rgba(200,130,10,0.15); border:1px solid rgba(200,130,10,0.4); color:var(--gold); font-size:10px; width:24px; height:22px; border-radius:3px; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:0; }
   .jrv-voice-preview-btn:hover { background:var(--gold); color:#000; }
   .jrv-voice-empty { color:var(--text-muted); font-size:11px; text-align:center; padding:24px 16px; font-style:italic; }
@@ -2910,8 +2912,22 @@ function jrvRenderVoiceMenuList() {
   if (!list) return;
   const agentName = menu.getAttribute('data-agent') || 'jarvis';
   let voices = (('speechSynthesis' in window) ? speechSynthesis.getVoices() : []) || [];
-  voices = voices.filter(v => /^en/i.test(v.lang || ''));
-  voices.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  // No filter — show every voice the browser has so nothing gets accidentally
+  // hidden. Sort English voices to the top (UK English first within those),
+  // then everything else by name.
+  voices = voices.slice().sort((a, b) => {
+    const la = (a.lang || '').toLowerCase();
+    const lb = (b.lang || '').toLowerCase();
+    const enA = la.startsWith('en') ? 0 : 1;
+    const enB = lb.startsWith('en') ? 0 : 1;
+    if (enA !== enB) return enA - enB;
+    if (la.startsWith('en')) {
+      const gbA = la.startsWith('en-gb') ? 0 : 1;
+      const gbB = lb.startsWith('en-gb') ? 0 : 1;
+      if (gbA !== gbB) return gbA - gbB;
+    }
+    return (a.name || '').localeCompare(b.name || '');
+  });
   if (!voices.length) {
     list.innerHTML = '<div class="jrv-voice-empty">Voices loading&hellip; try again in a moment.</div>';
     return;
@@ -2922,9 +2938,13 @@ function jrvRenderVoiceMenuList() {
     const isActive = v.name === current;
     // Escape single quotes in voice name for safe inline onclick attribute
     const attrName = (v.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const langTag = (v.lang || '').toString();
     return ''
       + '<div class="jrv-voice-row' + (isActive ? ' active' : '') + '" onclick="jrvSelectAgentVoice(\'' + escapeAttr(agentName) + '\', \'' + attrName + '\')">'
-      +   '<span class="jrv-voice-name" title="' + escapeAttr(v.name + ' [' + v.lang + ']') + '">' + escapeHtml(v.name) + '</span>'
+      +   '<span class="jrv-voice-name" title="' + escapeAttr(v.name + ' [' + langTag + ']') + '">'
+      +     '<span class="jrv-voice-name-text">' + escapeHtml(v.name) + '</span>'
+      +     (langTag ? '<span class="jrv-voice-lang-tag">' + escapeHtml(langTag) + '</span>' : '')
+      +   '</span>'
       +   '<button class="jrv-voice-preview-btn" onclick="event.stopPropagation(); jrvPreviewVoice(\'' + attrName + '\')" title="Preview">&#9654;</button>'
       + '</div>';
   }).join('');
