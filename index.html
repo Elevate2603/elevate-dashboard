@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0529-AQ-MORNING-BRIEF -->
+<!-- ELEVATE-2026-0529-AR-BRIEF-V1-LIVE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -702,6 +702,8 @@
   .jrv-brief-hot-from { color: var(--gold); font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:0.08em; }
   .jrv-brief-hot-subj { color: var(--text); margin-top:2px; }
   .jrv-brief-hot-why { color: var(--text-muted); font-style:italic; font-size:10px; margin-top:2px; }
+  .jrv-brief-line { color: var(--text); font-size:11px; line-height:1.5; padding:2px 0; }
+  .jrv-brief-line .jrv-brief-label { display:inline-block; margin-right:6px; }
   .jrv-brief-refresh { background: none; border:1px solid rgba(200,130,10,0.4); color: var(--gold); font-size:10px; padding:3px 8px; margin-left:6px; border-radius:3px; cursor:pointer; font-family:inherit; }
   .jrv-brief-play { background: var(--gold); color:#000; border:none; border-radius:4px; padding:6px 10px; font-size:10px; letter-spacing:0.08em; font-weight:700; cursor:pointer; text-transform:uppercase; width:100%; margin-top:4px; }
   .jrv-brief-play:hover { filter:brightness(1.1); }
@@ -2726,15 +2728,17 @@ function jrvLoadMorningBrief(force) {
     .then(r => r.ok ? r.json() : null)
     .then(data => {
       if (!data || !data.brief_date) { jrvBriefData = null; jrvRenderBriefCard(); return; }
-      // Outer wrapper has *_json fields as serialized strings — parse them.
-      const safe = (s, fb) => { try { return JSON.parse(s); } catch (_) { return fb; } };
+      // v1 architecture: *_json fields hold plain-text summaries (e.g.
+      // "RCRM holds 100 companies. Sample names: …"), not structured JSON.
+      // Plain text avoids the JSON-in-JSON escape problem in Make's jsonStringBodyContent.
+      // If we move to structured payloads later, switch back to JSON.parse with a fallback.
       jrvBriefData = {
         brief_date: data.brief_date,
         generated_at: data.generated_at,
         narration_text: data.narration_text || '',
-        active_clients: safe(data.active_clients_json, []),
-        outlook: safe(data.outlook_json, {}),
-        market_intel: safe(data.market_intel_json, {})
+        active_clients_text: data.active_clients_json || '',
+        outlook_text: data.outlook_json || '',
+        market_intel_text: data.market_intel_json || ''
       };
       jrvRenderBriefCard();
     })
@@ -2752,20 +2756,16 @@ function jrvRenderBriefCard() {
   }
   const b = jrvBriefData;
   if (dateEl) dateEl.textContent = b.brief_date || '—';
-  const acCount = Array.isArray(b.active_clients) ? b.active_clients.length : 0;
-  const ob = b.outlook || {};
-  const sum = ob.summary || {};
-  const hot = Array.isArray(ob.hot_threads) ? ob.hot_threads.slice(0, 2) : [];
   let html = '';
-  html += '<div class="jrv-brief-row"><span class="jrv-brief-label">Active Clients</span><span class="jrv-brief-val">' + acCount + '</span></div>';
-  html += '<div class="jrv-brief-row"><span class="jrv-brief-label">Inbox 24h</span><span class="jrv-brief-val">' + (sum.human || 0) + ' human &middot; ' + (sum.autoreply || 0) + ' auto</span></div>';
-  hot.forEach(t => {
-    html += '<div class="jrv-brief-hot">';
-    html += '<div class="jrv-brief-hot-from">' + escapeHtml(t.from || '') + '</div>';
-    html += '<div class="jrv-brief-hot-subj">' + escapeHtml(t.subject || '') + '</div>';
-    if (t.why_hot) html += '<div class="jrv-brief-hot-why">' + escapeHtml(t.why_hot) + '</div>';
-    html += '</div>';
-  });
+  if (b.active_clients_text) {
+    html += '<div class="jrv-brief-line"><span class="jrv-brief-label">Clients</span> ' + escapeHtml(b.active_clients_text) + '</div>';
+  }
+  if (b.outlook_text) {
+    html += '<div class="jrv-brief-line"><span class="jrv-brief-label">Inbox</span> ' + escapeHtml(b.outlook_text) + '</div>';
+  }
+  if (b.market_intel_text) {
+    html += '<div class="jrv-brief-line"><span class="jrv-brief-label">Intel</span> ' + escapeHtml(b.market_intel_text) + '</div>';
+  }
   if (b.narration_text) {
     html += '<button class="jrv-brief-play" onclick="jrvPlayBriefNarration()">&#9654; Hear the Brief</button>';
   }
