@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0529-AT-TASKS-EMPTY-FIX -->
+<!-- ELEVATE-2026-0529-AU-UK-MALE-VOICE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2762,17 +2762,35 @@ function jrvQueueSpeak(text) {
     if (!clean) return;
     const u = new SpeechSynthesisUtterance(clean);
     u.rate = 1.0; u.pitch = 0.95; u.volume = 1.0;
-    const voices = speechSynthesis.getVoices();
-    const savedName = localStorage.getItem(JRV_VOICE_KEY);
-    let pick = savedName ? voices.find(v => v.name === savedName) : null;
-    if (!pick) {
-      pick = voices.find(v => /male/i.test(v.name) && /en/i.test(v.lang)) ||
-             voices.find(v => /david|daniel|google uk english male/i.test(v.name)) ||
-             voices.find(v => /en-GB|en-US/i.test(v.lang));
-    }
+    const pick = jrvPickVoice(speechSynthesis.getVoices(), localStorage.getItem(JRV_VOICE_KEY));
     if (pick) u.voice = pick;
     speechSynthesis.speak(u);
   } catch (_) {}
+}
+
+// UK Male preferred. Order of preference:
+//   1. Saved user choice IF it's a UK voice (honors explicit picks)
+//   2. Known UK Male voices by name (George / Daniel / Oliver / Arthur / Google UK English Male)
+//   3. Any UK voice with "male" in the name
+//   4. Any UK voice at all (better UK female than US male for JARVIS character)
+//   5. Saved non-UK choice (honors deliberate cross-region pick)
+//   6. Generic English male voice
+//   7. Any English voice
+function jrvPickVoice(voices, savedName) {
+  if (!voices || !voices.length) return null;
+  const savedHit = savedName ? voices.find(v => v.name === savedName) : null;
+  const isUK = v => /en-GB|united kingdom|uk english/i.test((v.name || '') + ' ' + (v.lang || ''));
+  if (savedHit && isUK(savedHit)) return savedHit;
+  const ukMaleByName = voices.find(v => /george|oliver|arthur|daniel|google uk english male/i.test(v.name || ''));
+  if (ukMaleByName) return ukMaleByName;
+  const ukAndMale = voices.find(v => isUK(v) && /male/i.test(v.name || ''));
+  if (ukAndMale) return ukAndMale;
+  const anyUK = voices.find(isUK);
+  if (anyUK) return anyUK;
+  if (savedHit) return savedHit;
+  const anyEnMale = voices.find(v => /male|david|mark|alex|fred|tom|james|paul/i.test(v.name || '') && /en/i.test(v.lang || ''));
+  if (anyEnMale) return anyEnMale;
+  return voices.find(v => /^en/i.test(v.lang || '')) || voices[0] || null;
 }
 
 function jrvLoadMorningBrief(force) {
@@ -4276,14 +4294,7 @@ function jrvSpeakOut(text) {
     u.rate = 1.0;
     u.pitch = 0.95;
     u.volume = 1.0; // max — JARVIS must stay loud over the background song
-    const voices = speechSynthesis.getVoices();
-    const savedName = localStorage.getItem(JRV_VOICE_KEY);
-    let pick = savedName ? voices.find(v => v.name === savedName) : null;
-    if (!pick) {
-      pick = voices.find(v => /male/i.test(v.name) && /en/i.test(v.lang)) ||
-             voices.find(v => /david|daniel|google uk english male/i.test(v.name)) ||
-             voices.find(v => /en-GB|en-US/i.test(v.lang));
-    }
+    const pick = jrvPickVoice(speechSynthesis.getVoices(), localStorage.getItem(JRV_VOICE_KEY));
     if (pick) u.voice = pick;
     // Sphere talking-pulse hooks
     u.onstart = () => {
