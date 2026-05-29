@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-AI-TACTICAL-RADAR -->
+<!-- ELEVATE-2026-0528-AJ-RADAR-HALF-SIZE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -550,8 +550,13 @@
   .jrv-stage-count { color: var(--gold); font-weight:700; font-size:13px; }
   .jrv-stage-row.empty .jrv-stage-count { color: var(--text-muted); }
 
-  /* Market Hot Spots — full-width tactical radar section below the sphere row */
+  /* Market Hot Spots — full-width section below the sphere row */
   .jrv-mhs-section { display:flex; flex-direction:column; gap:18px; margin-top:24px; }
+  /* Tactical radar is the centerpiece-but-not-too-big — half width, centered.
+     Sphere stays the visual hero; this map is a reference graphic, not the focus. */
+  .jrv-mhs-section > .jrv-map-root { max-width: 560px; width: 50%; margin: 0 auto; }
+  @media (max-width: 1100px) { .jrv-mhs-section > .jrv-map-root { width: 80%; max-width: none; } }
+  @media (max-width: 700px)  { .jrv-mhs-section > .jrv-map-root { width: 100%; } }
   .jrv-mhs-lower { display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap:18px; }
   @media (max-width: 1100px) { .jrv-mhs-lower { grid-template-columns: 1fr; } }
   .jrv-mhs-panel { background: var(--dark2); border:1px solid var(--border); border-radius:12px; padding:18px 16px; display:flex; flex-direction:column; gap:10px; }
