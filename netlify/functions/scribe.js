@@ -81,20 +81,60 @@ exports.handler = async (event) => {
       }
       return jsonResp(200, { ok: true, fields: fieldShape, sample_keys: Object.keys(first).sort() });
     }
+    if (params.get("debug") === "fields-co") {
+      const r = await fetch(`${RCRM_BASE}/companies?page=1&limit=1`, { headers: { Authorization: `Bearer ${process.env.RCRM_BEARER_TOKEN}` } });
+      const data = await r.json();
+      const first = (Array.isArray(data) ? data : (data.data || data.results || data.companies || []))[0];
+      if (!first) return jsonResp(200, { ok: true, fields: [] });
+      const fieldShape = {};
+      for (const k of Object.keys(first)) {
+        const v = first[k];
+        fieldShape[k] = Array.isArray(v) ? `array(len=${v.length})` : (v === null ? "null" : typeof v);
+      }
+      // Also dump the actual values for the off_limit-ish fields so we can see what they hold
+      const offLimitValues = {};
+      for (const k of Object.keys(first)) if (/off.?limit/i.test(k)) offLimitValues[k] = first[k];
+      return jsonResp(200, { ok: true, fields: fieldShape, sample_keys: Object.keys(first).sort(), off_limit_values: offLimitValues });
+    }
+    if (params.get("debug") === "active") {
+      // Run the full active-client pull and return diagnostic info only — no rollup
+      const cos = await rcrmListCompanies();
+      const sample = cos.find(c => isActiveClient(c)) || cos[0] || null;
+      const flagged = cos.filter(c => isActiveClient(c));
+      return jsonResp(200, {
+        ok: true,
+        total_companies: cos.length,
+        active_client_companies: flagged.length,
+        sample_active: flagged.slice(0, 3).map(c => ({ slug: c.slug, name: c.company_name || c.name, off_limit_status_id: c.off_limit_status_id })),
+        first_company_off_limit_fields: sample ? Object.keys(sample).filter(k => /off.?limit/i.test(k)).reduce((acc, k) => { acc[k] = sample[k]; return acc; }, {}) : null,
+      });
+    }
 
     const asOf = new Date().toISOString();
-    // RCRM's public API doesn't support filtering /v1/contacts by list_id — the param
-    // is silently ignored. So we pull the full set once and partition client-side.
-    const [allContacts, outlookActivity] = await Promise.all([
+    // off_limit_status_id lives on the COMPANY record (not the contact), so we pull
+    // both endpoints. Companies give us the authoritative Active-Client membership;
+    // contacts give us the activity history we roll up per company.
+    const [allContacts, allCompanies, outlookActivity] = await Promise.all([
       rcrmListContacts({}),
+      rcrmListCompanies().catch(e => { console.warn("[SCRIBE] companies pull failed:", e && e.message); return []; }),
       pullOutlookActivity().catch(e => ({ error: String(e && e.message || e), byEmail: new Map() })),
     ]);
     const outlookByEmail = outlookActivity.byEmail || new Map();
     const outlookErr = outlookActivity.error || null;
 
+    // Build slug → activeClient lookup from companies
+    const activeBySlug = new Map();
+    const activeByName = new Map();
+    for (const co of allCompanies) {
+      if (!isActiveClient(co)) continue;
+      if (co.slug) activeBySlug.set(co.slug, co);
+      const name = (co.company_name || co.name || "").trim().toLowerCase();
+      if (name) activeByName.set(name, co);
+    }
+
     const listC = computeListC_clientsGoneQuiet(allContacts, outlookByEmail);
     const listAPartial = computeListA_inSequencePartial(allContacts);
-    const activeClientResult = computeActiveClients(allContacts, outlookByEmail);
+    const activeClientResult = computeActiveClients(allContacts, outlookByEmail, { activeBySlug, activeByName });
 
     return jsonResp(200, {
       ok: true,
@@ -206,21 +246,37 @@ function computeListC_clientsGoneQuiet(contacts, outlookByEmail) {
 // the dashboard. Filters by off_limit_status_id == 166186 (Active Client) on each
 // contact or its related_company. Joins Outlook activity so an unlogged email
 // still counts as a recent touch on the company.
-function computeActiveClients(allContacts, outlookByEmail) {
+function computeActiveClients(allContacts, outlookByEmail, lookup) {
   outlookByEmail = outlookByEmail || new Map();
+  lookup = lookup || { activeBySlug: new Map(), activeByName: new Map() };
   const now = Date.now();
   const byCompany = new Map();
   let matched = 0;
 
-  for (const c of allContacts) {
-    if (!isActiveClient(c)) continue;
-    matched++;
-    const company = extractCompany(c);
-    if (!company) continue;
-    const companySlug = (c.related_company && c.related_company.slug) || c.company_slug || null;
-    const key = (companySlug || company).toLowerCase();
+  // Pre-seed buckets from the companies endpoint so every Active Client appears
+  // even if there are no logged contacts/activity yet (otherwise they'd be invisible).
+  for (const co of lookup.activeBySlug.values()) {
+    const key = co.slug.toLowerCase();
+    if (!byCompany.has(key)) byCompany.set(key, {
+      slug: co.slug,
+      name: (co.company_name || co.name || "(no name)").trim(),
+      most_recent: null,
+    });
+  }
 
-    if (!byCompany.has(key)) byCompany.set(key, { slug: companySlug, name: company, most_recent: null });
+  for (const c of allContacts) {
+    const companySlug = (c.related_company && c.related_company.slug) || c.company_slug || null;
+    const companyName = (extractCompany(c) || "").trim();
+    // A contact counts if EITHER it carries off_limit_status_id directly, OR its
+    // company is in the active-client lookup we built from /v1/companies.
+    const companyMatch = (companySlug && lookup.activeBySlug.has(companySlug))
+                      || (companyName && lookup.activeByName.has(companyName.toLowerCase()));
+    if (!isActiveClient(c) && !companyMatch) continue;
+    matched++;
+    if (!companyName) continue;
+    const key = (companySlug || companyName).toLowerCase();
+
+    if (!byCompany.has(key)) byCompany.set(key, { slug: companySlug, name: companyName, most_recent: null });
     const bucket = byCompany.get(key);
     if (!bucket.slug && companySlug) bucket.slug = companySlug;
 
@@ -270,9 +326,7 @@ function computeActiveClients(allContacts, outlookByEmail) {
   return {
     rows,
     scanned: matched,
-    diagnostic: matched === 0
-      ? `0 contacts matched off_limit_status_id=${ACTIVE_CLIENT_OFF_LIMIT_ID}. Hit /scribe?debug=fields to inspect what RCRM actually returns on each contact.`
-      : `${matched} contacts marked Active Client → ${rows.length} unique companies.`,
+    diagnostic: `companies-flagged=${lookup.activeBySlug.size} · contacts-matched=${matched} · unique-companies-shown=${rows.length}. If still empty, hit /scribe?debug=fields-co to inspect company shape.`,
   };
 }
 
@@ -296,6 +350,24 @@ function computeListA_inSequencePartial(contacts) {
 }
 
 // ── RCRM helpers ───────────────────────────────────────────────────────
+async function rcrmListCompanies() {
+  const all = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const url = `${RCRM_BASE}/companies?page=${page}&limit=${PAGE_LIMIT}`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${process.env.RCRM_BEARER_TOKEN}` } });
+    if (!r.ok) {
+      if (page === 1) throw new Error(`RCRM /companies returned ${r.status}: ${(await r.text()).slice(0, 240)}`);
+      break;
+    }
+    const data = await r.json();
+    const arr = Array.isArray(data) ? data : (data.data || data.results || data.companies || []);
+    if (!arr.length) break;
+    all.push(...arr);
+    if (arr.length < PAGE_LIMIT) break;
+  }
+  return all;
+}
+
 async function rcrmListContacts({ listId } = {}) {
   const all = [];
   for (let page = 1; page <= MAX_PAGES; page++) {
