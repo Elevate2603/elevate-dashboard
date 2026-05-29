@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-Y-SONG-MIC-GATE -->
+<!-- ELEVATE-2026-0528-Z-SELF-ECHO-FILTER -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2666,7 +2666,7 @@ function jrvStartAlwaysOn() {
     // Travis says "Jarvis" to interrupt. By acting on interim text the moment the
     // wake word appears, the interrupt is near-instant.
     const speaking = (typeof speechSynthesis !== 'undefined' && speechSynthesis.speaking) || jrvState.speaking;
-    if (speaking && interimLower && JRV_WAKE_RE.test(interimLower) && !jrvState.recentInterrupt) {
+    if (speaking && interimLower && JRV_WAKE_RE.test(interimLower) && !jrvState.recentInterrupt && !jrvIsSelfEcho(interimLower)) {
       jrvState.recentInterrupt = true;
       setTimeout(() => { jrvState.recentInterrupt = false; }, 1800);
       jrvInterruptSpeech();
@@ -2675,6 +2675,13 @@ function jrvStartAlwaysOn() {
     }
 
     if (!finalText) return;
+    // Drop transcripts that are echoes of JARVIS's own current speech. Chrome's mic
+    // picks up the speaker output and transcribes the lyrics back to us; without this
+    // filter, JARVIS would respond to himself.
+    if (jrvIsSelfEcho(finalText)) {
+      try { console.log('[JARVIS heard — filtered as self-echo]', finalText); } catch (_) {}
+      return;
+    }
     // Log every final transcript so the browser console shows what Chrome decided he said
     try { console.log('[JARVIS heard]', finalText, 'wake-match:', JRV_WAKE_RE.test(finalText)); } catch (_) {}
     // Don't reprocess the same chunk if Chrome re-emits it on resume
@@ -3099,6 +3106,32 @@ const JRV_VOICE_KEY = 'jrv_chosen_voice_v1';
 // Track what's being spoken so wake-word interruption can capture it for "continue" resume
 let jrvCurrentSpeechText = null;
 let jrvLastInterruptedText = null;
+
+// Self-echo filter — Chrome's SpeechRecognition picks up JARVIS's own voice through
+// the speakers and feeds the lyrics back to us as "user transcripts." Without this
+// filter, JARVIS would respond to himself and ping-pong forever.
+//
+// Strategy: tokenize the incoming transcript and JARVIS's current speech text to
+// lowercase words. If a meaningful fraction of the incoming words appear verbatim
+// in what JARVIS is currently saying, treat the transcript as echo and drop it.
+//
+// Short transcripts (≤2 words) — like a lone "jarvis" — bypass the filter so the
+// voice-interrupt path still works even if JARVIS happens to be saying his own name.
+function jrvIsSelfEcho(transcript) {
+  if (!transcript) return false;
+  // Only filter when JARVIS is actively speaking — outside of that, there's nothing
+  // to echo against.
+  const current = jrvCurrentSpeechText;
+  if (!current) return false;
+  const toks = (s) => String(s).toLowerCase().replace(/[^a-z0-9'\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const incoming = toks(transcript);
+  if (incoming.length < 3) return false; // too short — let normal path handle it
+  const known = new Set(toks(current));
+  if (!known.size) return false;
+  let overlap = 0;
+  for (const w of incoming) if (known.has(w)) overlap++;
+  return overlap / incoming.length >= 0.6;
+}
 
 function jrvInterruptSpeech() {
   if (!('speechSynthesis' in window)) return false;
