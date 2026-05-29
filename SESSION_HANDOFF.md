@@ -1,5 +1,75 @@
 # Session Handoff
 
+## 2026-05-29 Session — JARVIS Morning Brief shipped end-to-end (open item #89 resolved)
+
+### What Was Done
+
+Resolved the Mail.Read scope question by reading the Microsoft 365 connection metadata directly via Make MCP. Connection 8250656 already has `Mail.ReadWrite` (the Graph superset that covers Mail.Read), granted alongside the 8 other scopes when admin consent was originally given. The 3-minute Make probe Travis was planning was unnecessary — no second consent request, no admin message.
+
+That unblocked the full Outlook leg. Built and activated the complete Morning Brief pipeline end-to-end in one session:
+
+**New data layer** (datastructure IDs in parens, datastore IDs in brackets):
+- `elevate_morning_brief_struct` (385227) → `elevate_morning_brief_cache` [103642] — single-row final composite written by the Assembler at 07:55, read by the Fetch webhook + dashboard.
+- `elevate_brief_working_struct` (385228) → `elevate_brief_working` [103645] — per-key staging where each pull scenario writes its slice (`active_clients`, `outlook`).
+- `elevate_outlook_classifier_struct` (385229) → `elevate_outlook_classifier_cache` [103646] — sender-domain TTL cache (30d) for autoreply classifications, ready for future use.
+- Freed 4 MB by shrinking `elevate_market_signals` 5→2 MB and `elevate_signal_history` 2→1 MB before creating the new stores (Core plan 20 MB cap was full).
+
+**New Make scenarios** (all activated, first scheduled run 2026-05-30 morning):
+- `5229620` Brief Active Clients Snapshot — daily 07:30, GET RCRM `/v1/companies?limit=100`, dumps raw JSON to working datastore key `active_clients`. Assembler filters server-side.
+- `5229661` Brief Outlook Inbox Triage — daily 07:45, Microsoft 365 `makeApiCall` to Graph `/v1.0/me/mailFolders/Inbox/messages` (last 24h, 50 msgs, includes `internetMessageHeaders`), Claude Haiku 4.5 classifies via header + subject rules in one call, returns `{summary:{total,human,autoreply,marketing}, hot_threads:[…]}`, writes to working datastore key `outlook`.
+- `5229677` Brief Assembler — daily 07:55, GetRecord on the two working keys + GetRecord on the existing `elevate_market_intel_cache` [103513] → Claude Opus 4.7 writes a 75-second (~190 word) narration in Travis-voice (no em dashes, address as Travis/sir, end with one call-to-action) → writes the composite to `elevate_morning_brief_cache` key `current`.
+- `5229693` Brief Fetch — instant trigger on new hook `2381905` / URL `https://hook.us2.make.com/1u4418ksb6jkc37lpbrylswtuj9hl56m`, returns the cached brief as JSON for the dashboard fetch.
+
+**Dashboard wiring** (`index.html`, commit `6d95972`, build token `ELEVATE-2026-0529-AQ-MORNING-BRIEF`):
+- `JRV_CONFIG.BRIEF_URL` set to the new webhook.
+- `jrvLoadMorningBrief()` called from `jrvInit`. Fetches the brief, parses the inner `*_json` strings, stores in `jrvBriefData`.
+- Right-rail card titled "Morning Brief · <date>" sits above the Pipeline section. Shows Active Clients count, inbox human/auto counts, up to two hot-thread cards with from/subject/why_hot, and a gold "▶ Hear the Brief" button for on-demand replay.
+- `jrvQueueSpeak()` helper added — chains a new `SpeechSynthesisUtterance` onto the current queue without calling `cancel()`. Lets the greeting reply finish before the brief plays.
+- `jrvProcessGreeting()` extended: when Travis says "good morning Jarvis" (period === "morning"), after the existing reply finishes, queues "Here is today's brief." then the full narration. Gated by `localStorage.jrv_brief_spoken_date_v1` so it only auto-plays once per calendar day. The "Hear the Brief" button bypasses the gate for manual replay.
+
+### Architecture decisions made mid-build (vs the original plan)
+
+- **Collapsed 5 pull scenarios to 3.** Original plan had separate Hiring Signals Pull (07:35) and Market Intel Pull (07:40) scenarios. Both reads were against internal Make datastores; the Assembler can read them directly with no aggregation needed. Dropped the 2 extra scenarios. Same data freshness, fewer moving parts.
+- **Outlook Triage uses Graph `makeApiCall` instead of `listMessages`.** `listMessages` emits one bundle per message which forces aggregation. `makeApiCall` returns one bundle with the array, single Anthropic call classifies all of them, no aggregator needed. ~$0.04 per morning run.
+- **Active Clients = dumb dump, Assembler filters.** RCRM `/v1/companies` returns all companies; we store the full response and let the Assembler's Anthropic prompt do the `off_limit_status_id == 166186` filter inline. Trade-off: a few extra K of tokens vs. Make-side filter complexity.
+- **Hiring signals not in the Assembler.** Dashboard already has its own Signal Fetch webhook (4744091) populating the radar and hot-spots panels. JARVIS narration mentions "hiring signals on the radar" without re-fetching them.
+
+### Current State
+
+- All 4 new scenarios `isActive: true`, `isinvalid: false`. First scheduled run: 2026-05-30 morning (Toronto time) at 07:30, 07:45, 07:55.
+- Dashboard live at https://elevate-sales-nav.netlify.app — Netlify auto-deploy from commit 6d95972 completes ~30s after push.
+- Reused as-is: Microsoft 365 connection 8250656 (`Mail.ReadWrite` already granted).
+- Pre-existing 08:00 Morning BD Email (4669709) UNCHANGED per the keep-running-two-weeks decision. Travis still gets the email at 08:00 as a fallback while the brief soaks.
+
+### Next Steps
+
+1. [ ] **Tomorrow morning (2026-05-30)**: at 07:56, refresh dashboard → check the right-rail brief card populated. Then say "Good morning Jarvis" → confirm the greeting reply + the 75s narration play in sequence.
+2. [ ] If any of the three timed scenarios fail their first run, inspect Make execution log. Most likely failure modes: (a) RCRM `/v1/companies` listing format different than expected, (b) Graph `$filter` syntax rejected by Microsoft (Outlook returns 400), (c) Anthropic returning non-JSON despite STRICT JSON instruction.
+3. [ ] After 5 mornings of clean runs, decide whether to **disable the 08:00 BD Email** (4669709).
+4. [ ] **Server-side filter for Active Clients** — once verified the field is on the listing response, switch from "dump all + Assembler filter" to server-side filter to cut Claude tokens.
+5. [ ] **Audio/TTS upgrade** — current brief uses browser SpeechSynthesis. Optional Phase 2 upgrade: pre-generate the audio at 07:56 via ElevenLabs or `jarvis-stream`'s SSE→TTS, store URL in `narration_audio_url`, dashboard plays the file.
+6. [ ] **Rotate the embedded API keys** (carried over from 2026-05-21).
+
+### Decisions Made
+
+- **Right-rail card always-visible** (not overlay-on-open or dedicated tab) — sits above Pipeline.
+- **Keep 08:00 BD Email running** for two weeks — belt-and-suspenders during soak.
+- **Outlook filter = whole inbox last 24h** (not RCRM-contact-matched senders) — per Travis's "you are the brains, we can tweak later" autonomy.
+- **75s / ~190 word narration target** baked into the Opus 4.7 system prompt.
+- **Browser SpeechSynthesis for v1 narration** via existing `jrvSpeakOut` + new `jrvQueueSpeak`.
+
+### Blockers
+
+- None right now. All four scenarios active and waiting for 07:30 Toronto tomorrow.
+
+### Notes for Next Session
+
+- The `scenarios_update` / `scenarios_create` API accepts `jsonStringBodyContent` blueprints with `{{var}}` references without triggering `isinvalid:true` in current Make platform behaviour (this session created two such scenarios — Outlook Triage and Assembler — both `isinvalid: false` on first save). The prior scribe rule about `isinvalid:true` requiring manual UI Save appears specific to an older API version.
+- Make Core plan datastore cap is 20 MB total across all stores. With this session's additions it's now at ~16 MB.
+- `builtin:BasicAggregator` source-module-must-be-set-manually scribe rule appears outdated. Queue Fetch (4734116) Module 3 has `parameters: { feeder: 2 }` set via API and runs cleanly.
+
+---
+
 ## Wave 6 Failure + Real Root Cause: 2026-05-21 21:37 — bundle propagation, not IML
 
 ### Result of Michael Besic Re-Run (Test 2)
