@@ -231,8 +231,8 @@ function summarizeMemoryFacts(facts) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Configuration: model + routing prompt.
-// Edit ROUTING_PROMPT to change how the brain thinks.
+// Configuration: model.
+// Routing prompt lives in ./jarvis-prompt.js (shared with jarvis-stream.js).
 // ════════════════════════════════════════════════════════════════════════
 // Default to Haiku 4.5 for snappy replies (1-3s typical). Travis can opt back up to
 // Opus 4.7 by setting JARVIS_MODEL in Netlify env. Haiku follows this prompt cleanly
@@ -378,6 +378,7 @@ Reply with ONLY a JSON object. No markdown fences, no preamble, no trailing text
 - No em dashes. No "I'd be happy to." No "let me know if you need anything else."
 - Good news → lean in. Bad news → say it straight without softening to vagueness.
 - When a sub-agent best fits the answer, set agent to their name and write speak AS THAT SPECIALIST (Sarah: calm, fact-driven; Scout: fast; Intel: sharp; Scribe: thoughtful). JARVIS introduces them in one short line, then they deliver.
+- IMPORTANT: Put the "speak" key FIRST in your JSON output. This minimizes time-to-first-word in streaming mode.
 `.trim();
 
 // Strip characters TTS would read literally — backslashes, markdown, JSON noise.
