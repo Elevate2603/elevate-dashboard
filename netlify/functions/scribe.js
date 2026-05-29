@@ -48,9 +48,10 @@ exports.handler = async (event) => {
     }
 
     const asOf = new Date().toISOString();
-    // Pull RCRM + Outlook in parallel — Outlook only runs if all three env vars set
-    const [allContacts, outlookActivity] = await Promise.all([
+    // Pull RCRM (all contacts + active-client list) + Outlook in parallel
+    const [allContacts, activeClientContacts, outlookActivity] = await Promise.all([
       rcrmListContacts({}),
+      rcrmListContacts({ listId: ACTIVE_CLIENT_LIST }).catch(() => []),
       pullOutlookActivity().catch(e => ({ error: String(e && e.message || e), byEmail: new Map() })),
     ]);
     const outlookByEmail = outlookActivity.byEmail || new Map();
@@ -58,11 +59,13 @@ exports.handler = async (event) => {
 
     const listC = computeListC_clientsGoneQuiet(allContacts, outlookByEmail);
     const listAPartial = computeListA_inSequencePartial(allContacts);
+    const activeClients = computeActiveClients(activeClientContacts, outlookByEmail);
 
     return jsonResp(200, {
       ok: true,
       asOf,
       totalContactsScanned: allContacts.length,
+      activeClientsScanned: activeClientContacts.length,
       outlook: {
         connected: !outlookErr && outlookActivity.totalMessages > 0,
         totalMessagesPulled: outlookActivity.totalMessages || 0,
@@ -75,6 +78,10 @@ exports.handler = async (event) => {
         C: listC,
         D: { items: [], note: "Stalled-prospect revive list: pending Outlook reply-detection layer." },
       },
+      // Per-company rollup for the Active Client traffic-light component on the dashboard.
+      // Each row carries the slug for the RCRM link, days since most recent contact, and the
+      // name/role/channel of that most recent touch so the tooltip can read naturally.
+      activeClients,
     });
   } catch (e) {
     return jsonResp(500, { error: "SCRIBE failed", detail: String(e && e.message || e), ok: false });
@@ -159,6 +166,87 @@ function computeListC_clientsGoneQuiet(contacts, outlookByEmail) {
       ? `Companies where MAX(RCRM activity, Outlook activity) is ${STALE_DAYS}+ days old. Joins RCRM + Outlook so an unlogged Outlook email still counts as touching the company.`
       : "All clear — every company touched recently across RCRM + Outlook",
   };
+}
+
+// Active Client traffic-light feed — one row per company with days_since_last_contact
+// and the most recent contact's name/role/channel. Drives the jrv-ac- component on the
+// dashboard. Takes contacts that are members of the Active Client RCRM list (166186)
+// plus the joined Outlook activity so unlogged emails still count as a touch.
+function computeActiveClients(activeClientContacts, outlookByEmail) {
+  outlookByEmail = outlookByEmail || new Map();
+  const now = Date.now();
+  const byCompany = new Map();
+
+  for (const c of activeClientContacts) {
+    const company = extractCompany(c);
+    if (!company) continue;
+    const companySlug = (c.related_company && c.related_company.slug) || c.company_slug || null;
+    const key = (companySlug || company).toLowerCase();
+
+    if (!byCompany.has(key)) {
+      byCompany.set(key, {
+        slug: companySlug,
+        name: company,
+        most_recent: null,
+      });
+    }
+    const bucket = byCompany.get(key);
+
+    // Promote whichever slug we find — some contacts have it, some don't
+    if (!bucket.slug && companySlug) bucket.slug = companySlug;
+
+    // Consider RCRM logged activity
+    const rcrm = parseActivity(c);
+    if (rcrm.ts != null) {
+      registerContact(bucket, {
+        firstName: c.first_name || c.firstname || "",
+        lastName:  c.last_name  || c.lastname  || "",
+        role: c.designation || c.position || c.title || "",
+        channel: (rcrm.type || "").toLowerCase() || "note",
+        ts: rcrm.ts,
+      });
+    }
+    // Consider Outlook activity for this contact's email
+    const email = (c.email || "").toLowerCase().trim();
+    if (email && outlookByEmail.has(email)) {
+      const ob = outlookByEmail.get(email);
+      registerContact(bucket, {
+        firstName: c.first_name || c.firstname || "",
+        lastName:  c.last_name  || c.lastname  || "",
+        role: c.designation || c.position || c.title || "",
+        channel: "email",
+        ts: ob.ts,
+      });
+    }
+  }
+
+  function registerContact(bucket, candidate) {
+    if (!bucket.most_recent || candidate.ts > bucket.most_recent.ts) bucket.most_recent = candidate;
+  }
+
+  const rows = [];
+  for (const bucket of byCompany.values()) {
+    const mr = bucket.most_recent;
+    const daysSinceContact = mr ? Math.floor((now - mr.ts) / 86400000) : null;
+    rows.push({
+      slug: bucket.slug,
+      name: bucket.name,
+      daysSinceContact, // null means "no contact on record"
+      lastContact: mr ? {
+        firstName: mr.firstName || "",
+        lastName: mr.lastName || "",
+        role: mr.role || "",
+        channel: mr.channel || "",
+      } : null,
+    });
+  }
+  // Most overdue first — red comes to the top so Travis sees the worst at a glance
+  rows.sort((a, b) => {
+    const da = (typeof a.daysSinceContact === "number") ? a.daysSinceContact : -1;
+    const db = (typeof b.daysSinceContact === "number") ? b.daysSinceContact : -1;
+    return db - da;
+  });
+  return rows;
 }
 
 function computeListA_inSequencePartial(contacts) {

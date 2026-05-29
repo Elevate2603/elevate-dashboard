@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-AL-SONG-14S -->
+<!-- ELEVATE-2026-0529-AM-ACTIVE-CLIENT-LIGHTS -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -550,6 +550,52 @@
   .jrv-stage-count { color: var(--gold); font-weight:700; font-size:13px; }
   .jrv-stage-row.empty .jrv-stage-count { color: var(--text-muted); }
 
+  /* Active Client traffic-light component (drop-in, all rules prefixed jrv-ac-) */
+  .jrv-ac-root {
+    --jrv-ac-gold: #C8820A;
+    --jrv-ac-gold-bright: #E8A234;
+    --jrv-ac-red: #ff4d4d;
+    --jrv-ac-yellow: #f4c842;
+    --jrv-ac-green: #4ade80;
+    --jrv-ac-bg: var(--dark3);
+    --jrv-ac-bg-hover: #22222a;
+    --jrv-ac-bg-list: #0f0f12;
+    --jrv-ac-border: var(--border);
+    --jrv-ac-text: var(--text);
+    --jrv-ac-dim: var(--text-muted);
+    font-family: 'Consolas', ui-monospace, monospace;
+    color: var(--jrv-ac-text);
+  }
+  .jrv-ac-row { border:1px solid var(--jrv-ac-border); border-radius:6px; background: var(--jrv-ac-bg); overflow:hidden; }
+  .jrv-ac-header { display:flex; align-items:center; gap:10px; width:100%; padding:10px 12px; background:transparent; border:none; cursor:pointer; color:inherit; font:inherit; text-align:left; letter-spacing:0.08em; font-size:12px; transition: background 0.15s; }
+  .jrv-ac-header:hover { background: var(--jrv-ac-bg-hover); }
+  .jrv-ac-caret { color: var(--jrv-ac-gold); font-size:10px; transition: transform 0.2s; display:inline-block; width:10px; }
+  .jrv-ac-row.jrv-ac-open .jrv-ac-caret { transform: rotate(90deg); }
+  .jrv-ac-label { flex:1; }
+  .jrv-ac-count { color: var(--jrv-ac-gold); font-weight:700; font-size:13px; }
+  .jrv-ac-list { background: var(--jrv-ac-bg-list); border-top:1px solid var(--jrv-ac-border); max-height:320px; overflow-y:auto; }
+  .jrv-ac-list[hidden] { display:none; }
+  .jrv-ac-empty { padding:14px; color: var(--jrv-ac-dim); font-size:11px; font-style:italic; text-align:center; }
+  .jrv-ac-item { display:flex; align-items:center; gap:10px; padding:9px 12px 9px 22px; border-bottom:1px solid #1a1a20; cursor:pointer; font-size:11.5px; letter-spacing:0.02em; color: var(--jrv-ac-text); text-decoration:none; transition: background 0.12s; }
+  .jrv-ac-item:hover { background: var(--jrv-ac-bg-hover); }
+  .jrv-ac-item:last-child { border-bottom:none; }
+  .jrv-ac-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; box-shadow: 0 0 6px currentColor; }
+  .jrv-ac-dot-red    { background: var(--jrv-ac-red);    color: var(--jrv-ac-red); }
+  .jrv-ac-dot-yellow { background: var(--jrv-ac-yellow); color: var(--jrv-ac-yellow); }
+  .jrv-ac-dot-green  { background: var(--jrv-ac-green);  color: var(--jrv-ac-green); }
+  .jrv-ac-dot-gray   { background: #555; color: #555; }
+  .jrv-ac-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .jrv-ac-days { font-size:10px; color: var(--jrv-ac-dim); letter-spacing:0.05em; flex-shrink:0; }
+  .jrv-ac-list::-webkit-scrollbar { width:6px; }
+  .jrv-ac-list::-webkit-scrollbar-track { background:transparent; }
+  .jrv-ac-list::-webkit-scrollbar-thumb { background:#2a2a32; border-radius:3px; }
+  .jrv-ac-list::-webkit-scrollbar-thumb:hover { background:#3a3a42; }
+  .jrv-ac-tooltip { position:fixed; z-index:9999; pointer-events:none; padding:9px 12px; background:#0a0a0c; border:1px solid var(--jrv-ac-gold-bright); border-radius:5px; font-size:11px; line-height:1.45; color: var(--jrv-ac-text); max-width:280px; opacity:0; transition: opacity 0.12s; box-shadow: 0 4px 18px rgba(0,0,0,0.6); }
+  .jrv-ac-tooltip.jrv-ac-show { opacity:1; }
+  .jrv-ac-tooltip-label { display:block; font-size:9px; letter-spacing:0.12em; color: var(--jrv-ac-gold); margin-bottom:4px; }
+  .jrv-ac-tooltip-name { color:#f4f4f8; font-weight:600; }
+  .jrv-ac-tooltip-meta { display:block; color: var(--jrv-ac-dim); font-size:10.5px; margin-top:2px; }
+
   /* Market Hot Spots — 3-column row: Top 5 Hot Spots | Radar | Hot Hiring Positions.
      Radar holds its ~560px center column; the panels flex to whatever's left on each side. */
   .jrv-mhs-section { display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 560px) minmax(0, 1fr); gap:18px; margin-top:24px; align-items:start; }
@@ -781,7 +827,20 @@
         <div class="jrv-stage-row" id="jrvStageStaged"><span class="jrv-stage-label">STAGED</span><span class="jrv-stage-count">—</span></div>
         <div class="jrv-stage-row" id="jrvStageEnrolled"><span class="jrv-stage-label">IN SEQUENCE</span><span class="jrv-stage-count">—</span></div>
         <div class="jrv-stage-row" id="jrvStageApproved"><span class="jrv-stage-label">APPROVED</span><span class="jrv-stage-count">—</span></div>
-        <div class="jrv-stage-row" id="jrvStageActive"><span class="jrv-stage-label">ACTIVE CLIENT</span><span class="jrv-stage-count">—</span></div>
+        <!-- ACTIVE CLIENT — expandable traffic-light list (jrv-ac- component, self-contained) -->
+        <div class="jrv-ac-root">
+          <div class="jrv-ac-row" id="jrvAcRow">
+            <button type="button" class="jrv-ac-header" id="jrvAcHeader" aria-expanded="false">
+              <span class="jrv-ac-caret" id="jrvAcCaret">▸</span>
+              <span class="jrv-ac-label">ACTIVE CLIENT</span>
+              <span class="jrv-ac-count" id="jrvAcCount">0</span>
+            </button>
+            <div class="jrv-ac-list" id="jrvAcList" hidden>
+              <div class="jrv-ac-empty" id="jrvAcEmpty">No active clients loaded.</div>
+            </div>
+          </div>
+          <div class="jrv-ac-tooltip" id="jrvAcTooltip" role="tooltip" aria-hidden="true"></div>
+        </div>
 
         <div class="jrv-rail-title" style="margin-top:14px;">Recent</div>
         <div class="jrv-log" id="jrvLog">
@@ -2495,7 +2554,13 @@ function jrvLoadFollowUps() {
   fetch(JRV_CONFIG.SCRIBE_URL)
     .then(r => r.ok ? r.json() : null)
     .then(j => {
-      if (j && j.ok) jrvState.followUps = j;
+      if (j && j.ok) {
+        jrvState.followUps = j;
+        // Feed the Active Client traffic-light component if SCRIBE returned the rollup.
+        if (Array.isArray(j.activeClients) && typeof window.jrvActiveClientsUpdate === 'function') {
+          window.jrvActiveClientsUpdate(j.activeClients);
+        }
+      }
       else if (j && j.hint) console.warn('[SCRIBE]', j.error || 'error', '·', j.hint);
     })
     .catch(err => console.warn('[SCRIBE] fetch failed:', err && err.message));
@@ -4220,6 +4285,131 @@ function jrvSetFeedBadge(live, count) {
   if (live) { el.textContent = 'LIVE FEED · ' + count + ' RECORDS'; el.className = 'jrv-badge live'; }
   else { el.textContent = 'DEMO MODE'; el.className = 'jrv-badge demo'; }
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// ACTIVE CLIENT TRAFFIC-LIGHT — drop-in IIFE (self-contained, jrv-ac- scoped).
+// Listens for window.jrvActiveClientsUpdate(list) which SCRIBE calls on load.
+// Renders sample data until real data lands so the UI always paints.
+// ════════════════════════════════════════════════════════════════════════
+(function() {
+  "use strict";
+  const THRESHOLDS = { GREEN_MAX_DAYS: 7, YELLOW_MAX_DAYS: 20 }; // 21+ = red
+
+  // Sample data — replaced the moment SCRIBE returns real activeClients
+  const SAMPLE = [
+    { slug: "sample-1", name: "Loading active clients…", daysSinceContact: null, lastContact: null },
+  ];
+  let clients = (window.JRV_ACTIVE_CLIENTS && window.JRV_ACTIVE_CLIENTS.length) ? window.JRV_ACTIVE_CLIENTS : SAMPLE;
+
+  function ready(cb) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cb);
+    else cb();
+  }
+
+  ready(() => {
+    const root = document.querySelector('.jrv-ac-root');
+    const row = document.getElementById('jrvAcRow');
+    const header = document.getElementById('jrvAcHeader');
+    const list = document.getElementById('jrvAcList');
+    const count = document.getElementById('jrvAcCount');
+    const tooltip = document.getElementById('jrvAcTooltip');
+    if (!root || !row || !header || !list || !count || !tooltip) return;
+
+    function tierFor(days) {
+      if (typeof days !== 'number' || days < 0) return 'gray';
+      if (days <= THRESHOLDS.GREEN_MAX_DAYS) return 'green';
+      if (days <= THRESHOLDS.YELLOW_MAX_DAYS) return 'yellow';
+      return 'red';
+    }
+    function rcrmUrlFor(slug) { return 'https://app.recruitcrm.io/v1/company/' + encodeURIComponent(slug || ''); }
+    function channelVerb(ch) {
+      switch ((ch || '').toLowerCase()) {
+        case 'email': return 'emailed';
+        case 'call': return 'called';
+        case 'note': return 'logged a note with';
+        case 'sms': return 'texted';
+        case 'meeting': return 'met with';
+        default: return 'contacted';
+      }
+    }
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function render() {
+      count.textContent = clients.length;
+      const sorted = clients.slice().sort((a, b) => {
+        const da = (typeof a.daysSinceContact === 'number') ? a.daysSinceContact : -1;
+        const db = (typeof b.daysSinceContact === 'number') ? b.daysSinceContact : -1;
+        return db - da;
+      });
+      if (!sorted.length) { list.innerHTML = '<div class="jrv-ac-empty">No active clients.</div>'; return; }
+      list.innerHTML = sorted.map(c => {
+        const tier = tierFor(c.daysSinceContact);
+        const days = (typeof c.daysSinceContact === 'number') ? (c.daysSinceContact + 'd') : '—';
+        const lc = c.lastContact || {};
+        const tipName = (lc.firstName || '') + (lc.lastName ? ' ' + lc.lastName : '');
+        const tipRole = lc.role || '';
+        const tipHow = (typeof c.daysSinceContact === 'number')
+          ? (channelVerb(lc.channel) + ' ' + c.daysSinceContact + ' day' + (c.daysSinceContact === 1 ? '' : 's') + ' ago')
+          : 'no contact on record';
+        return '<a class="jrv-ac-item" href="' + esc(rcrmUrlFor(c.slug)) + '" target="_blank" rel="noopener" '
+          + 'data-tip-name="' + esc(tipName || 'Unknown contact') + '" '
+          + 'data-tip-role="' + esc(tipRole) + '" '
+          + 'data-tip-how="' + esc(tipHow) + '">'
+          + '<span class="jrv-ac-dot jrv-ac-dot-' + tier + '" aria-hidden="true"></span>'
+          + '<span class="jrv-ac-name">' + esc(c.name || 'Unknown company') + '</span>'
+          + '<span class="jrv-ac-days">' + esc(days) + '</span>'
+          + '</a>';
+      }).join('');
+    }
+
+    let open = false;
+    function setOpen(state) {
+      open = state;
+      row.classList.toggle('jrv-ac-open', open);
+      header.setAttribute('aria-expanded', open ? 'true' : 'false');
+      list.hidden = !open;
+      if (!open) hideTooltip();
+    }
+    header.addEventListener('click', () => setOpen(!open));
+
+    function showTooltip(target, evt) {
+      const name = target.dataset.tipName || '';
+      const role = target.dataset.tipRole || '';
+      const how = target.dataset.tipHow || '';
+      const roleLine = role ? (', ' + esc(role)) : '';
+      tooltip.innerHTML = '<span class="jrv-ac-tooltip-label">LAST CONTACT</span>'
+        + '<span class="jrv-ac-tooltip-name">' + esc(name) + '</span>'
+        + roleLine
+        + '<span class="jrv-ac-tooltip-meta">' + esc(how) + '</span>';
+      positionTooltip(evt);
+      tooltip.classList.add('jrv-ac-show');
+      tooltip.setAttribute('aria-hidden', 'false');
+    }
+    function positionTooltip(evt) {
+      const pad = 14, tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
+      let x = evt.clientX + pad, y = evt.clientY + pad;
+      if (x + tw > window.innerWidth - 8)  x = evt.clientX - tw - pad;
+      if (y + th > window.innerHeight - 8) y = evt.clientY - th - pad;
+      tooltip.style.left = x + 'px';
+      tooltip.style.top = y + 'px';
+    }
+    function hideTooltip() { tooltip.classList.remove('jrv-ac-show'); tooltip.setAttribute('aria-hidden', 'true'); }
+
+    list.addEventListener('mouseover', e => { const it = e.target.closest('.jrv-ac-item'); if (it) showTooltip(it, e); });
+    list.addEventListener('mousemove', e => { if (tooltip.classList.contains('jrv-ac-show')) positionTooltip(e); });
+    list.addEventListener('mouseout',  e => { const it = e.target.closest('.jrv-ac-item'); if (it && !it.contains(e.relatedTarget)) hideTooltip(); });
+    list.addEventListener('scroll', hideTooltip, { passive: true });
+
+    window.jrvActiveClientsUpdate = function(newList) {
+      if (!Array.isArray(newList)) return;
+      clients = newList;
+      render();
+    };
+    render();
+  });
+})();
 
 // Boot when DOM ready (auth gate runs first; JARVIS lives inside the protected page)
 document.addEventListener('DOMContentLoaded', function() {
