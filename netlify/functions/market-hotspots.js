@@ -58,12 +58,10 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        // 4500 tokens covers areas (5) + roles (10) + news (8 with impact analysis).
-        // Output cost at Haiku 4.5: ~4500 × $5/M = $0.022 — still trivial monthly.
-        max_tokens: 4500,
-        // Web search results are large (~3-5K tokens each). 4 searches gives Claude
-        // enough live coverage for hot spots + news without blowing the per-minute rate limit.
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }],
+        // Trimmed to fit Netlify's 26s function timeout. Each web search round is
+        // ~4-6s end-to-end; 3 rounds + ~3500 output tokens lands at ~18-22s.
+        max_tokens: 3500,
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -152,15 +150,10 @@ Rules for areas + roles:
 - key = city lowercase. job_count = realistic recent estimate. why_now = real catalyst (specific company, contract, sector shift). Never generic.
 
 Rules for news:
-- "news": exactly 8 entries, ordered by recency (newest first).
-- Each item is a SPECIFIC EVENT from the last 30 days affecting Ontario manufacturing / EV / battery / automotive / logistics / skilled trades — plant opening or closure, layoffs, government contract, M&A, expansion announcement, policy shift, major hiring spree.
-- impact field is the MOST IMPORTANT field — write 2-3 sentences as if briefing Travis personally. Address what it means for HIM:
-    * Does it open hiring demand for which roles?
-    * Does it create a new account opportunity (name the company)?
-    * Does it threaten or improve existing placements?
-    * Does it shift competitive positioning for Elevate?
-  Be concrete. "Watch this space" is not an impact analysis.
-- If you cannot find 8 real news items, pad with the most relevant Canadian / Ontario sector trends — but mark date as "ongoing" rather than fabricate a specific date.
+- "news": exactly 5 entries, ordered by recency (newest first).
+- Each item is a SPECIFIC EVENT from the last 30 days in Ontario manufacturing / EV / battery / automotive / logistics / skilled trades — plant opening/closure, layoffs, contract, M&A, expansion, policy shift, hiring spree.
+- impact = 2 sentences max. Concrete: which roles open up, which company becomes a target account, what shifts for Elevate. Never generic.
+- If a slot lacks a real event, use the strongest broader sector trend with date="ongoing".
 
 Output ONLY the JSON. Start with { and end with }.`;
 }
