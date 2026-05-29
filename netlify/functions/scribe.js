@@ -22,27 +22,14 @@ const CORS_HEADERS = {
 
 const RCRM_BASE = "https://api.recruitcrm.io/v1";
 const STALE_DAYS = 21;     // List C threshold — clients gone quiet
-// Active Client signal — value of the off_limit_status_id field on the contact
-// or related company record. NOT a List ID (we tried that — RCRM's API ignores
-// list_id query params anyway). 166186 = "Active Client" off-limit status.
+// Active Client signal lives ONLY on the COMPANY record — off_limit_status_id field.
+// Per Travis: contact-level off_limit is meaningless. The company page is the
+// foundation; contacts inherit Active Client status from their parent company.
 const ACTIVE_CLIENT_OFF_LIMIT_ID = "166186";
-// Match RCRM whether the field comes back as a string or a number, on either
-// the contact directly or via its related_company nesting.
-function isActiveClient(c) {
-  if (!c) return false;
-  const wanted = ACTIVE_CLIENT_OFF_LIMIT_ID;
-  const candidates = [
-    c.off_limit_status_id,
-    c.off_limit_status && c.off_limit_status.id,
-    c.related_company && c.related_company.off_limit_status_id,
-    c.related_company && c.related_company.off_limit_status && c.related_company.off_limit_status.id,
-    c.current_position && c.current_position.off_limit_status_id,
-  ];
-  for (const v of candidates) {
-    if (v == null) continue;
-    if (String(v) === wanted) return true;
-  }
-  return false;
+function companyIsActiveClient(co) {
+  if (!co) return false;
+  const v = co.off_limit_status_id;
+  return v != null && String(v) === ACTIVE_CLIENT_OFF_LIMIT_ID;
 }
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 5;       // safety cap so a single call doesn't burn all rate budget
@@ -99,8 +86,8 @@ exports.handler = async (event) => {
     if (params.get("debug") === "active") {
       // Run the full active-client pull and return diagnostic info only — no rollup
       const cos = await rcrmListCompanies();
-      const sample = cos.find(c => isActiveClient(c)) || cos[0] || null;
-      const flagged = cos.filter(c => isActiveClient(c));
+      const sample = cos.find(c => companyIsActiveClient(c)) || cos[0] || null;
+      const flagged = cos.filter(c => companyIsActiveClient(c));
       return jsonResp(200, {
         ok: true,
         total_companies: cos.length,
@@ -126,7 +113,7 @@ exports.handler = async (event) => {
     const activeBySlug = new Map();
     const activeByName = new Map();
     for (const co of allCompanies) {
-      if (!isActiveClient(co)) continue;
+      if (!companyIsActiveClient(co)) continue;
       if (co.slug) activeBySlug.set(co.slug, co);
       const name = (co.company_name || co.name || "").trim().toLowerCase();
       if (name) activeByName.set(name, co);
