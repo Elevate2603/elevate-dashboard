@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-AB-SPHERE-BRIGHTER-THAN-EVER -->
+<!-- ELEVATE-2026-0528-AC-APPROVAL-QUEUE-PENDING-FILTER -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1383,7 +1383,12 @@ async function initQueue() {
     }).filter(c => {
       if (!c) return false;
       const name = (c.contact_name || c.full_name || '').trim();
-      return !!name;
+      if (!name) return false;
+      // Queue Fetch now returns ALL records (so JARVIS Command Center can count
+      // approved/enrolled). The Approval Queue tab still only wants pending — anything
+      // already decided is hidden here. JARVIS reads the same feed and buckets on its end.
+      const decision = String(c.decision || 'pending').toLowerCase();
+      return decision === 'pending' || decision === '';
     });
 
     console.log('[Queue Fetch] contacts extracted:', contacts.length);
