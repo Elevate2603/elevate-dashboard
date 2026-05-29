@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-AH-MARKET-INTEL-CRON -->
+<!-- ELEVATE-2026-0528-AI-TACTICAL-RADAR -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -550,17 +550,65 @@
   .jrv-stage-count { color: var(--gold); font-weight:700; font-size:13px; }
   .jrv-stage-row.empty .jrv-stage-count { color: var(--text-muted); }
 
-  /* Market Hot Spots — compact Ontario map + ranked bar chart */
-  .jrv-mhs-map { background:#0a0a0c; border:1px solid #2a2118; border-radius:8px; padding:4px; position:relative; }
-  .jrv-mhs-map svg { display:block; width:100%; height:auto; }
-  .jrv-mhs-ont-fill { fill:#15120c; stroke:#3a2f1a; stroke-width:0.8; }
-  .jrv-mhs-lake { fill:#06070a; stroke:#15161a; stroke-width:0.4; }
-  .jrv-mhs-pin { fill: var(--gold); stroke:#000; stroke-width:0.4; opacity:0.95; cursor:pointer; transition: all 0.15s; filter: drop-shadow(0 0 2px var(--gold)); }
-  .jrv-mhs-pin:hover { filter: drop-shadow(0 0 4px var(--gold)); }
-  .jrv-mhs-pin-ring { fill:none; stroke: var(--gold); stroke-width:0.7; opacity:0.35; pointer-events:none; }
-  .jrv-mhs-pin-label { font:600 6px 'Consolas', monospace; fill: var(--gold); pointer-events:none; }
-  @keyframes jrvMhsPulse { 0%,100%{r:5}50%{r:7} }
-  .jrv-mhs-pin-pulse { fill:none; stroke: var(--gold); stroke-width:0.5; opacity:0.3; animation: jrvMhsPulse 2.6s ease-in-out infinite; pointer-events:none; }
+  /* Market Hot Spots — full-width tactical radar section below the sphere row */
+  .jrv-mhs-section { display:flex; flex-direction:column; gap:18px; margin-top:24px; }
+  .jrv-mhs-lower { display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap:18px; }
+  @media (max-width: 1100px) { .jrv-mhs-lower { grid-template-columns: 1fr; } }
+  .jrv-mhs-panel { background: var(--dark2); border:1px solid var(--border); border-radius:12px; padding:18px 16px; display:flex; flex-direction:column; gap:10px; }
+
+  /* Ontario tactical radar — Travis's drop-in component, all rules prefixed jrv-map- */
+  .jrv-map-root {
+    --jrv-map-gold: #C8820A;
+    --jrv-map-gold-bright: #E8A234;
+    --jrv-map-gold-deep: #7a4f04;
+    --jrv-map-dark: #0a0a0c;
+    --jrv-map-water: #0a0e14;
+    --jrv-map-neighbor: #15151a;
+    --jrv-map-line: #1c1c20;
+    --jrv-map-text: #d6d6dc;
+    --jrv-map-dim: #6b6b75;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    color: var(--jrv-map-text);
+    width: 100%;
+  }
+  .jrv-map-card { background: rgba(12,12,16,0.85); border: 1px solid var(--jrv-map-line); border-radius: 12px; padding: 22px; width: 100%; box-sizing: border-box; }
+  .jrv-map-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 14px; }
+  .jrv-map-kicker { font-size: 10px; letter-spacing: 3px; color: var(--jrv-map-gold); font-weight: 600; }
+  .jrv-map-title { font-weight: 700; font-size: 20px; letter-spacing: 1px; color: #f4f4f8; margin: 4px 0 0; }
+  .jrv-map-statusbox { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--jrv-map-gold-deep); border-radius: 4px; background: rgba(200,130,10,0.05); }
+  .jrv-map-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--jrv-map-gold-bright); box-shadow: 0 0 6px var(--jrv-map-gold-bright); animation: jrvMapDotPulse 1.6s ease-in-out infinite; }
+  .jrv-map-status-text { font-size: 9px; letter-spacing: 1.5px; color: var(--jrv-map-gold-bright); font-weight: 500; }
+  .jrv-map-stage { position: relative; width: 100%; aspect-ratio: 900 / 620; background: var(--jrv-map-water); border: 1px solid var(--jrv-map-line); border-radius: 8px; overflow: hidden; }
+  .jrv-map-svg { width: 100%; height: 100%; display: block; }
+  .jrv-map-tag { position: absolute; top: 12px; left: 12px; font-size: 9px; letter-spacing: 2px; color: var(--jrv-map-gold); padding: 4px 8px; border: 1px solid var(--jrv-map-gold-deep); border-radius: 3px; background: rgba(200,130,10,0.08); z-index: 5; }
+  .jrv-map-compass { position: absolute; top: 12px; right: 12px; font-size: 9px; letter-spacing: 2px; color: var(--jrv-map-gold); z-index: 5; opacity: 0.7; }
+  .jrv-map-readout { position: absolute; bottom: 10px; right: 12px; font-size: 9px; letter-spacing: 1.5px; color: var(--jrv-map-dim); z-index: 5; }
+  .jrv-map-readout b { color: var(--jrv-map-gold-bright); font-weight: 500; }
+  .jrv-map-neighbor { fill: var(--jrv-map-neighbor); stroke: #1f1f25; stroke-width: 0.6; }
+  .jrv-map-us { fill: #0f0f14; stroke: #1f1f25; stroke-width: 0.6; }
+  .jrv-map-ontario { fill: rgba(200,130,10,0.04); stroke: rgba(200,130,10,0.55); stroke-width: 0.8; }
+  .jrv-map-lake-label { font-family: 'IBM Plex Mono', monospace; font-size: 9px; fill: #3a4a5c; letter-spacing: 1.5px; font-style: italic; }
+  .jrv-map-border-label { font-family: 'IBM Plex Mono', monospace; font-size: 8px; fill: #4a4a52; letter-spacing: 1.2px; }
+  .jrv-map-hwy { fill: none; stroke: rgba(200,130,10,0.25); stroke-width: 1; stroke-dasharray: 2 3; }
+  .jrv-map-hwy-label { font-family: 'IBM Plex Mono', monospace; font-size: 8px; fill: var(--jrv-map-gold); letter-spacing: 0.5px; opacity: 0.7; }
+  .jrv-map-sweep-group { transform-origin: 50% 50%; animation: jrvMapSweep 8s linear infinite; }
+  .jrv-map-blip-hot  { fill: var(--jrv-map-gold-bright); filter: drop-shadow(0 0 5px var(--jrv-map-gold-bright)); cursor:pointer; }
+  .jrv-map-blip-warm { fill: var(--jrv-map-gold); filter: drop-shadow(0 0 3px var(--jrv-map-gold)); cursor:pointer; }
+  .jrv-map-blip-mid  { fill: var(--jrv-map-gold); opacity: 0.7; cursor:pointer; }
+  .jrv-map-blip-cold { fill: var(--jrv-map-gold-deep); opacity: 0.55; cursor:pointer; }
+  .jrv-map-blip-ring { fill: none; stroke: var(--jrv-map-gold-bright); stroke-width: 1; animation: jrvMapRingExpand 2.6s ease-out infinite; pointer-events:none; }
+  .jrv-map-label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; fill: var(--jrv-map-gold-bright); letter-spacing: 0.5px; font-weight: 500; pointer-events:none; }
+  .jrv-map-label-dim { font-family: 'IBM Plex Mono', monospace; font-size: 9px; fill: var(--jrv-map-dim); letter-spacing: 0.3px; pointer-events:none; }
+  .jrv-map-card .jrv-map-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: 10px; letter-spacing: 1.5px; color: var(--jrv-map-dim); position: static; }
+  .jrv-map-card .jrv-map-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .jrv-map-card .jrv-map-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .jrv-map-leg-hot { background: var(--jrv-map-gold-bright); box-shadow: 0 0 6px var(--jrv-map-gold-bright); }
+  .jrv-map-leg-warm { background: var(--jrv-map-gold); }
+  .jrv-map-leg-cold { background: var(--jrv-map-gold-deep); opacity: 0.7; }
+  .jrv-map-leg-spacer { margin-left: auto; }
+  @keyframes jrvMapSweep { to { transform: rotate(360deg); } }
+  @keyframes jrvMapRingExpand { 0% { r: 5;  opacity: 0.9; } 100% { r: 32; opacity: 0; } }
+  @keyframes jrvMapDotPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 
   .jrv-mhs-areas { display:flex; flex-direction:column; gap:4px; }
   .jrv-mhs-row { display:grid; grid-template-columns: 18px 1fr auto; gap:8px; align-items:center; padding:6px 10px; background: var(--dark3); border:1px solid var(--border); border-radius:5px; cursor:pointer; transition: all 0.15s; font-size:12px; }
@@ -721,26 +769,9 @@
         </div>
       </section>
 
-      <!-- RIGHT RAIL: MARKET HOT SPOTS + PIPELINE + RECENT -->
+      <!-- RIGHT RAIL: PIPELINE + RECENT (Market Hot Spots lives in its own full-width row below) -->
       <aside class="jrv-rail">
-        <div class="jrv-rail-title">Market Hot Spots</div>
-        <div class="jrv-mhs-map" id="jrvMhsMap">
-          <div class="jrv-mhs-empty">Waiting for hiring signals…</div>
-        </div>
-        <div class="jrv-mhs-areas" id="jrvMhsAreas"></div>
-        <div id="jrvMhsAreaDetailWrap"></div>
-        <div class="jrv-mhs-source-note" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-          <span id="jrvMhsStatus">Loading…</span>
-          <button onclick="jrvRefreshMarketIntel()" title="Refresh live data" style="background:none;border:1px solid var(--border);color:var(--gold);font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer;">↻</button>
-        </div>
-
-        <div class="jrv-rail-title" style="margin-top:14px;">Hot Hiring Positions</div>
-        <div class="jrv-mhs-bars" id="jrvMhsBars">
-          <div class="jrv-mhs-empty">Waiting for hiring signals…</div>
-        </div>
-        <div id="jrvMhsProfDetailWrap"></div>
-
-        <div class="jrv-rail-title" style="margin-top:14px;">Pipeline</div>
+        <div class="jrv-rail-title">Pipeline</div>
         <div class="jrv-stage-row" id="jrvStageNew"><span class="jrv-stage-label">NEW LEAD</span><span class="jrv-stage-count">—</span></div>
         <div class="jrv-stage-row" id="jrvStageStaged"><span class="jrv-stage-label">STAGED</span><span class="jrv-stage-count">—</span></div>
         <div class="jrv-stage-row" id="jrvStageEnrolled"><span class="jrv-stage-label">IN SEQUENCE</span><span class="jrv-stage-count">—</span></div>
@@ -752,6 +783,98 @@
           <div class="jrv-log-empty">Loading recent activity…</div>
         </div>
       </aside>
+
+    </div>
+
+    <!-- ══════════════ MARKET HOT SPOTS — FULL WIDTH BELOW SPHERE ROW ══════════════ -->
+    <div class="jrv-mhs-section">
+
+      <!-- Ontario Tactical Radar (full-width, real geography) -->
+      <div class="jrv-map-root">
+        <div class="jrv-map-card">
+
+          <div class="jrv-map-head">
+            <div>
+              <div class="jrv-map-kicker">ELEVATE · SALES COMMAND</div>
+              <h2 class="jrv-map-title">ONTARIO · TACTICAL RADAR</h2>
+            </div>
+            <div class="jrv-map-statusbox">
+              <span class="jrv-map-dot"></span>
+              <span class="jrv-map-status-text" id="jrvMhsStatus">SCAN · LIVE</span>
+              <button onclick="jrvRefreshMarketIntel()" title="Force refresh now" style="background:none;border:1px solid rgba(200,130,10,0.4);color:var(--jrv-map-gold);font-size:10px;padding:2px 8px;margin-left:8px;border-radius:3px;cursor:pointer;font-family:inherit;letter-spacing:1px;">↻</button>
+            </div>
+          </div>
+
+          <div class="jrv-map-stage" id="jrvMapStage">
+            <div class="jrv-map-tag">◉ SCAN · LIVE</div>
+            <div class="jrv-map-compass">↑ N</div>
+            <div class="jrv-map-readout">CONTACTS <b id="jrvMapCount">--</b> · HOT <b id="jrvMapHot">--</b></div>
+
+            <svg viewBox="0 0 900 620" preserveAspectRatio="xMidYMid meet" class="jrv-map-svg">
+              <defs>
+                <radialGradient id="jrvMapSweepGrad" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%"   stop-color="#E8A234" stop-opacity="0.45"/>
+                  <stop offset="60%"  stop-color="#C8820A" stop-opacity="0.12"/>
+                  <stop offset="100%" stop-color="#C8820A" stop-opacity="0"/>
+                </radialGradient>
+              </defs>
+
+              <!-- Geographic context: neighboring provinces, US -->
+              <path class="jrv-map-neighbor" d="M703.6,-216.7L709.5,-216.6L710.7,-215.3L700.3,-215.4L700.1,-216.3L703.6,-216.7Z M1049.4,-82.5L1048.8,-80.1L1051.3,-79.6L1047.9,-77.2L1047.8,-75.7L1045.2,-76.6L1042.6,-75.6L1045.6,-80.1L1042.5,-82.9L1045.7,-83.5L1049.4,-82.5Z M645.8,9.0L646.2,13.3L644.7,12.9L643.0,14.9L642.4,13.5L643.7,12.4L643.6,10.4L642.1,9.0L642.5,7.5L645.8,9.0Z M669.1,26.4L662.8,33.9L657.0,44.3L657.8,41.0L665.7,28.4L665.9,23.6L663.1,25.4L661.3,30.2L663.3,30.1L662.8,31.5L654.1,44.0L660.0,33.8L659.3,29.7L655.7,32.9L651.1,39.9L645.9,44.2L640.3,42.7L634.5,46.9L646.6,34.9L645.1,33.5L641.8,35.2L630.9,45.3L629.8,45.5L628.1,43.0L625.1,42.6L636.1,32.7L644.5,28.1L646.6,24.0L647.3,17.3L648.8,21.6L646.4,25.3L646.0,28.5L641.4,33.6L648.5,30.9L653.4,21.4L654.7,14.5L655.3,17.4L660.0,17.7L662.3,21.5L668.0,22.2L668.8,25.5L667.1,26.5L669.1,26.4Z M643.5,19.4L637.8,26.9L626.6,31.0L621.8,31.1L624.3,26.7L631.2,25.9L630.9,24.1L637.9,24.5L641.2,22.0L642.3,19.4L644.0,18.3L643.5,19.4Z M678.5,22.7L677.9,31.7L667.8,34.3L668.5,32.1L672.1,28.6L671.3,28.0L672.7,25.6L671.8,25.2L675.7,21.7L678.2,21.7L678.5,22.7Z M664.9,36.3L666.9,35.5L667.2,37.3L665.1,38.3L667.8,38.0L665.1,39.5L663.1,44.0L659.9,46.9L664.0,40.0L664.9,36.3Z M1272.0,277.4L1293.5,281.6L1310.5,287.1L1315.0,290.9L1320.6,292.3L1322.4,294.1L1335.3,296.6L1343.7,304.4L1342.2,306.5L1337.7,307.4L1320.9,307.6L1312.6,305.1L1287.8,301.2L1280.2,297.7L1268.5,295.0L1267.1,290.9L1258.4,285.2L1242.8,280.9L1238.0,278.1L1236.9,279.4L1232.1,276.5L1234.2,275.1L1244.2,273.2L1254.9,275.7L1272.0,277.4Z M1353.6,362.7L1354.7,363.5L1350.3,366.1L1348.1,366.0L1351.2,363.6L1348.4,363.6L1342.6,366.8L1341.7,367.4L1336.1,371.3L1339.2,370.8L1343.2,366.8L1346.3,366.0L1342.1,368.4L1339.7,372.1L1337.1,371.9L1335.9,373.8L1333.0,374.6L1332.1,377.3L1334.0,376.9L1337.5,378.5L1338.9,377.4L1338.3,378.5L1335.9,379.1L1330.0,378.9L1333.3,371.7L1348.6,363.0L1353.6,362.7Z M985.5,387.6L982.0,390.8L973.2,393.1L982.3,387.0L984.7,386.4L985.5,387.6Z M1522.0,216.5L1502.5,215.9L1499.3,214.0L1494.8,215.7L1476.7,221.3L1475.3,222.1L1462.4,221.8L1460.3,223.4L1454.2,229.3L1451.2,232.5L1449.7,232.8L1448.8,238.0L1447.2,242.2L1445.7,237.5L1440.3,243.0L1434.1,245.6L1430.0,247.2L1413.3,256.8L1415.2,258.9L1403.4,263.3L1402.8,260.1L1399.4,260.9L1394.6,261.5L1385.9,263.2L1379.4,262.2L1377.7,261.1L1365.2,264.0L1357.9,263.5L1346.4,265.2L1336.3,263.0L1313.0,261.3L1298.9,260.1L1284.9,260.0L1275.9,263.0L1259.5,259.1L1218.0,260.9L1202.9,258.9L1171.7,262.9L1164.7,262.8L1152.7,263.2L1155.9,266.1L1144.9,269.6L1133.3,278.2L1127.8,281.1L1125.4,287.1L1112.5,297.2L1091.0,299.5L1088.1,303.6L1079.7,307.8L1078.3,302.6L1070.5,311.7L1064.8,313.6L1054.1,319.0L1045.1,331.0L1029.8,343.4L1011.5,338.1L987.6,332.0L979.4,331.4L983.6,336.5L1006.7,337.2L1022.9,343.2L1011.9,362.0L997.8,370.6L979.3,387.4L972.6,393.5L1004.1,381.6L1016.7,368.6L1034.8,353.9L1063.4,334.6L1077.9,328.1L1113.1,315.6L1165.1,302.2L1215.3,301.7L1246.0,319.5L1233.7,316.5L1237.5,318.2L1245.9,324.6L1244.8,328.6L1224.0,335.6L1214.4,341.6L1195.2,348.7L1178.2,342.1L1162.4,344.4L1155.5,344.1L1137.0,350.2L1127.4,353.2L1111.1,351.2L1090.9,351.6L1080.8,365.9L1054.7,371.1L1016.8,404.1L1006.3,418.9L1006.4,424.2L1007.4,430.2L995.8,439.4L986.2,448.5L984.4,454.2L974.8,453.3L963.1,455.9L961.4,460.5L943.0,464.7L886.5,464.8L841.1,462.2L842.1,452.7L826.6,440.1L779.6,445.1L758.8,443.6L752.0,435.5L746.6,433.8L732.6,428.7L716.8,419.1L667.2,406.4L647.8,383.2L645.2,365.6L644.2,234.1L652.3,241.9L644.2,233.2L645.3,214.3L655.8,207.9L660.2,211.7L667.1,224.1L669.0,220.7L674.5,213.7L672.9,208.9L663.9,202.4L675.1,194.8L679.4,191.5L683.3,186.7L686.7,183.2L683.1,176.9L683.0,173.8L675.8,169.9L674.8,166.8L673.7,165.3L675.8,161.8L670.8,159.7L673.6,156.2L665.9,154.1L668.5,148.6L668.1,146.5L669.3,144.7L665.7,137.8L660.9,135.5L665.2,136.0L668.5,133.3L665.1,130.1L659.3,127.7L663.6,124.6L663.4,122.6L662.9,120.5L659.9,117.9L663.5,117.2L666.6,116.4L660.3,113.1L658.7,111.7L661.4,111.3L657.2,110.2L649.5,106.0L647.2,104.5L647.7,100.1L643.8,96.7L644.8,93.5L641.9,91.5L635.4,90.7L641.0,88.7L670.6,81.0L717.7,63.2L736.3,50.8L756.9,36.4L762.3,23.0L761.9,-4.1L751.1,-25.9L726.1,-46.0L703.8,-54.8L693.8,-58.9L691.5,-59.6L682.1,-62.6L686.1,-65.9L685.3,-70.6L682.0,-76.0L690.2,-75.9L694.8,-77.2L693.3,-79.4L697.4,-80.8L701.0,-83.6L708.6,-89.5L712.1,-91.8L707.8,-93.6L715.2,-98.4L714.4,-104.3L721.2,-104.5L731.2,-99.4L722.3,-104.2L725.0,-106.3L729.2,-112.0L730.8,-115.8L735.4,-117.9L745.1,-120.2L750.0,-120.7L735.7,-122.1L734.4,-118.3L726.5,-117.7L727.6,-121.3L721.0,-126.3L719.9,-129.0L721.0,-135.7L722.0,-138.4L719.7,-145.6L708.6,-145.3L708.4,-148.3L706.4,-155.2L716.3,-162.9L712.5,-172.6L721.5,-173.1L719.2,-176.7L720.4,-178.4L708.3,-181.6L701.2,-188.6L698.0,-200.3L716.0,-212.0L728.8,-215.1L777.0,-208.4L796.5,-205.1L786.7,-199.9L809.1,-205.8L819.1,-204.1L839.1,-197.8L844.8,-203.5L866.0,-211.5L884.8,-208.1L897.5,-200.8L908.4,-197.9L914.6,-198.2L915.8,-195.7L912.6,-191.8L913.0,-189.1L914.2,-190.0L934.0,-186.0L933.4,-184.2L935.7,-178.2L930.9,-178.2L941.7,-180.7L955.9,-178.5L947.4,-175.2L943.5,-171.7L946.1,-169.4L952.3,-167.7L953.6,-162.9L958.2,-161.3L963.8,-159.6L970.7,-159.5L981.1,-159.0L987.4,-156.9L991.7,-157.0L995.2,-156.6L1000.0,-157.1L1003.6,-157.4L1011.7,-158.3L1013.6,-155.4L1013.9,-151.0L1015.0,-149.0L1020.0,-149.2L1030.7,-150.2L1030.8,-157.1L1039.8,-152.0L1042.1,-147.7L1029.3,-139.4L1027.2,-134.1L1028.2,-130.4L1031.0,-123.4L1028.5,-117.9L1026.4,-116.3L1005.1,-116.4L995.2,-115.0L1028.1,-114.8L1034.5,-111.1L1030.9,-104.5L1029.9,-99.3L1029.2,-96.1L1031.8,-92.0L1040.4,-91.3L1046.7,-90.0L1045.1,-85.6L1040.1,-85.0L1035.4,-83.9L1038.4,-82.5L1036.7,-80.2L1035.1,-70.1L1030.2,-73.3L1028.8,-76.4L1022.5,-79.6L1024.9,-74.9L1021.3,-70.8L1020.5,-68.7L1022.2,-63.7L1031.4,-65.7L1042.9,-72.5L1065.8,-74.4L1080.8,-65.8L1084.9,-61.6L1086.9,-54.2L1077.4,-40.5L1042.1,-29.7L1083.4,-42.7L1089.1,-54.8L1094.6,-58.6L1097.3,-58.6L1101.3,-51.0L1090.6,-41.6L1101.1,-47.7L1104.0,-56.7L1107.1,-53.6L1106.2,-49.7L1108.5,-41.5L1107.1,-38.1L1115.9,-49.4L1131.2,-52.3L1134.3,-55.2L1138.8,-56.0L1149.7,-57.7L1149.6,-62.2L1151.9,-64.8L1154.7,-68.0L1169.6,-66.7L1174.5,-62.9L1174.3,-54.5L1172.3,-53.0L1174.7,-57.5L1180.6,-60.9L1172.7,-65.5L1173.0,-72.1L1174.3,-73.6L1186.5,-74.7L1184.1,-78.2L1193.5,-76.9L1191.8,-81.4L1186.3,-85.0L1186.6,-87.6L1193.8,-87.4L1199.1,-88.2L1198.1,-93.1L1191.8,-96.5L1213.7,-92.1L1191.8,-106.0L1198.5,-108.4L1207.1,-107.7L1204.0,-111.8L1207.2,-113.3L1208.2,-115.2L1208.2,-117.9L1210.6,-120.0L1215.3,-123.7L1218.5,-127.8L1231.2,-128.0L1222.2,-123.0L1223.4,-120.3L1216.7,-118.1L1226.3,-111.7L1220.3,-109.2L1224.7,-94.8L1232.6,-94.3L1232.6,-90.7L1231.2,-85.2L1237.9,-80.3L1226.5,-78.6L1218.3,-77.1L1220.5,-74.1L1240.4,-72.9L1246.1,-67.6L1261.3,-72.6L1268.8,-66.5L1248.9,-60.3L1259.2,-57.0L1236.6,-45.8L1243.8,-37.9L1251.9,-31.5L1259.0,-26.7L1265.7,-28.3L1263.1,-23.3L1263.5,-14.4L1257.8,-7.5L1260.3,-6.4L1257.5,0.3L1252.0,5.8L1247.1,11.2L1257.2,21.7L1247.7,23.6L1248.8,28.7L1251.7,32.6L1256.9,35.8L1264.1,41.0L1273.8,54.3L1284.4,61.2L1271.0,70.4L1265.1,92.5L1236.4,87.1L1208.3,89.3L1180.4,84.0L1172.5,81.0L1147.2,67.7L1140.9,64.9L1143.9,73.4L1147.4,81.6L1146.6,87.5L1133.7,81.5L1118.0,74.7L1124.5,84.3L1126.4,90.3L1122.8,96.7L1110.0,97.7L1115.4,104.1L1109.8,109.5L1110.9,119.0L1115.5,131.6L1132.1,138.4L1138.3,141.8L1135.6,153.9L1131.2,165.5L1139.7,164.8L1148.6,157.1L1160.4,156.0L1161.1,165.2L1159.3,172.7L1156.0,179.6L1160.8,188.5L1163.1,181.7L1171.4,189.2L1181.8,190.0L1192.0,188.9L1218.8,192.9L1228.9,201.7L1228.5,207.6L1241.8,203.8L1239.2,195.1L1242.1,188.8L1249.0,179.3L1244.3,167.7L1245.4,160.8L1252.8,157.6L1264.2,150.6L1270.1,156.1L1276.5,168.5L1249.0,175.5L1254.9,177.6L1252.7,179.7L1266.3,192.2L1511.7,193.8L1522.0,216.5Z" />
+              <path class="jrv-map-neighbor" d="M-234.8,-116.2L46.9,-116.2L46.2,-102.2L49.8,-94.8L52.5,-91.1L41.7,-80.8L46.8,-78.1L51.8,-72.8L61.8,-66.5L70.3,-69.9L67.6,-63.3L65.4,-54.0L68.6,-61.5L97.7,-68.6L104.9,-68.1L120.1,-47.0L125.1,-41.0L128.0,-31.8L138.9,-17.1L134.0,-2.2L129.5,2.6L138.3,2.6L217.1,-7.5L262.0,14.4L137.9,94.3L106.7,116.3L33.1,287.7L33.0,310.0L-48.1,310.0L-138.3,310.0L-210.0,303.1L-212.3,289.3L-213.4,261.9L-215.8,248.2L-217.8,194.9L-220.7,181.3L-223.1,140.7L-225.8,113.7L-229.0,100.1L-230.2,86.5L-231.9,59.4L-233.5,48.0L-234.8,24.6L-234.8,-19.3L-234.8,-43.7L-234.8,-116.2Z" />
+              <rect class="jrv-map-us" x="0" y="555" width="900" height="65"/>
+              <text class="jrv-map-border-label" x="450" y="600" text-anchor="middle">— U.S. BORDER —</text>
+
+              <!-- Ontario outline (real geography) -->
+              <path class="jrv-map-ontario" d="M643.8,214.7L644.1,225.1L644.2,233.2L640.8,231.1L638.7,230.4L635.8,225.4L638.6,221.0L637.9,216.9L643.8,214.7Z M644.2,234.1L644.9,325.3L642.7,370.4L647.8,383.2L659.1,394.8L674.8,410.7L716.8,419.1L730.9,425.2L735.4,431.0L746.6,433.8L751.1,431.5L754.8,437.4L758.8,443.6L775.4,444.8L788.6,450.6L826.6,440.1L845.3,443.1L848.2,457.2L841.1,462.2L823.0,467.0L792.0,483.7L791.3,483.6L762.9,494.9L744.1,501.0L747.9,496.9L743.0,495.6L721.0,500.7L731.0,500.3L738.5,502.4L745.8,501.0L741.8,505.8L738.2,509.3L736.8,505.5L730.7,505.5L724.5,506.0L722.4,503.0L714.6,502.8L712.0,503.1L651.0,517.6L642.2,520.6L637.7,533.0L662.3,532.1L662.1,539.3L663.6,542.2L661.3,548.7L618.1,550.6L621.6,560.3L589.9,555.5L556.2,565.8L552.0,571.3L550.9,571.2L532.6,576.5L528.0,584.6L513.0,581.9L507.5,569.1L531.1,567.5L524.5,561.5L524.9,559.6L529.3,551.7L531.4,543.6L557.8,529.1L557.8,500.5L564.2,490.3L576.5,479.9L570.0,465.7L564.4,457.5L559.8,454.7L574.2,458.9L577.0,464.9L581.1,468.4L581.8,474.4L591.2,473.1L594.6,476.5L603.2,480.0L626.2,482.2L621.7,474.6L628.2,470.2L639.4,474.6L638.5,469.7L636.3,472.6L632.8,467.5L628.6,464.5L626.5,459.3L624.6,452.8L621.1,449.0L619.6,451.8L612.9,448.1L610.4,441.5L596.8,429.3L580.9,429.1L577.2,427.9L567.5,425.5L564.4,426.4L567.2,424.6L565.7,423.9L557.9,423.6L556.5,423.8L542.5,421.7L535.2,418.9L523.2,417.8L474.8,414.8L467.6,413.6L466.6,406.7L464.2,405.6L453.4,406.7L449.3,407.6L453.1,399.3L448.1,399.1L454.2,394.0L452.1,389.9L445.9,391.3L444.0,378.7L445.1,373.5L431.7,361.1L434.6,356.9L436.5,350.7L396.8,349.3L381.0,326.1L369.7,320.4L357.8,319.7L352.1,318.7L334.8,316.0L329.6,314.4L314.8,311.9L305.9,311.3L303.1,315.0L309.0,321.2L303.2,325.7L301.9,325.3L300.8,326.2L296.2,326.5L291.1,332.1L291.3,327.6L300.8,319.3L294.2,315.6L293.1,321.0L291.9,323.7L288.3,328.5L284.1,334.4L283.3,326.3L264.4,333.7L260.7,344.3L244.6,347.7L235.3,347.8L229.1,344.4L212.6,344.0L201.0,338.9L186.3,345.6L173.4,344.7L167.8,341.1L157.3,339.0L151.6,334.5L144.8,337.2L142.0,340.2L138.7,333.2L128.9,330.9L132.0,329.3L128.0,327.8L113.8,324.5L99.5,325.8L97.3,328.0L85.6,328.4L69.2,323.5L61.4,321.2L51.1,318.6L45.7,297.2L33.1,292.5L33.2,161.7L106.7,116.3L133.0,97.7L141.3,91.9L262.0,14.4L272.4,6.4L287.4,11.8L299.2,17.3L315.3,24.1L324.5,32.7L328.1,38.6L338.4,39.0L353.0,41.4L372.6,46.2L393.5,50.5L415.0,61.7L425.7,65.7L414.9,73.6L413.8,77.9L430.4,66.0L456.9,66.3L472.7,65.1L479.9,69.2L485.2,68.8L485.9,68.6L501.7,69.9L512.8,70.8L513.2,71.6L526.1,72.1L535.3,75.0L535.8,72.8L538.2,73.5L537.8,78.5L540.2,83.5L530.6,102.2L533.6,110.7L535.2,111.4L542.7,124.0L543.3,144.4L536.0,156.5L548.9,163.5L550.9,167.3L565.3,180.1L565.0,181.5L554.8,183.9L557.3,184.5L573.2,189.8L590.9,197.8L602.6,204.9L609.0,214.5L607.0,219.5L596.7,225.6L586.4,231.4L589.2,232.2L598.9,226.5L610.7,219.4L636.2,227.7L644.2,234.1Z M513.4,427.5L516.1,426.5L514.9,429.3L518.2,432.3L524.7,432.1L526.7,434.6L527.9,432.1L524.9,430.0L536.1,426.6L541.3,432.5L545.9,427.6L550.7,427.1L552.2,428.2L551.4,430.4L554.9,430.9L553.8,434.6L555.7,436.6L560.2,429.9L561.3,431.6L559.3,434.1L564.0,434.0L558.8,441.5L553.2,444.8L548.0,443.3L551.8,442.6L557.2,437.8L545.3,443.3L520.9,434.3L500.3,431.1L501.4,427.6L505.1,429.4L506.5,427.8L509.3,429.0L513.4,427.5Z" />
+
+              <!-- Great Lakes labels -->
+              <text class="jrv-map-lake-label" x="450" y="525" text-anchor="middle">LAKE ERIE</text>
+              <text class="jrv-map-lake-label" x="600" y="490" text-anchor="middle">LAKE ONTARIO</text>
+              <text class="jrv-map-lake-label" x="450" y="430" text-anchor="middle">LAKE HURON</text>
+              <text class="jrv-map-lake-label" x="240" y="430" text-anchor="middle">LAKE SUPERIOR</text>
+
+              <!-- Highway corridors -->
+              <path class="jrv-map-hwy" d="M 507.1,569.2 L 547.8,561.9 L 577.2,543.3 L 606.5,534.7 L 631.2,532.4 L 650.3,517.3 L 704.3,505.7 L 763.4,494.8 L 794.3,448.7" />
+              <text class="jrv-map-hwy-label" x="600" y="528">HWY 401</text>
+              <path class="jrv-map-hwy" d="M 455.9,406.1 L 528.3,406.9 L 587.3,407.3 L 677.0,426.2 L 763.0,441.7 L 794.3,448.7" />
+              <text class="jrv-map-hwy-label" x="450" y="395">HWY 17</text>
+
+              <!-- Sweep arm — ONLY this group rotates; map stays still -->
+              <g class="jrv-map-sweep-group">
+                <path d="M 450.0,310.0 L 950.0,310.0 A 500,500 0 0 0 804.0,-44.0 Z" fill="url(#jrvMapSweepGrad)" />
+                <line x1="450.0" y1="310.0" x2="950.0" y2="310.0" stroke="#E8A234" stroke-width="1.2" opacity="0.7"/>
+              </g>
+
+              <!-- City blips render here, populated by jrvRenderMhsMap -->
+              <g id="jrvMapBlips"></g>
+            </svg>
+
+            <div class="jrv-map-legend">
+              <span><i class="jrv-map-leg-hot"></i>HOT 75+</span>
+              <span><i class="jrv-map-leg-warm"></i>WARM 50-74</span>
+              <span><i class="jrv-map-leg-cold"></i>COLD 0-49</span>
+              <span class="jrv-map-leg-spacer">SWEEP ROTATES · MAP STATIC</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lower row: Top 5 areas (click for insight) + Hot Hiring Positions bars -->
+      <div class="jrv-mhs-lower">
+        <div class="jrv-mhs-panel">
+          <div class="jrv-rail-title">Top 5 Hot Spots — click for insight</div>
+          <div class="jrv-mhs-areas" id="jrvMhsAreas"></div>
+          <div id="jrvMhsAreaDetailWrap"></div>
+        </div>
+        <div class="jrv-mhs-panel">
+          <div class="jrv-rail-title">Hot Hiring Positions</div>
+          <div class="jrv-mhs-bars" id="jrvMhsBars">
+            <div class="jrv-mhs-empty">Waiting for hiring signals…</div>
+          </div>
+          <div id="jrvMhsProfDetailWrap"></div>
+        </div>
+      </div>
 
     </div>
   </div>
@@ -2469,55 +2592,6 @@ function jrvRefreshMarketIntel() { jrvLoadMarketIntel(true); }
 // MARKET HOT SPOTS — aggregate signals by city + profession, render map + pie
 // ════════════════════════════════════════════════════════════════════════
 
-// Approximate map coords for Southern Ontario cities (viewBox 0 0 300 200).
-// Pins are placed by city name; anything we don't have coords for gets dropped.
-const JRV_MHS_CITY_COORDS = {
-  windsor:        { x: 38,  y: 175 },
-  chatham:        { x: 60,  y: 170 },
-  sarnia:         { x: 60,  y: 150 },
-  london:         { x: 90,  y: 150 },
-  brantford:      { x: 130, y: 140 },
-  hamilton:       { x: 155, y: 130 },
-  kitchener:      { x: 130, y: 125 },
-  waterloo:       { x: 128, y: 122 },
-  guelph:         { x: 145, y: 122 },
-  cambridge:      { x: 135, y: 130 },
-  burlington:     { x: 160, y: 125 },
-  oakville:       { x: 165, y: 122 },
-  mississauga:    { x: 175, y: 118 },
-  brampton:       { x: 178, y: 110 },
-  toronto:        { x: 188, y: 118 },
-  markham:        { x: 195, y: 110 },
-  vaughan:        { x: 185, y: 108 },
-  scarborough:    { x: 198, y: 117 },
-  ajax:           { x: 205, y: 117 },
-  pickering:      { x: 202, y: 116 },
-  oshawa:         { x: 212, y: 113 },
-  whitby:         { x: 208, y: 115 },
-  barrie:         { x: 188, y: 90 },
-  ottawa:         { x: 270, y: 70 },
-  kingston:       { x: 240, y: 95 },
-  belleville:     { x: 225, y: 100 },
-  peterborough:   { x: 215, y: 100 },
-  sudbury:        { x: 175, y: 35 },
-  'north bay':    { x: 200, y: 40 },
-  'thunder bay':  { x: 60,  y: 25 },
-  'sault ste. marie': { x: 115, y: 50 },
-  niagara:        { x: 165, y: 145 },
-  'niagara falls':{ x: 165, y: 145 },
-  'st. catharines': { x: 160, y: 140 },
-  woodstock:      { x: 110, y: 145 },
-  stratford:      { x: 110, y: 130 },
-  orillia:        { x: 195, y: 88 },
-  'richmond hill':{ x: 188, y: 112 }
-};
-
-// Pie chart palette — gold + warm complementary hues, dark-theme readable.
-const JRV_MHS_PIE_COLORS = [
-  '#C8820A', '#E0A030', '#9C6606', '#F5C56B', '#7A4F00',
-  '#D89240', '#A87010', '#FFD78A', '#5C3A00', '#B07820'
-];
-
 // Words that are NOT cities — province/country/region labels we must drop so they
 // don't poison the top-5 ranking. Anything matching these is rejected outright.
 const JRV_MHS_NON_CITY = new Set([
@@ -2536,8 +2610,8 @@ function jrvMhsCityKey(raw) {
   if (JRV_MHS_NON_CITY.has(s)) return null;
   // Map any GTA shorthand that survived the non-city filter to Toronto
   if (s.includes('gta')) return 'toronto';
-  // Only accept cities we have pin coordinates for. Anything else is "uncategorized."
-  if (!JRV_MHS_CITY_COORDS[s]) return null;
+  // Only accept cities we have lat/lon for. Anything else is "uncategorized."
+  if (!JRV_MHS_CITY_LATLON[s]) return null;
   return s;
 }
 
@@ -2636,55 +2710,122 @@ function jrvRenderMarketHotSpots() {
   jrvRenderMhsPie(professions);
 }
 
+// Real lat/lon for the cities we may rank. Equirectangular projection over the
+// bbox lon[-96,-73] lat[41,57] matches the bundled Ontario SVG outline.
+const JRV_MHS_CITY_LATLON = {
+  windsor:           { lon: -83.0364, lat: 42.3149 },
+  chatham:           { lon: -82.1857, lat: 42.4022 },
+  sarnia:            { lon: -82.4066, lat: 42.9994 },
+  london:            { lon: -81.2453, lat: 42.9849 },
+  woodstock:         { lon: -80.7440, lat: 43.1306 },
+  stratford:         { lon: -80.9818, lat: 43.3700 },
+  brantford:         { lon: -80.2734, lat: 43.1394 },
+  hamilton:          { lon: -79.8711, lat: 43.2557 },
+  kitchener:         { lon: -80.4925, lat: 43.4516 },
+  waterloo:          { lon: -80.5204, lat: 43.4643 },
+  cambridge:         { lon: -80.3127, lat: 43.3601 },
+  guelph:            { lon: -80.2482, lat: 43.5448 },
+  burlington:        { lon: -79.7990, lat: 43.3255 },
+  oakville:          { lon: -79.6877, lat: 43.4675 },
+  mississauga:       { lon: -79.6441, lat: 43.5890 },
+  brampton:          { lon: -79.7624, lat: 43.7315 },
+  toronto:           { lon: -79.3832, lat: 43.6532 },
+  scarborough:       { lon: -79.2569, lat: 43.7731 },
+  markham:           { lon: -79.3370, lat: 43.8561 },
+  vaughan:           { lon: -79.5083, lat: 43.8361 },
+  'richmond hill':   { lon: -79.4422, lat: 43.8828 },
+  ajax:              { lon: -79.0204, lat: 43.8509 },
+  pickering:         { lon: -79.0890, lat: 43.8384 },
+  whitby:            { lon: -78.9430, lat: 43.8975 },
+  oshawa:            { lon: -78.8657, lat: 43.8971 },
+  barrie:            { lon: -79.6903, lat: 44.3894 },
+  orillia:           { lon: -79.4197, lat: 44.6086 },
+  peterborough:      { lon: -78.3232, lat: 44.3091 },
+  belleville:        { lon: -77.3833, lat: 44.1628 },
+  kingston:          { lon: -76.4860, lat: 44.2312 },
+  ottawa:            { lon: -75.6972, lat: 45.4215 },
+  niagara:           { lon: -79.0747, lat: 43.0896 },
+  'niagara falls':   { lon: -79.0747, lat: 43.0896 },
+  'st. catharines':  { lon: -79.2453, lat: 43.1594 },
+  sudbury:           { lon: -80.9930, lat: 46.4917 },
+  'north bay':       { lon: -79.4608, lat: 46.3091 },
+  'sault ste. marie':{ lon: -84.3461, lat: 46.5197 },
+  'thunder bay':     { lon: -89.2477, lat: 48.3809 },
+};
+
+// Equirectangular projection — match the bundled radar SVG bbox.
+const JRV_MAP_BBOX = { lonMin: -96, lonMax: -73, latMin: 41, latMax: 57, w: 900, h: 620 };
+
+function jrvMhsProject(lon, lat) {
+  const b = JRV_MAP_BBOX;
+  return {
+    x: (lon - b.lonMin) / (b.lonMax - b.lonMin) * b.w,
+    y: (b.latMax - lat) / (b.latMax - b.latMin) * b.h,
+  };
+}
+
+function jrvMhsTierFor(score) {
+  if (score >= 75) return 'hot';
+  if (score >= 50) return 'warm';
+  if (score >= 30) return 'mid';
+  return 'cold';
+}
+
 function jrvRenderMhsMap(top5) {
-  const host = document.getElementById('jrvMhsMap');
-  if (!host) return;
+  const blips = document.getElementById('jrvMapBlips');
+  const countEl = document.getElementById('jrvMapCount');
+  const hotEl = document.getElementById('jrvMapHot');
+  if (!blips) return;
+  blips.innerHTML = '';
   if (!top5.length) {
-    host.innerHTML = '<div class="jrv-mhs-empty">No hiring-signal city data yet.</div>';
+    if (countEl) countEl.textContent = '0';
+    if (hotEl) hotEl.textContent = '0';
     return;
   }
-  // Recognizable Ontario silhouette. Includes the northwestern bulge (Kenora),
-  // Hudson/James Bay coast (top), the eastern Quebec border, and the Great Lakes
-  // shoreline at the south. Coordinates in a 300×200 viewBox.
-  const ontario =
-    'M 35 60 ' +                       // NW corner (near Manitoba border)
-    'L 30 50 L 55 38 L 90 32 L 115 30 ' + // NW shore arc
-    'L 135 38 L 150 28 L 178 22 L 200 20 ' + // James Bay coastline
-    'L 220 28 L 235 38 L 248 32 L 260 38 ' + // Hudson Bay edge
-    'L 275 50 L 285 75 ' +             // far NE/top right
-    'L 282 95 L 270 108 L 258 118 ' +  // Quebec border descending
-    'L 240 130 L 222 138 L 208 140 ' + // SE coast curve
-    'L 200 152 L 188 155 L 170 152 ' + // Lake Ontario shore
-    'L 158 142 L 145 150 L 130 152 ' + // Niagara peninsula
-    'L 115 148 L 100 142 L 85 138 ' +  // Lake Erie shore
-    'L 70 142 L 55 145 L 42 138 ' +    // Windsor / Lambton
-    'L 33 128 L 28 110 L 25 92 L 30 75 Z';
-  // Lakes — drawn as cuts into the bottom + west edges
-  const lakes =
-    '<path d="M 28 175 L 50 168 L 90 172 L 130 175 L 165 173 L 175 168 L 178 162 L 145 158 L 100 158 L 55 162 L 28 168 Z" class="jrv-mhs-lake"/>' + // Lake Erie
-    '<path d="M 178 158 L 220 152 L 250 150 L 245 162 L 225 165 L 195 168 L 178 163 Z" class="jrv-mhs-lake"/>' + // Lake Ontario
-    '<path d="M 24 30 L 18 60 L 22 95 L 30 120 L 22 135 L 8 110 L 5 70 L 10 35 Z" class="jrv-mhs-lake"/>' +     // Lake Huron / Superior west
-    '<path d="M 145 60 L 165 65 L 170 80 L 155 88 L 142 78 Z" class="jrv-mhs-lake"/>';                          // Georgian Bay
-  const pins = top5.map((a, i) => {
-    const coords = JRV_MHS_CITY_COORDS[a.key];
-    if (!coords) return '';
-    const r = 3 + (5 - i) * 0.5; // gentle size differential by rank
-    return `
-      <circle class="jrv-mhs-pin-pulse" cx="${coords.x}" cy="${coords.y}" r="${r + 2}"/>
-      <circle class="jrv-mhs-pin-ring" cx="${coords.x}" cy="${coords.y}" r="${r + 3}"/>
-      <circle class="jrv-mhs-pin" cx="${coords.x}" cy="${coords.y}" r="${r}" onclick="jrvMhsAreaClick('${a.key.replace(/'/g, "\\'")}')">
-        <title>${a.name} · ${a.count} signals</title>
-      </circle>
-      <text class="jrv-mhs-pin-label" x="${coords.x + r + 2}" y="${coords.y + 2}">${a.name}</text>
-    `;
-  }).join('');
-  host.innerHTML = `
-    <svg viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg" aria-label="Ontario hot spots">
-      <path d="${ontario}" class="jrv-mhs-ont-fill"/>
-      ${lakes}
-      ${pins}
-    </svg>
-  `;
+  const maxCount = Math.max(1, ...top5.map(a => a.count || 0));
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  let hotCount = 0;
+  top5.forEach((a, i) => {
+    const coords = JRV_MHS_CITY_LATLON[a.key];
+    if (!coords) return;
+    const { x, y } = jrvMhsProject(coords.lon, coords.lat);
+    // Score: relative to the strongest area in the snapshot (top one = 100).
+    const score = Math.max(1, Math.round((a.count || 0) / maxCount * 100));
+    const tier = jrvMhsTierFor(score);
+    if (tier === 'hot') hotCount++;
+    const g = document.createElementNS(SVGNS, 'g');
+    g.style.cursor = 'pointer';
+    g.addEventListener('click', () => jrvMhsAreaClick(a.key));
+
+    if (tier === 'hot') {
+      const ring = document.createElementNS(SVGNS, 'circle');
+      ring.setAttribute('cx', x.toFixed(1));
+      ring.setAttribute('cy', y.toFixed(1));
+      ring.setAttribute('class', 'jrv-map-blip-ring');
+      ring.style.animationDelay = (i * 0.4) + 's';
+      g.appendChild(ring);
+    }
+    const dot = document.createElementNS(SVGNS, 'circle');
+    dot.setAttribute('cx', x.toFixed(1));
+    dot.setAttribute('cy', y.toFixed(1));
+    dot.setAttribute('r', tier === 'hot' ? 5 : tier === 'warm' ? 3.5 : tier === 'mid' ? 2.8 : 2.2);
+    dot.setAttribute('class', 'jrv-map-blip-' + tier);
+    const title = document.createElementNS(SVGNS, 'title');
+    title.textContent = `${a.name} · ${a.count || 0} jobs`;
+    dot.appendChild(title);
+    g.appendChild(dot);
+
+    const text = document.createElementNS(SVGNS, 'text');
+    text.setAttribute('x', (x + (tier === 'hot' ? 11 : 9)).toFixed(1));
+    text.setAttribute('y', (y + 3).toFixed(1));
+    text.setAttribute('class', (tier === 'hot' || tier === 'warm') ? 'jrv-map-label' : 'jrv-map-label-dim');
+    text.textContent = (tier === 'hot' ? a.name.toUpperCase() : a.name) + ' · ' + score;
+    g.appendChild(text);
+
+    blips.appendChild(g);
+  });
+  if (countEl) countEl.textContent = top5.length;
+  if (hotEl) hotEl.textContent = hotCount;
 }
 
 function jrvRenderMhsAreas(top5) {
