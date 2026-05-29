@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0529-AX-ALL-VOICES-VISIBLE -->
+<!-- ELEVATE-2026-0529-AY-VOICE-COLLISION-FIX -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2821,7 +2821,10 @@ function jrvLogVoiceOnce(picked) {
 //   7. Microsoft Neural/Online English male anywhere (Guy / Davis / Eric)
 //   8. Generic English male (David / Mark / Alex)
 //   9. Any English voice
-function jrvPickVoice(voices, savedName) {
+// NOTE: this used to be named jrvPickVoice, which collided with the existing
+// voice-picker-UI function of the same name (line ~4600), causing this entire
+// auto-picker to be silently overwritten and never execute. Renamed 2026-05-29.
+function jrvAutoPickVoice(voices, savedName) {
   if (!voices || !voices.length) return null;
   const savedHit = savedName ? voices.find(v => v.name === savedName) : null;
   const isUK = v => /en-GB|united kingdom|uk english/i.test((v.name || '') + ' ' + (v.lang || ''));
@@ -2876,7 +2879,7 @@ function jrvResolveAgentVoice(voices) {
       if (hit) return hit;
     }
   } catch (_) {}
-  return jrvPickVoice(voices, localStorage.getItem(JRV_VOICE_KEY));
+  return jrvAutoPickVoice(voices, localStorage.getItem(JRV_VOICE_KEY));
 }
 
 function jrvShowAgentVoiceMenu(agentName, x, y) {
@@ -4424,10 +4427,12 @@ function jrvShowActionToast(action) {
 }
 
 // Speak text via browser SpeechSynthesis (Phase 5 swaps this for ElevenLabs)
-// Bumped v1 → v2 on 2026-05-29 so old "robotic SAPI George/David" picks get
-// re-evaluated against the new neural-first picker. Travis can re-pick from
-// the voice picker UI any time; this just doesn't honor stale low-quality picks.
-const JRV_VOICE_KEY = 'jrv_chosen_voice_v2';
+// Restored to v1 on 2026-05-29 — the earlier v2 bump dropped Travis's
+// previously-saved "Google UK English Male" preference. The actual broken
+// auto-picker (silently overwritten by a naming collision with another
+// jrvPickVoice function in the file) has now been renamed and fixed, so the
+// upgrade is no longer needed to override a stale low-quality pick.
+const JRV_VOICE_KEY = 'jrv_chosen_voice_v1';
 
 // Track what's being spoken so wake-word interruption can capture it for "continue" resume
 let jrvCurrentSpeechText = null;
