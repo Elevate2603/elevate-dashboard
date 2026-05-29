@@ -278,7 +278,11 @@ async function keepalivePing() {
       cache_read_tokens: u.cache_read_input_tokens || 0,
       cache_create_tokens: u.cache_creation_input_tokens || 0,
       input_tokens: u.input_tokens || 0,
+      output_tokens: u.output_tokens || 0,
       status: resp.status,
+      // DEBUG: include full raw usage + error body so we can diagnose cache-miss issues
+      raw_usage: u,
+      raw_error: resp.ok ? null : data,
     }), { headers: { ...CORS, "content-type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({
