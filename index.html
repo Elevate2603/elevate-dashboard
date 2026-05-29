@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-W-SCRIBE -->
+<!-- ELEVATE-2026-0528-X-SPHERE-RESIZE -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2500,6 +2500,18 @@ function jrvInitSphere() {
   jrvSphereReady = true;
   jrvSphereAnimate();
   window.addEventListener('resize', jrvOnResize);
+  // ResizeObserver catches host shape changes that don't trigger window.resize —
+  // e.g. when max-height:50vh kicks in because a sibling element grew, or when
+  // the tab is shown after being hidden. Without this the canvas keeps its old
+  // square render size while CSS stretches it to fit the new (non-square) host,
+  // producing the "stretched sphere" artifact.
+  if (typeof ResizeObserver !== 'undefined') {
+    const host = document.getElementById('jrvSphereHost');
+    if (host) {
+      const ro = new ResizeObserver(jrvOnResize);
+      ro.observe(host);
+    }
+  }
 }
 
 function jrvOnResize() {
@@ -2507,9 +2519,12 @@ function jrvOnResize() {
   const host = document.getElementById('jrvSphereHost');
   if (!host) return;
   const w = host.clientWidth || 380, h = host.clientHeight || 380;
+  if (w <= 0 || h <= 0) return; // host hidden — skip rather than crash
   jrvSphereCamera.aspect = w/h;
   jrvSphereCamera.updateProjectionMatrix();
-  jrvSphereRenderer.setSize(w, h);
+  jrvSphereRenderer.setSize(w, h, false);
+  // setSize(w,h,false) preserves the CSS size and only updates the internal drawing
+  // buffer, which is what we want — the canvas is already CSS-sized to 100% of the host.
 }
 
 function jrvSphereAnimate() {
