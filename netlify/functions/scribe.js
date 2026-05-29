@@ -22,7 +22,28 @@ const CORS_HEADERS = {
 
 const RCRM_BASE = "https://api.recruitcrm.io/v1";
 const STALE_DAYS = 21;     // List C threshold — clients gone quiet
-const ACTIVE_CLIENT_LIST = "166186"; // per CLAUDE.md — Active Client list ID in RCRM
+// Active Client signal — value of the off_limit_status_id field on the contact
+// or related company record. NOT a List ID (we tried that — RCRM's API ignores
+// list_id query params anyway). 166186 = "Active Client" off-limit status.
+const ACTIVE_CLIENT_OFF_LIMIT_ID = "166186";
+// Match RCRM whether the field comes back as a string or a number, on either
+// the contact directly or via its related_company nesting.
+function isActiveClient(c) {
+  if (!c) return false;
+  const wanted = ACTIVE_CLIENT_OFF_LIMIT_ID;
+  const candidates = [
+    c.off_limit_status_id,
+    c.off_limit_status && c.off_limit_status.id,
+    c.related_company && c.related_company.off_limit_status_id,
+    c.related_company && c.related_company.off_limit_status && c.related_company.off_limit_status.id,
+    c.current_position && c.current_position.off_limit_status_id,
+  ];
+  for (const v of candidates) {
+    if (v == null) continue;
+    if (String(v) === wanted) return true;
+  }
+  return false;
+}
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 5;       // safety cap so a single call doesn't burn all rate budget
 
@@ -40,18 +61,32 @@ exports.handler = async (event) => {
   }
   try {
     // ?debug=1 returns the raw first-page RCRM response so we can see the actual contact shape
+    // ?debug=fields=1 returns just the field NAMES on the first contact — useful for finding
+    //   the right list-membership field once we hit the live data.
     const params = new URLSearchParams(event.rawQuery || (event.queryStringParameters ? new URLSearchParams(event.queryStringParameters).toString() : ""));
     if (params.get("debug") === "1") {
       const r = await fetch(`${RCRM_BASE}/contacts?page=1&limit=2`, { headers: { Authorization: `Bearer ${process.env.RCRM_BEARER_TOKEN}` } });
       const body = await r.text();
       return jsonResp(200, { ok: true, status: r.status, body: safeJSON(body) });
     }
+    if (params.get("debug") === "fields") {
+      const r = await fetch(`${RCRM_BASE}/contacts?page=1&limit=1`, { headers: { Authorization: `Bearer ${process.env.RCRM_BEARER_TOKEN}` } });
+      const data = await r.json();
+      const first = (Array.isArray(data) ? data : (data.data || data.results || data.contacts || []))[0];
+      if (!first) return jsonResp(200, { ok: true, fields: [] });
+      const fieldShape = {};
+      for (const k of Object.keys(first)) {
+        const v = first[k];
+        fieldShape[k] = Array.isArray(v) ? `array(len=${v.length})` : (v === null ? "null" : typeof v);
+      }
+      return jsonResp(200, { ok: true, fields: fieldShape, sample_keys: Object.keys(first).sort() });
+    }
 
     const asOf = new Date().toISOString();
-    // Pull RCRM (all contacts + active-client list) + Outlook in parallel
-    const [allContacts, activeClientContacts, outlookActivity] = await Promise.all([
+    // RCRM's public API doesn't support filtering /v1/contacts by list_id — the param
+    // is silently ignored. So we pull the full set once and partition client-side.
+    const [allContacts, outlookActivity] = await Promise.all([
       rcrmListContacts({}),
-      rcrmListContacts({ listId: ACTIVE_CLIENT_LIST }).catch(() => []),
       pullOutlookActivity().catch(e => ({ error: String(e && e.message || e), byEmail: new Map() })),
     ]);
     const outlookByEmail = outlookActivity.byEmail || new Map();
@@ -59,13 +94,13 @@ exports.handler = async (event) => {
 
     const listC = computeListC_clientsGoneQuiet(allContacts, outlookByEmail);
     const listAPartial = computeListA_inSequencePartial(allContacts);
-    const activeClients = computeActiveClients(activeClientContacts, outlookByEmail);
+    const activeClientResult = computeActiveClients(allContacts, outlookByEmail);
 
     return jsonResp(200, {
       ok: true,
       asOf,
       totalContactsScanned: allContacts.length,
-      activeClientsScanned: activeClientContacts.length,
+      activeClientsScanned: activeClientResult.scanned,
       outlook: {
         connected: !outlookErr && outlookActivity.totalMessages > 0,
         totalMessagesPulled: outlookActivity.totalMessages || 0,
@@ -78,10 +113,8 @@ exports.handler = async (event) => {
         C: listC,
         D: { items: [], note: "Stalled-prospect revive list: pending Outlook reply-detection layer." },
       },
-      // Per-company rollup for the Active Client traffic-light component on the dashboard.
-      // Each row carries the slug for the RCRM link, days since most recent contact, and the
-      // name/role/channel of that most recent touch so the tooltip can read naturally.
-      activeClients,
+      activeClients: activeClientResult.rows,
+      activeClientsDiagnostic: activeClientResult.diagnostic,
     });
   } catch (e) {
     return jsonResp(500, { error: "SCRIBE failed", detail: String(e && e.message || e), ok: false });
@@ -169,33 +202,28 @@ function computeListC_clientsGoneQuiet(contacts, outlookByEmail) {
 }
 
 // Active Client traffic-light feed — one row per company with days_since_last_contact
-// and the most recent contact's name/role/channel. Drives the jrv-ac- component on the
-// dashboard. Takes contacts that are members of the Active Client RCRM list (166186)
-// plus the joined Outlook activity so unlogged emails still count as a touch.
-function computeActiveClients(activeClientContacts, outlookByEmail) {
+// and the most recent contact's name/role/channel. Drives the jrv-ac- component on
+// the dashboard. Filters by off_limit_status_id == 166186 (Active Client) on each
+// contact or its related_company. Joins Outlook activity so an unlogged email
+// still counts as a recent touch on the company.
+function computeActiveClients(allContacts, outlookByEmail) {
   outlookByEmail = outlookByEmail || new Map();
   const now = Date.now();
   const byCompany = new Map();
+  let matched = 0;
 
-  for (const c of activeClientContacts) {
+  for (const c of allContacts) {
+    if (!isActiveClient(c)) continue;
+    matched++;
     const company = extractCompany(c);
     if (!company) continue;
     const companySlug = (c.related_company && c.related_company.slug) || c.company_slug || null;
     const key = (companySlug || company).toLowerCase();
 
-    if (!byCompany.has(key)) {
-      byCompany.set(key, {
-        slug: companySlug,
-        name: company,
-        most_recent: null,
-      });
-    }
+    if (!byCompany.has(key)) byCompany.set(key, { slug: companySlug, name: company, most_recent: null });
     const bucket = byCompany.get(key);
-
-    // Promote whichever slug we find — some contacts have it, some don't
     if (!bucket.slug && companySlug) bucket.slug = companySlug;
 
-    // Consider RCRM logged activity
     const rcrm = parseActivity(c);
     if (rcrm.ts != null) {
       registerContact(bucket, {
@@ -206,7 +234,6 @@ function computeActiveClients(activeClientContacts, outlookByEmail) {
         ts: rcrm.ts,
       });
     }
-    // Consider Outlook activity for this contact's email
     const email = (c.email || "").toLowerCase().trim();
     if (email && outlookByEmail.has(email)) {
       const ob = outlookByEmail.get(email);
@@ -231,22 +258,22 @@ function computeActiveClients(activeClientContacts, outlookByEmail) {
     rows.push({
       slug: bucket.slug,
       name: bucket.name,
-      daysSinceContact, // null means "no contact on record"
-      lastContact: mr ? {
-        firstName: mr.firstName || "",
-        lastName: mr.lastName || "",
-        role: mr.role || "",
-        channel: mr.channel || "",
-      } : null,
+      daysSinceContact,
+      lastContact: mr ? { firstName: mr.firstName, lastName: mr.lastName, role: mr.role, channel: mr.channel } : null,
     });
   }
-  // Most overdue first — red comes to the top so Travis sees the worst at a glance
   rows.sort((a, b) => {
     const da = (typeof a.daysSinceContact === "number") ? a.daysSinceContact : -1;
     const db = (typeof b.daysSinceContact === "number") ? b.daysSinceContact : -1;
     return db - da;
   });
-  return rows;
+  return {
+    rows,
+    scanned: matched,
+    diagnostic: matched === 0
+      ? `0 contacts matched off_limit_status_id=${ACTIVE_CLIENT_OFF_LIMIT_ID}. Hit /scribe?debug=fields to inspect what RCRM actually returns on each contact.`
+      : `${matched} contacts marked Active Client → ${rows.length} unique companies.`,
+  };
 }
 
 function computeListA_inSequencePartial(contacts) {
