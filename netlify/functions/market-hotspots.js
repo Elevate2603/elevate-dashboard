@@ -58,11 +58,12 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 2500,
-        // Web search results are large (~3-5K tokens each). Capping at 3 keeps us
-        // under the org's 30K input-tokens-per-minute limit while still giving Claude
-        // enough live data to compose the rankings.
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
+        // 4500 tokens covers areas (5) + roles (10) + news (8 with impact analysis).
+        // Output cost at Haiku 4.5: ~4500 × $5/M = $0.022 — still trivial monthly.
+        max_tokens: 4500,
+        // Web search results are large (~3-5K tokens each). 4 searches gives Claude
+        // enough live coverage for hot spots + news without blowing the per-minute rate limit.
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }],
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -102,6 +103,9 @@ exports.handler = async (event) => {
     key: (a.key || a.name || "").toString().toLowerCase().trim(),
   }));
 
+  // News array is optional — older deploys won't have it, default to empty
+  const news = Array.isArray(parsed.news) ? parsed.news : [];
+
   const tokensUsed = (data.usage || {});
   return {
     statusCode: 200,
@@ -115,6 +119,7 @@ exports.handler = async (event) => {
       output_tokens: tokensUsed.output_tokens || 0,
       areas: parsed.areas,
       roles: parsed.roles,
+      news,
     }),
   };
 };
@@ -130,22 +135,32 @@ function jsonError(status, error, extra) {
 function buildPrompt() {
   // Compact prompt — keep the input token count down so we stay under the per-minute
   // rate limit even when combined with web_search result tokens.
-  return `You are a labor-market analyst for a recruitment firm in Windsor, Ontario. Search the web (Job Bank Canada at jobbank.gc.ca, recent Ontario hiring/expansion news from the last 30 days) and return ONLY a JSON object — no markdown, no preamble.
+  return `You are a labor-market analyst for ELEVATE RS Corp, a staffing & recruitment agency in Windsor, Ontario specializing in automotive Tier 1/2, EV/battery, manufacturing, warehouse/logistics, and skilled-trades placements across Ontario.
+
+Search the web (Job Bank Canada at jobbank.gc.ca, recent Ontario hiring/expansion/layoff news from the last 30 days, Indeed Canada) and return ONLY a JSON object — no markdown, no preamble.
 
 Shape:
 {
   "areas": [ { "name": "Windsor", "key": "windsor", "job_count": 1247, "top_industries": ["EV/Battery","Automotive"], "top_roles": ["Industrial Electrician","Plant Manager"], "why_now": "Concrete one-sentence catalyst — name the company/contract." } ],
-  "roles":  [ { "title": "Industrial Electrician", "job_count": 234, "top_areas": ["Windsor","Brampton"], "why_now": "Concrete one-sentence driver." } ]
+  "roles":  [ { "title": "Industrial Electrician", "job_count": 234, "top_areas": ["Windsor","Brampton"], "why_now": "Concrete one-sentence driver." } ],
+  "news":   [ { "title": "Stellantis announces 1,400-job Windsor expansion", "summary": "One-sentence factual summary of the event.", "source": "CBC News", "date": "2026-05-20", "category": "expansion|layoff|contract|policy|merger|other", "impact": "Two-to-three sentences on how this affects Elevate's staffing/recruitment business — does it create demand for specific roles (which?), open new client accounts, threaten existing placements, or shift the competitive landscape? Be specific and actionable." } ]
 }
 
-Rules:
-- "areas": exactly 5 entries, ranked by job_count descending.
+Rules for areas + roles:
+- "areas": exactly 5 entries, ranked by job_count descending. Specific Ontario CITIES only (Windsor, Toronto, Mississauga, Brampton, Hamilton, Ottawa, London, Kitchener, Waterloo, Cambridge, Guelph, Burlington, Oakville, Markham, Vaughan, Oshawa, Barrie, Kingston, Sudbury, Niagara Falls, St. Catharines, etc.) — never "Ontario", "GTA", or region labels.
 - "roles": exactly 10 entries, ranked by job_count descending.
-- Specific Ontario CITIES only (Windsor, Toronto, Mississauga, Brampton, Hamilton, Ottawa, London, Kitchener, Waterloo, Cambridge, Guelph, Burlington, Oakville, Markham, Vaughan, Oshawa, Barrie, Kingston, Sudbury, Niagara Falls, St. Catharines, etc.) — never "Ontario", "GTA", or region labels.
-- key = city lowercase.
-- job_count = realistic recent estimate from Job Bank / Indeed.
-- why_now must name a real catalyst (specific company, contract, sector shift). Never generic.
-- If a slot lacks live data, infer from broader Ontario labor context — don't return fewer than 5/10.
+- key = city lowercase. job_count = realistic recent estimate. why_now = real catalyst (specific company, contract, sector shift). Never generic.
+
+Rules for news:
+- "news": exactly 8 entries, ordered by recency (newest first).
+- Each item is a SPECIFIC EVENT from the last 30 days affecting Ontario manufacturing / EV / battery / automotive / logistics / skilled trades — plant opening or closure, layoffs, government contract, M&A, expansion announcement, policy shift, major hiring spree.
+- impact field is the MOST IMPORTANT field — write 2-3 sentences as if briefing Travis personally. Address what it means for HIM:
+    * Does it open hiring demand for which roles?
+    * Does it create a new account opportunity (name the company)?
+    * Does it threaten or improve existing placements?
+    * Does it shift competitive positioning for Elevate?
+  Be concrete. "Watch this space" is not an impact analysis.
+- If you cannot find 8 real news items, pad with the most relevant Canadian / Ontario sector trends — but mark date as "ongoing" rather than fabricate a specific date.
 
 Output ONLY the JSON. Start with { and end with }.`;
 }
