@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-AC-APPROVAL-QUEUE-PENDING-FILTER -->
+<!-- ELEVATE-2026-0528-AD-MARKET-HOTSPOTS -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -550,6 +550,47 @@
   .jrv-stage-count { color: var(--gold); font-weight:700; font-size:13px; }
   .jrv-stage-row.empty .jrv-stage-count { color: var(--text-muted); }
 
+  /* Market Hot Spots — Ontario map + top areas + profession pie */
+  .jrv-mhs-map { background: var(--dark3); border:1px solid var(--border); border-radius:8px; padding:8px; }
+  .jrv-mhs-map svg { display:block; width:100%; height:auto; }
+  .jrv-mhs-ont-fill { fill:#1a1a1a; stroke:#3a2f1a; stroke-width:1; }
+  .jrv-mhs-lake { fill:#0e0e10; stroke:#222; stroke-width:0.5; }
+  .jrv-mhs-pin { fill: var(--gold); stroke:#000; stroke-width:0.5; opacity:0.95; cursor:pointer; transition: all 0.15s; }
+  .jrv-mhs-pin:hover { transform-origin:center; }
+  .jrv-mhs-pin-ring { fill:none; stroke: var(--gold); stroke-width:1; opacity:0.4; pointer-events:none; }
+  .jrv-mhs-pin-label { font:600 9px 'Consolas', monospace; fill: var(--gold); pointer-events:none; }
+
+  .jrv-mhs-areas { display:flex; flex-direction:column; gap:6px; }
+  .jrv-mhs-row { display:grid; grid-template-columns: 22px 1fr auto; gap:8px; align-items:center; padding:8px 10px; background: var(--dark3); border:1px solid var(--border); border-radius:6px; cursor:pointer; transition: all 0.15s; }
+  .jrv-mhs-row:hover { border-color: var(--gold); }
+  .jrv-mhs-row.active { border-color: var(--gold); background:#1c1410; }
+  .jrv-mhs-rank { color: var(--gold); font:700 11px 'Consolas',monospace; }
+  .jrv-mhs-name { color: var(--text); font-size:12px; }
+  .jrv-mhs-count { color: var(--text-muted); font:700 11px 'Consolas',monospace; }
+
+  .jrv-mhs-detail { background: var(--dark3); border:1px solid var(--gold); border-radius:8px; padding:12px; font-size:12px; line-height:1.5; color: var(--text); }
+  .jrv-mhs-detail-title { color: var(--gold); font-weight:700; font-size:12px; letter-spacing:0.05em; margin-bottom:6px; text-transform:uppercase; }
+  .jrv-mhs-detail-body { white-space:pre-wrap; }
+  .jrv-mhs-detail.loading .jrv-mhs-detail-body::after { content:'…'; animation: jrvDots 1s infinite; }
+  .jrv-mhs-detail-close { float:right; background:none; border:none; color: var(--text-muted); cursor:pointer; font-size:14px; line-height:1; padding:0; }
+  .jrv-mhs-detail-close:hover { color: var(--gold); }
+  @keyframes jrvDots { 0%,100%{opacity:0.3}50%{opacity:1} }
+
+  .jrv-mhs-pie-wrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .jrv-mhs-pie-svg { width:180px; height:180px; }
+  .jrv-mhs-pie-slice { cursor:pointer; transition: opacity 0.15s; }
+  .jrv-mhs-pie-slice:hover { opacity:0.85; }
+  .jrv-mhs-pie-slice.active { stroke: var(--gold); stroke-width:2; }
+  .jrv-mhs-pie-legend { width:100%; display:flex; flex-direction:column; gap:4px; }
+  .jrv-mhs-legend-row { display:grid; grid-template-columns: 10px 1fr auto; gap:6px; align-items:center; padding:5px 8px; background: var(--dark3); border:1px solid var(--border); border-radius:5px; cursor:pointer; font-size:11px; transition: all 0.15s; }
+  .jrv-mhs-legend-row:hover { border-color: var(--gold); }
+  .jrv-mhs-legend-row.active { border-color: var(--gold); background:#1c1410; }
+  .jrv-mhs-legend-dot { width:8px; height:8px; border-radius:50%; }
+  .jrv-mhs-legend-title { color: var(--text); }
+  .jrv-mhs-legend-pct { color: var(--gold); font:600 10px 'Consolas',monospace; }
+
+  .jrv-mhs-empty { color: var(--text-muted); font-size:11px; text-align:center; padding:14px; font-style:italic; }
+
   .jrv-log { display:flex; flex-direction:column; gap:8px; max-height:380px; overflow-y:auto; }
   .jrv-log-item { background: var(--dark3); border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:11px; line-height:1.4; }
   .jrv-log-time { color: var(--text-muted); font-family:'Consolas', monospace; font-size:10px; letter-spacing:0.08em; }
@@ -682,9 +723,22 @@
         </div>
       </section>
 
-      <!-- RIGHT RAIL: PIPELINE + RECENT -->
+      <!-- RIGHT RAIL: MARKET HOT SPOTS + PIPELINE + RECENT -->
       <aside class="jrv-rail">
-        <div class="jrv-rail-title">Pipeline</div>
+        <div class="jrv-rail-title">Market Hot Spots</div>
+        <div class="jrv-mhs-map" id="jrvMhsMap">
+          <div class="jrv-mhs-empty">Waiting for hiring signals…</div>
+        </div>
+        <div class="jrv-mhs-areas" id="jrvMhsAreas"></div>
+        <div id="jrvMhsAreaDetailWrap"></div>
+
+        <div class="jrv-rail-title" style="margin-top:14px;">Top Hiring Roles</div>
+        <div class="jrv-mhs-pie-wrap" id="jrvMhsPieWrap">
+          <div class="jrv-mhs-empty">Waiting for hiring signals…</div>
+        </div>
+        <div id="jrvMhsProfDetailWrap"></div>
+
+        <div class="jrv-rail-title" style="margin-top:14px;">Pipeline</div>
         <div class="jrv-stage-row" id="jrvStageNew"><span class="jrv-stage-label">NEW LEAD</span><span class="jrv-stage-count">—</span></div>
         <div class="jrv-stage-row" id="jrvStageStaged"><span class="jrv-stage-label">STAGED</span><span class="jrv-stage-count">—</span></div>
         <div class="jrv-stage-row" id="jrvStageEnrolled"><span class="jrv-stage-label">IN SEQUENCE</span><span class="jrv-stage-count">—</span></div>
@@ -2316,8 +2370,333 @@ function jrvLoadHiringSignals() {
     .then(data => {
       const arr = (Array.isArray(data) ? data : []).map(r => (r && r.aggregate) ? r.aggregate : r).filter(r => r && r.key);
       jrvState.hiringSignals = arr;
+      jrvRenderMarketHotSpots();
     })
-    .catch(() => { jrvState.hiringSignals = []; });
+    .catch(() => { jrvState.hiringSignals = []; jrvRenderMarketHotSpots(); });
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// MARKET HOT SPOTS — aggregate signals by city + profession, render map + pie
+// ════════════════════════════════════════════════════════════════════════
+
+// Approximate map coords for Southern Ontario cities (viewBox 0 0 300 200).
+// Pins are placed by city name; anything we don't have coords for gets dropped.
+const JRV_MHS_CITY_COORDS = {
+  windsor:        { x: 38,  y: 175 },
+  chatham:        { x: 60,  y: 170 },
+  sarnia:         { x: 60,  y: 150 },
+  london:         { x: 90,  y: 150 },
+  brantford:      { x: 130, y: 140 },
+  hamilton:       { x: 155, y: 130 },
+  kitchener:      { x: 130, y: 125 },
+  waterloo:       { x: 128, y: 122 },
+  guelph:         { x: 145, y: 122 },
+  cambridge:      { x: 135, y: 130 },
+  burlington:     { x: 160, y: 125 },
+  oakville:       { x: 165, y: 122 },
+  mississauga:    { x: 175, y: 118 },
+  brampton:       { x: 178, y: 110 },
+  toronto:        { x: 188, y: 118 },
+  markham:        { x: 195, y: 110 },
+  vaughan:        { x: 185, y: 108 },
+  scarborough:    { x: 198, y: 117 },
+  ajax:           { x: 205, y: 117 },
+  pickering:      { x: 202, y: 116 },
+  oshawa:         { x: 212, y: 113 },
+  whitby:         { x: 208, y: 115 },
+  barrie:         { x: 188, y: 90 },
+  ottawa:         { x: 270, y: 70 },
+  kingston:       { x: 240, y: 95 },
+  belleville:     { x: 225, y: 100 },
+  peterborough:   { x: 215, y: 100 },
+  sudbury:        { x: 175, y: 35 },
+  'north bay':    { x: 200, y: 40 },
+  'thunder bay':  { x: 60,  y: 25 },
+  'sault ste. marie': { x: 115, y: 50 },
+  niagara:        { x: 165, y: 145 },
+  'niagara falls':{ x: 165, y: 145 },
+  'st. catharines': { x: 160, y: 140 },
+  woodstock:      { x: 110, y: 145 },
+  stratford:      { x: 110, y: 130 },
+  orillia:        { x: 195, y: 88 },
+  'richmond hill':{ x: 188, y: 112 }
+};
+
+// Pie chart palette — gold + warm complementary hues, dark-theme readable.
+const JRV_MHS_PIE_COLORS = [
+  '#C8820A', '#E0A030', '#9C6606', '#F5C56B', '#7A4F00',
+  '#D89240', '#A87010', '#FFD78A', '#5C3A00', '#B07820'
+];
+
+// Normalize a geography string into a city key for lookup.
+function jrvMhsCityKey(raw) {
+  if (!raw) return null;
+  let s = String(raw).toLowerCase().trim();
+  // Strip ", ON" / ", Ontario" / " Canada" suffixes and parenthetical area names
+  s = s.replace(/[,].*$/, '').replace(/\s+\(.*\)$/, '').trim();
+  if (!s) return null;
+  // Common GTA shorthand
+  if (s.includes('gta') || s === 'greater toronto area') return 'toronto';
+  return s;
+}
+
+// Pull a list of role titles from a signal record. Some signals store JSON arrays
+// in target_titles_json; others store free text or a comma list.
+function jrvMhsExtractTitles(d) {
+  const out = [];
+  const raw = d.target_titles_json || d.target_titles || d.titles || '';
+  if (!raw) return out;
+  if (Array.isArray(raw)) {
+    raw.forEach(t => out.push(String(t).trim()));
+  } else {
+    const str = String(raw).trim();
+    if (str.startsWith('[')) {
+      try {
+        const arr = JSON.parse(str);
+        if (Array.isArray(arr)) arr.forEach(t => out.push(String(t).trim()));
+      } catch (_) { /* fall through to comma-split */ }
+    }
+    if (!out.length) str.split(/[,;|]/).forEach(t => { const v = t.trim(); if (v) out.push(v); });
+  }
+  return out.filter(Boolean);
+}
+
+function jrvComputeMarketHotSpots() {
+  const signals = (jrvState.hiringSignals || []).map(r => (r && r.aggregate) ? r.aggregate : r).filter(r => r && r.data);
+  // Areas — group by city
+  const areaMap = new Map();
+  for (const r of signals) {
+    const d = r.data || {};
+    const cityKey = jrvMhsCityKey(d.geography || d.city || d.location);
+    if (!cityKey) continue;
+    if (!areaMap.has(cityKey)) {
+      areaMap.set(cityKey, { key: cityKey, name: jrvTitleCase(cityKey), count: 0, score: 0, industries: new Map(), titles: new Map(), companies: [], whys: [] });
+    }
+    const a = areaMap.get(cityKey);
+    a.count++;
+    a.score += Number(d.score) || 0;
+    const ind = (d.industry || '').trim();
+    if (ind) a.industries.set(ind, (a.industries.get(ind) || 0) + 1);
+    for (const t of jrvMhsExtractTitles(d)) {
+      a.titles.set(t, (a.titles.get(t) || 0) + 1);
+    }
+    if (d.company_name) a.companies.push(d.company_name);
+    if (d.why_now) a.whys.push(d.why_now);
+  }
+  const areas = Array.from(areaMap.values()).sort((a, b) => b.count - a.count || b.score - a.score);
+
+  // Professions — top 10 titles across all signals
+  const profMap = new Map();
+  for (const r of signals) {
+    for (const t of jrvMhsExtractTitles(r.data || {})) {
+      const norm = t.replace(/\s+/g, ' ').trim();
+      if (!norm) continue;
+      if (!profMap.has(norm)) profMap.set(norm, { title: norm, count: 0, areas: new Map() });
+      const p = profMap.get(norm);
+      p.count++;
+      const city = jrvMhsCityKey((r.data || {}).geography);
+      if (city) p.areas.set(city, (p.areas.get(city) || 0) + 1);
+    }
+  }
+  const professions = Array.from(profMap.values()).sort((a, b) => b.count - a.count).slice(0, 10);
+  return { areas, professions };
+}
+
+function jrvTitleCase(s) {
+  return String(s).split(' ').map(w => w ? w[0].toUpperCase() + w.slice(1) : '').join(' ');
+}
+
+function jrvRenderMarketHotSpots() {
+  const { areas, professions } = jrvComputeMarketHotSpots();
+  jrvRenderMhsMap(areas.slice(0, 5));
+  jrvRenderMhsAreas(areas.slice(0, 5));
+  jrvRenderMhsPie(professions);
+}
+
+function jrvRenderMhsMap(top5) {
+  const host = document.getElementById('jrvMhsMap');
+  if (!host) return;
+  if (!top5.length) {
+    host.innerHTML = '<div class="jrv-mhs-empty">No hiring-signal geography yet — pulling signals…</div>';
+    return;
+  }
+  // Stylized Southern-Ontario silhouette. Not cartographically perfect — meant as a
+  // visual reference so the pins land in roughly the right place.
+  const land = 'M 25 60 L 60 50 L 110 45 L 160 50 L 210 55 L 260 60 L 290 75 L 285 95 L 270 110 L 250 125 L 220 140 L 190 145 L 160 150 L 130 152 L 100 150 L 70 142 L 50 130 L 35 110 L 28 90 Z';
+  // Lakes — Erie (south), Ontario (south of Toronto), Huron (west)
+  const lakes = '<path d="M 30 175 L 100 178 L 165 175 L 175 165 L 110 162 L 50 165 Z" class="jrv-mhs-lake"/>' +
+                '<path d="M 175 145 L 240 142 L 230 158 L 178 158 Z" class="jrv-mhs-lake"/>' +
+                '<path d="M 30 35 L 40 70 L 25 100 L 15 70 L 18 40 Z" class="jrv-mhs-lake"/>';
+  const pins = top5.map((a, i) => {
+    const coords = JRV_MHS_CITY_COORDS[a.key];
+    if (!coords) return '';
+    const r = 4 + (5 - i) * 0.8; // bigger pins for higher ranks
+    return `
+      <circle class="jrv-mhs-pin-ring" cx="${coords.x}" cy="${coords.y}" r="${r + 4}"/>
+      <circle class="jrv-mhs-pin" cx="${coords.x}" cy="${coords.y}" r="${r}" onclick="jrvMhsAreaClick('${a.key.replace(/'/g, "\\'")}')">
+        <title>${a.name} · ${a.count} signals</title>
+      </circle>
+      <text class="jrv-mhs-pin-label" x="${coords.x + r + 3}" y="${coords.y + 3}">${a.name}</text>
+    `;
+  }).join('');
+  host.innerHTML = `
+    <svg viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg" aria-label="Southern Ontario hot spots">
+      <path d="${land}" class="jrv-mhs-ont-fill"/>
+      ${lakes}
+      ${pins}
+    </svg>
+  `;
+}
+
+function jrvRenderMhsAreas(top5) {
+  const host = document.getElementById('jrvMhsAreas');
+  if (!host) return;
+  if (!top5.length) { host.innerHTML = ''; return; }
+  host.innerHTML = top5.map((a, i) => `
+    <div class="jrv-mhs-row" data-area="${a.key}" onclick="jrvMhsAreaClick('${a.key.replace(/'/g, "\\'")}')">
+      <span class="jrv-mhs-rank">${i + 1}</span>
+      <span class="jrv-mhs-name">${escapeHtml(a.name)}</span>
+      <span class="jrv-mhs-count">${a.count}</span>
+    </div>
+  `).join('');
+}
+
+function jrvRenderMhsPie(profs) {
+  const host = document.getElementById('jrvMhsPieWrap');
+  if (!host) return;
+  if (!profs.length) {
+    host.innerHTML = '<div class="jrv-mhs-empty">No role data in signals yet.</div>';
+    return;
+  }
+  const total = profs.reduce((s, p) => s + p.count, 0);
+  // Build slices — vanilla SVG arcs at cx=50 cy=50 r=44
+  const cx = 50, cy = 50, r = 44;
+  let acc = 0;
+  const slices = profs.map((p, i) => {
+    const start = (acc / total) * Math.PI * 2 - Math.PI / 2;
+    acc += p.count;
+    const end = (acc / total) * Math.PI * 2 - Math.PI / 2;
+    const x1 = cx + r * Math.cos(start), y1 = cy + r * Math.sin(start);
+    const x2 = cx + r * Math.cos(end),   y2 = cy + r * Math.sin(end);
+    const largeArc = (end - start) > Math.PI ? 1 : 0;
+    const d = `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+    const color = JRV_MHS_PIE_COLORS[i % JRV_MHS_PIE_COLORS.length];
+    const safeTitle = p.title.replace(/'/g, "\\'");
+    return `<path class="jrv-mhs-pie-slice" data-prof="${escapeHtml(p.title)}" d="${d}" fill="${color}" onclick="jrvMhsProfClick('${safeTitle}')"><title>${escapeHtml(p.title)} · ${p.count}</title></path>`;
+  }).join('');
+  const legend = profs.map((p, i) => {
+    const color = JRV_MHS_PIE_COLORS[i % JRV_MHS_PIE_COLORS.length];
+    const pct = Math.round((p.count / total) * 100);
+    const safeTitle = p.title.replace(/'/g, "\\'");
+    return `
+      <div class="jrv-mhs-legend-row" data-prof="${escapeHtml(p.title)}" onclick="jrvMhsProfClick('${safeTitle}')">
+        <span class="jrv-mhs-legend-dot" style="background:${color}"></span>
+        <span class="jrv-mhs-legend-title">${escapeHtml(p.title)}</span>
+        <span class="jrv-mhs-legend-pct">${pct}%</span>
+      </div>
+    `;
+  }).join('');
+  host.innerHTML = `
+    <svg viewBox="0 0 100 100" class="jrv-mhs-pie-svg" xmlns="http://www.w3.org/2000/svg">${slices}</svg>
+    <div class="jrv-mhs-pie-legend">${legend}</div>
+  `;
+}
+
+// Click handler — area pin or area row. Fires a focused brain call and shows
+// the response in an inline expandable card.
+function jrvMhsAreaClick(cityKey) {
+  const { areas } = jrvComputeMarketHotSpots();
+  const area = areas.find(a => a.key === cityKey);
+  if (!area) return;
+  document.querySelectorAll('.jrv-mhs-row').forEach(r => r.classList.toggle('active', r.dataset.area === cityKey));
+  const topIndustries = Array.from(area.industries.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
+  const topTitles = Array.from(area.titles.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6).map(e => e[0]);
+  const whys = area.whys.slice(0, 4);
+  jrvMhsAskBrain('area', {
+    name: area.name,
+    signal_count: area.count,
+    industries: topIndustries,
+    roles: topTitles,
+    why_now_samples: whys,
+    companies: area.companies.slice(0, 6),
+  }, 'jrvMhsAreaDetailWrap');
+}
+
+function jrvMhsProfClick(title) {
+  const { professions } = jrvComputeMarketHotSpots();
+  const p = professions.find(x => x.title === title);
+  if (!p) return;
+  document.querySelectorAll('.jrv-mhs-legend-row').forEach(r => r.classList.toggle('active', r.dataset.prof === title));
+  document.querySelectorAll('.jrv-mhs-pie-slice').forEach(r => r.classList.toggle('active', r.dataset.prof === title));
+  const topAreas = Array.from(p.areas.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${jrvTitleCase(k)} (${v})`);
+  jrvMhsAskBrain('profession', {
+    title: p.title,
+    signal_count: p.count,
+    top_areas: topAreas,
+  }, 'jrvMhsProfDetailWrap');
+}
+
+// POST to the JARVIS brain with a focused prompt. The brain already has the
+// hiring-signals context, so this short prompt is enough to get a tight insight.
+function jrvMhsAskBrain(kind, payload, targetWrapId) {
+  const wrap = document.getElementById(targetWrapId);
+  if (!wrap) return;
+  const title = (kind === 'area' ? payload.name : payload.title) || '—';
+  wrap.innerHTML = `
+    <div class="jrv-mhs-detail loading">
+      <button class="jrv-mhs-detail-close" onclick="this.parentElement.parentElement.innerHTML=''" title="Close">×</button>
+      <div class="jrv-mhs-detail-title">${escapeHtml(title)}</div>
+      <div class="jrv-mhs-detail-body">Pulling insight</div>
+    </div>
+  `;
+
+  const transcriptKind = kind === 'area' ? 'MARKET HOT SPOT — AREA' : 'MARKET HOT SPOT — PROFESSION';
+  const transcript =
+    `${transcriptKind} CLICK · Travis wants a tight breakdown.\n\n` +
+    `Subject: ${kind === 'area' ? payload.name : payload.title}\n` +
+    `Signal count: ${payload.signal_count}\n` +
+    (kind === 'area'
+      ? `Top industries: ${(payload.industries || []).join(', ') || '(unknown)'}\n` +
+        `Top roles: ${(payload.roles || []).join(', ') || '(unknown)'}\n` +
+        `Active companies: ${(payload.companies || []).join(', ') || '(unknown)'}\n` +
+        `Sample why_now phrases: ${(payload.why_now_samples || []).map(w => `"${w}"`).join(' | ') || '(none)'}\n\n` +
+        `Write a tight ~70-word INTEL briefing on what's driving this area right now. Lead with the strongest catalyst (plant, expansion, contract, sector trend). Name companies if relevant. Mention the dominant role/skill demand. Plain prose, no bullets, no markdown. Set agent="intel".`
+      : `Active hiring areas: ${(payload.top_areas || []).join(', ') || '(unknown)'}\n\n` +
+        `Write a tight ~70-word INTEL briefing on why ${payload.title} is one of the hottest roles right now. Mention which sectors drive it and which Ontario regions concentrate the demand. Plain prose, no bullets, no markdown. Set agent="intel".`
+    );
+
+  const ctx = {
+    history: (jrvState.history || []).slice(-6),
+    memoryFacts: jrvState.memoryFacts || [],
+    hiringSignals: (jrvState.hiringSignals || []).slice(0, 30),
+    activeAgent: 'intel',
+  };
+
+  fetch(JRV_CONFIG.JARVIS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transcript, context: ctx }),
+  })
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(j => {
+      const body = (j && j.speak ? j.speak : 'No insight returned.').trim();
+      wrap.innerHTML = `
+        <div class="jrv-mhs-detail">
+          <button class="jrv-mhs-detail-close" onclick="this.parentElement.parentElement.innerHTML=''" title="Close">×</button>
+          <div class="jrv-mhs-detail-title">${escapeHtml(title)}</div>
+          <div class="jrv-mhs-detail-body">${escapeHtml(body)}</div>
+        </div>
+      `;
+    })
+    .catch(err => {
+      wrap.innerHTML = `
+        <div class="jrv-mhs-detail">
+          <button class="jrv-mhs-detail-close" onclick="this.parentElement.parentElement.innerHTML=''" title="Close">×</button>
+          <div class="jrv-mhs-detail-title">${escapeHtml(title)}</div>
+          <div class="jrv-mhs-detail-body">Brain unreachable: ${escapeHtml(String(err.message || err))}</div>
+        </div>
+      `;
+    });
 }
 
 // Probe the JARVIS Function once on load so we can flip the status badge.
