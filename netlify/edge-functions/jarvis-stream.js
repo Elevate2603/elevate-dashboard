@@ -266,8 +266,8 @@ async function keepalivePing() {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1,
-        system: [{ type: "text", text: ROUTING_PROMPT, cache_control: { type: "ephemeral" } }],
+        max_tokens: 10,
+        system: [{ type: "text", text: ROUTING_PROMPT, cache_control: { type: "ephemeral", ttl: "5m" } }],
         messages: [{ role: "user", content: "ping" }],
       }),
     });
