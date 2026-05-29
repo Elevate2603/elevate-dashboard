@@ -246,78 +246,73 @@ function computeListC_clientsGoneQuiet(contacts, outlookByEmail) {
 // the dashboard. Filters by off_limit_status_id == 166186 (Active Client) on each
 // contact or its related_company. Joins Outlook activity so an unlogged email
 // still counts as a recent touch on the company.
+// Build the traffic-light list directly from the active-client COMPANY records.
+// RCRM puts the activity timestamps right on the company (last_note_created_on,
+// last_meeting_created_on), so we don't need to roll up via contacts. Optionally
+// we still cross-reference contacts for the tooltip name when an Outlook email
+// or note ties to a specific person at that company.
 function computeActiveClients(allContacts, outlookByEmail, lookup) {
   outlookByEmail = outlookByEmail || new Map();
   lookup = lookup || { activeBySlug: new Map(), activeByName: new Map() };
   const now = Date.now();
-  const byCompany = new Map();
-  let matched = 0;
 
-  // Pre-seed buckets from the companies endpoint so every Active Client appears
-  // even if there are no logged contacts/activity yet (otherwise they'd be invisible).
-  for (const co of lookup.activeBySlug.values()) {
-    const key = co.slug.toLowerCase();
-    if (!byCompany.has(key)) byCompany.set(key, {
-      slug: co.slug,
-      name: (co.company_name || co.name || "(no name)").trim(),
-      most_recent: null,
-    });
-  }
-
+  // Group contacts by company so we can enrich the tooltip with a name when possible
+  const contactsBySlug = new Map();
   for (const c of allContacts) {
-    const companySlug = (c.related_company && c.related_company.slug) || c.company_slug || null;
-    const companyName = (extractCompany(c) || "").trim();
-    // A contact counts if EITHER it carries off_limit_status_id directly, OR its
-    // company is in the active-client lookup we built from /v1/companies.
-    const companyMatch = (companySlug && lookup.activeBySlug.has(companySlug))
-                      || (companyName && lookup.activeByName.has(companyName.toLowerCase()));
-    if (!isActiveClient(c) && !companyMatch) continue;
-    matched++;
-    if (!companyName) continue;
-    const key = (companySlug || companyName).toLowerCase();
-
-    if (!byCompany.has(key)) byCompany.set(key, { slug: companySlug, name: companyName, most_recent: null });
-    const bucket = byCompany.get(key);
-    if (!bucket.slug && companySlug) bucket.slug = companySlug;
-
-    const rcrm = parseActivity(c);
-    if (rcrm.ts != null) {
-      registerContact(bucket, {
-        firstName: c.first_name || c.firstname || "",
-        lastName:  c.last_name  || c.lastname  || "",
-        role: c.designation || c.position || c.title || "",
-        channel: (rcrm.type || "").toLowerCase() || "note",
-        ts: rcrm.ts,
-      });
-    }
-    const email = (c.email || "").toLowerCase().trim();
-    if (email && outlookByEmail.has(email)) {
-      const ob = outlookByEmail.get(email);
-      registerContact(bucket, {
-        firstName: c.first_name || c.firstname || "",
-        lastName:  c.last_name  || c.lastname  || "",
-        role: c.designation || c.position || c.title || "",
-        channel: "email",
-        ts: ob.ts,
-      });
-    }
-  }
-
-  function registerContact(bucket, candidate) {
-    if (!bucket.most_recent || candidate.ts > bucket.most_recent.ts) bucket.most_recent = candidate;
+    const slug = (c.related_company && c.related_company.slug) || c.company_slug;
+    if (!slug) continue;
+    if (!contactsBySlug.has(slug)) contactsBySlug.set(slug, []);
+    contactsBySlug.get(slug).push(c);
   }
 
   const rows = [];
-  for (const bucket of byCompany.values()) {
-    const mr = bucket.most_recent;
-    const daysSinceContact = mr ? Math.floor((now - mr.ts) / 86400000) : null;
+  for (const co of lookup.activeBySlug.values()) {
+    const name = (co.company_name || co.name || "(no name)").trim();
+
+    // Activity timestamp candidates — company-level RCRM fields + Outlook activity
+    // for any of its contacts.
+    let bestTs = null;
+    let bestChannel = "";
+    let bestContact = null;
+
+    function consider(ts, channel, contact) {
+      if (!ts || isNaN(ts)) return;
+      if (bestTs == null || ts > bestTs) {
+        bestTs = ts; bestChannel = channel; bestContact = contact || bestContact;
+      }
+    }
+    consider(Date.parse(co.last_note_created_on || ""), "note", null);
+    consider(Date.parse(co.last_meeting_created_on || ""), "meeting", null);
+
+    // Cross-reference with contacts under this company for Outlook + tooltip name
+    const cos = contactsBySlug.get(co.slug) || [];
+    for (const c of cos) {
+      const email = (c.email || "").toLowerCase().trim();
+      if (email && outlookByEmail.has(email)) {
+        const ob = outlookByEmail.get(email);
+        consider(ob.ts, "email", c);
+      }
+      const rcrm = parseActivity(c);
+      if (rcrm.ts) consider(rcrm.ts, (rcrm.type || "").toLowerCase() || "note", c);
+    }
+    // If we found a touchpoint but no contact identity, pick the first contact at the
+    // company for the tooltip — better than "unknown."
+    if (bestTs && !bestContact && cos.length) bestContact = cos[0];
+
+    const daysSinceContact = bestTs ? Math.floor((now - bestTs) / 86400000) : null;
     rows.push({
-      slug: bucket.slug,
-      name: bucket.name,
+      slug: co.slug,
+      name,
       daysSinceContact,
-      lastContact: mr ? { firstName: mr.firstName, lastName: mr.lastName, role: mr.role, channel: mr.channel } : null,
+      lastContact: bestContact ? {
+        firstName: bestContact.first_name || bestContact.firstname || "",
+        lastName:  bestContact.last_name  || bestContact.lastname  || "",
+        role: bestContact.designation || bestContact.position || bestContact.title || "",
+        channel: bestChannel,
+      } : (bestTs ? { firstName: "Activity", lastName: "logged", role: "", channel: bestChannel } : null),
     });
   }
+
   rows.sort((a, b) => {
     const da = (typeof a.daysSinceContact === "number") ? a.daysSinceContact : -1;
     const db = (typeof b.daysSinceContact === "number") ? b.daysSinceContact : -1;
@@ -325,8 +320,8 @@ function computeActiveClients(allContacts, outlookByEmail, lookup) {
   });
   return {
     rows,
-    scanned: matched,
-    diagnostic: `companies-flagged=${lookup.activeBySlug.size} · contacts-matched=${matched} · unique-companies-shown=${rows.length}. If still empty, hit /scribe?debug=fields-co to inspect company shape.`,
+    scanned: lookup.activeBySlug.size,
+    diagnostic: `companies-flagged=${lookup.activeBySlug.size} · with-activity=${rows.filter(r => r.daysSinceContact != null).length} · total-shown=${rows.length}`,
   };
 }
 
@@ -350,9 +345,13 @@ function computeListA_inSequencePartial(contacts) {
 }
 
 // ── RCRM helpers ───────────────────────────────────────────────────────
+// Companies pagination cap: high enough to cover Travis's data (thousands of
+// companies). Without this, Active Clients beyond page 5 were silently dropped.
+const COMPANIES_MAX_PAGES = 50; // 5,000 company ceiling — fits comfortably in 26s timeout
+
 async function rcrmListCompanies() {
   const all = [];
-  for (let page = 1; page <= MAX_PAGES; page++) {
+  for (let page = 1; page <= COMPANIES_MAX_PAGES; page++) {
     const url = `${RCRM_BASE}/companies?page=${page}&limit=${PAGE_LIMIT}`;
     const r = await fetch(url, { headers: { Authorization: `Bearer ${process.env.RCRM_BEARER_TOKEN}` } });
     if (!r.ok) {
