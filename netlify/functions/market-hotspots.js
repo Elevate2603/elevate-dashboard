@@ -54,10 +54,11 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 4096,
-        // Web search lets Claude pull live counts from Job Bank, Indeed, news.
-        // max_uses caps cost — 8 searches is enough to cover top regions + roles.
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 8 }],
+        max_tokens: 2500,
+        // Web search results are large (~3-5K tokens each). Capping at 3 keeps us
+        // under the org's 30K input-tokens-per-minute limit while still giving Claude
+        // enough live data to compose the rankings.
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -123,48 +124,24 @@ function jsonError(status, error, extra) {
 }
 
 function buildPrompt() {
-  return `You are a labor-market analyst for a recruitment firm in Windsor, Ontario.
+  // Compact prompt — keep the input token count down so we stay under the per-minute
+  // rate limit even when combined with web_search result tokens.
+  return `You are a labor-market analyst for a recruitment firm in Windsor, Ontario. Search the web (Job Bank Canada at jobbank.gc.ca, recent Ontario hiring/expansion news from the last 30 days) and return ONLY a JSON object — no markdown, no preamble.
 
-Research current hiring demand across Ontario, Canada. Use web search to pull data from:
-- Job Bank Canada (jobbank.gc.ca) — official Canadian government job board
-- Indeed Canada
-- Recent news articles from the last 30 days about plant openings, expansions, layoffs, government contracts
-- Statistics Canada labor data if relevant
-
-Focus on real, specific catalysts (named companies, announced contracts, sector trends) — not generic descriptions.
-
-Return ONLY a valid JSON object in this exact shape, no markdown, no preamble:
-
+Shape:
 {
-  "areas": [
-    {
-      "name": "Windsor",
-      "key": "windsor",
-      "job_count": 1247,
-      "top_industries": ["EV/Battery", "Automotive Tier 1", "Logistics"],
-      "top_roles": ["Industrial Electrician", "Plant Manager", "Warehouse Associate"],
-      "why_now": "One-sentence concrete reason — name the specific catalyst (NextStar Energy ramp, Stellantis EV transition, etc.)."
-    }
-  ],
-  "roles": [
-    {
-      "title": "Industrial Electrician",
-      "job_count": 234,
-      "top_areas": ["Windsor", "Brampton", "Hamilton"],
-      "why_now": "One-sentence concrete reason — name the specific driver."
-    }
-  ]
+  "areas": [ { "name": "Windsor", "key": "windsor", "job_count": 1247, "top_industries": ["EV/Battery","Automotive"], "top_roles": ["Industrial Electrician","Plant Manager"], "why_now": "Concrete one-sentence catalyst — name the company/contract." } ],
+  "roles":  [ { "title": "Industrial Electrician", "job_count": 234, "top_areas": ["Windsor","Brampton"], "why_now": "Concrete one-sentence driver." } ]
 }
 
 Rules:
-- "areas" must have exactly 5 entries, ranked by job_count descending.
-- "roles" must have exactly 10 entries, ranked by job_count descending.
-- ONLY name specific Ontario cities — never "Ontario", "GTA", "Southern Ontario", or province/region labels.
-- Use real cities like: Windsor, Toronto, Mississauga, Brampton, Hamilton, Ottawa, London, Kitchener, Waterloo, Cambridge, Guelph, Burlington, Oakville, Markham, Vaughan, Oshawa, Barrie, Kingston, Sudbury, Niagara Falls, St. Catharines, Thunder Bay, Sault Ste. Marie.
-- key must be the city name in lowercase, no punctuation (e.g. "windsor", "st. catharines" → "st. catharines", "thunder bay").
-- job_count should be a realistic estimate of currently posted jobs in that city for that area/role from recent Job Bank or Indeed counts.
-- why_now must name a real, specific driver — never generic ("growing market", "in demand").
-- If you cannot find data for a particular slot, still fill it with your best estimate based on the broader Ontario labor market context — don't return fewer than 5 areas or 10 roles.
+- "areas": exactly 5 entries, ranked by job_count descending.
+- "roles": exactly 10 entries, ranked by job_count descending.
+- Specific Ontario CITIES only (Windsor, Toronto, Mississauga, Brampton, Hamilton, Ottawa, London, Kitchener, Waterloo, Cambridge, Guelph, Burlington, Oakville, Markham, Vaughan, Oshawa, Barrie, Kingston, Sudbury, Niagara Falls, St. Catharines, etc.) — never "Ontario", "GTA", or region labels.
+- key = city lowercase.
+- job_count = realistic recent estimate from Job Bank / Indeed.
+- why_now must name a real catalyst (specific company, contract, sector shift). Never generic.
+- If a slot lacks live data, infer from broader Ontario labor context — don't return fewer than 5/10.
 
-Return ONLY the JSON object. No preamble, no markdown code fences, no closing remarks.`;
+Output ONLY the JSON. Start with { and end with }.`;
 }
