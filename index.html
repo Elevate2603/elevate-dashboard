@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-Z-SELF-ECHO-FILTER -->
+<!-- ELEVATE-2026-0528-AA-DIM-SPHERE-DATE-REFRESH -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2349,6 +2349,13 @@ function jrvSetGreeting() {
   if (dateLine) dateLine.textContent = d.toLocaleDateString('en-CA', { weekday:'long', month:'short', day:'numeric' }).toUpperCase();
 }
 
+// Keep the date current even when the dashboard stays open past midnight.
+// Refresh every minute + on tab focus so coming back to the tab shows today's date.
+if (typeof window !== 'undefined') {
+  setInterval(() => { try { jrvSetGreeting(); } catch (_) {} }, 60000);
+  window.addEventListener('focus', () => { try { jrvSetGreeting(); } catch (_) {} });
+}
+
 function jrvInitSphere() {
   if (typeof THREE === 'undefined') {
     console.warn('[JARVIS] Three.js not loaded — sphere disabled.');
@@ -2397,7 +2404,7 @@ function jrvInitSphere() {
     size: 4.0,
     sizeAttenuation: true,
     transparent: true,
-    opacity: 0.95,
+    opacity: 0.19,   // ~5x dimmer than the 0.95 "5x brighter" pass
     blending: THREE.AdditiveBlending,
     depthWrite: false
   });
@@ -2418,10 +2425,10 @@ function jrvInitSphere() {
     const arcGeo = new THREE.BufferGeometry();
     arcGeo.setAttribute('position', new THREE.Float32BufferAttribute(arcPos, 3));
     const arcMat = new THREE.LineBasicMaterial({
-      color: gold, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending
+      color: gold, transparent: true, opacity: 0.20, blending: THREE.AdditiveBlending
     });
     const arcGlowMat = new THREE.PointsMaterial({
-      color: gold, size: 5.5, transparent: true, opacity: 1.0,
+      color: gold, size: 5.5, transparent: true, opacity: 0.20,
       blending: THREE.AdditiveBlending, sizeAttenuation: true, depthWrite: false
     });
     jrvSphereArcMats.push(arcMat);
@@ -2434,7 +2441,7 @@ function jrvInitSphere() {
   const dashRadius = 196;
   const dashTotal = 72;
   jrvSphereDashMat = new THREE.LineBasicMaterial({
-    color: gold, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending
+    color: gold, transparent: true, opacity: 0.19, blending: THREE.AdditiveBlending
   });
   for (let i = 0; i < dashTotal; i++) {
     if (i % 2 !== 0) continue; // skip every other segment = dashed look
@@ -2461,7 +2468,7 @@ function jrvInitSphere() {
   const dotGeo = new THREE.BufferGeometry();
   dotGeo.setAttribute('position', new THREE.BufferAttribute(dotPos, 3));
   jrvSphereDotMat = new THREE.PointsMaterial({
-    color: gold, size: 4.2, transparent: true, opacity: 1.0,
+    color: gold, size: 4.2, transparent: true, opacity: 0.20,
     blending: THREE.AdditiveBlending, sizeAttenuation: true, depthWrite: false
   });
   jrvSphereOuter.add(new THREE.Points(dotGeo, jrvSphereDotMat));
@@ -2483,7 +2490,7 @@ function jrvInitSphere() {
   }
   spokeGeo.setAttribute('position', new THREE.BufferAttribute(spokePos, 3));
   jrvSphereSpokeMat = new THREE.LineBasicMaterial({
-    color: gold, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending
+    color: gold, transparent: true, opacity: 0.19, blending: THREE.AdditiveBlending
   });
   jrvSphereOuter.add(new THREE.LineSegments(spokeGeo, jrvSphereSpokeMat));
 
@@ -2492,7 +2499,7 @@ function jrvInitSphere() {
   coreGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
   jrvSphereCoreMat = new THREE.PointsMaterial({
     color: gold, size: 36, sizeAttenuation: true, transparent: true,
-    opacity: 0.32, blending: THREE.AdditiveBlending
+    opacity: 0.064, blending: THREE.AdditiveBlending
   });
   jrvSphereCore = new THREE.Points(coreGeo, jrvSphereCoreMat);
   jrvSphereInner.add(jrvSphereCore);
@@ -2562,8 +2569,8 @@ function jrvSphereAnimate() {
 
   // Inner glow core — always visible (subtle breath at rest), dramatic when talking
   if (jrvSphereCoreMat) {
-    // Resting baseline = 0.32. Speaking baseline = whatever onstart set (0.92).
-    const restingOpacity = 0.30 + Math.sin(now * 1.4) * 0.06; // gentle breathing
+    // 5x dimmed pass: resting baseline 0.30 → 0.06, breathing amplitude scaled the same.
+    const restingOpacity = 0.06 + Math.sin(now * 1.4) * 0.012; // gentle breathing
     const targetOp = jrvState.speaking ? jrvState.coreTargetOpacity : restingOpacity;
     jrvSphereCoreMat.opacity += (targetOp - jrvSphereCoreMat.opacity) * 0.18;
 
@@ -3140,7 +3147,7 @@ function jrvInterruptSpeech() {
   try { speechSynthesis.cancel(); } catch (_) {}
   jrvCurrentSpeechText = null;
   jrvState.speaking = false;
-  jrvState.coreTargetOpacity = 0.30;
+  jrvState.coreTargetOpacity = 0.06;
   jrvState.coreThrob = 0;
   return true;
 }
@@ -3194,7 +3201,7 @@ function jrvSpeakOut(text) {
     // Sphere talking-pulse hooks
     u.onstart = () => {
       jrvState.speaking = true;
-      jrvState.coreTargetOpacity = 0.95;
+      jrvState.coreTargetOpacity = 0.19;  // 5x dimmer than the previous 0.95
       jrvState.coreThrob = 0.7; // initial ignite burst
     };
     u.onboundary = () => {
@@ -3204,7 +3211,7 @@ function jrvSpeakOut(text) {
     const settle = () => {
       jrvState.speaking = false;
       // Resting baseline — orb stays visible with a gentle breath, just dimmer
-      jrvState.coreTargetOpacity = 0.30;
+      jrvState.coreTargetOpacity = 0.06;
       jrvState.coreThrob = 0;
       // Natural end clears current text so "continue" only resumes interrupted speech
       if (jrvCurrentSpeechText === clean) jrvCurrentSpeechText = null;
@@ -3310,7 +3317,7 @@ const jrvState = {
   styleSamples: [], // rolling buffer of Travis's recent transcripts (max 25)
   // Sphere talking-pulse runtime state
   speaking: false,
-  coreTargetOpacity: 0.30, // resting glow baseline — orb is always visible
+  coreTargetOpacity: 0.06, // resting glow baseline — 5x dimmer than prior 0.30
   coreThrob: 0,
   currentScatter: 1.0,
   recentInterrupt: false // gate: prevents bare-wake ack from double-firing after interim interrupt
