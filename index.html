@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0529-AU-UK-MALE-VOICE -->
+<!-- ELEVATE-2026-0529-AV-UK-MALE-NEURAL -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2763,33 +2763,75 @@ function jrvQueueSpeak(text) {
     const u = new SpeechSynthesisUtterance(clean);
     u.rate = 1.0; u.pitch = 0.95; u.volume = 1.0;
     const pick = jrvPickVoice(speechSynthesis.getVoices(), localStorage.getItem(JRV_VOICE_KEY));
-    if (pick) u.voice = pick;
+    if (pick) { u.voice = pick; jrvLogVoiceOnce(pick); }
     speechSynthesis.speak(u);
   } catch (_) {}
 }
 
-// UK Male preferred. Order of preference:
-//   1. Saved user choice IF it's a UK voice (honors explicit picks)
-//   2. Known UK Male voices by name (George / Daniel / Oliver / Arthur / Google UK English Male)
-//   3. Any UK voice with "male" in the name
-//   4. Any UK voice at all (better UK female than US male for JARVIS character)
-//   5. Saved non-UK choice (honors deliberate cross-region pick)
-//   6. Generic English male voice
-//   7. Any English voice
+// Log the chosen voice ONCE per page load so Travis can pop the console
+// (F12) and see which voice JARVIS landed on, plus the full available list.
+let jrvVoiceLogged = false;
+function jrvLogVoiceOnce(picked) {
+  if (jrvVoiceLogged) return;
+  jrvVoiceLogged = true;
+  try {
+    const all = speechSynthesis.getVoices();
+    console.log('[JARVIS voice] picked:', picked.name, '(' + picked.lang + ')');
+    console.log('[JARVIS voice] all UK voices available:',
+      all.filter(v => /en-GB|united kingdom|uk english/i.test(v.name + ' ' + v.lang))
+         .map(v => v.name + ' (' + v.lang + ')'));
+    console.log('[JARVIS voice] full list (' + all.length + '):',
+      all.map(v => v.name + ' [' + v.lang + ']'));
+  } catch (_) {}
+}
+
+// Voice picker — prefer UK Male in HIGH-QUALITY (Online / Natural / Neural) tiers
+// before falling back to the older SAPI desktop voices which sound robotic.
+// Order of preference (each row is "first match wins"):
+//
+//   1. Saved choice IF a UK voice (explicit UI pick honored)
+//   2. Microsoft Neural/Online UK male: Ryan / Thomas / Roger / Steffan (high quality)
+//   3. Google UK English Male / Daniel-Premium / Oliver-Premium (chrome/macOS premium)
+//   4. Any UK voice whose name contains "natural" or "neural" or "online" — even
+//      if female, neural-UK-female beats robotic-US-male for the character
+//   5. Older UK male (George / Daniel / Oliver / Arthur) — last UK-quality try
+//   6. Saved non-UK choice (deliberate cross-region picks still honored)
+//   7. Microsoft Neural/Online English male anywhere (Guy / Davis / Eric)
+//   8. Generic English male (David / Mark / Alex)
+//   9. Any English voice
 function jrvPickVoice(voices, savedName) {
   if (!voices || !voices.length) return null;
   const savedHit = savedName ? voices.find(v => v.name === savedName) : null;
   const isUK = v => /en-GB|united kingdom|uk english/i.test((v.name || '') + ' ' + (v.lang || ''));
+  const isNeural = v => /online|natural|neural|premium|wavenet/i.test(v.name || '');
   if (savedHit && isUK(savedHit)) return savedHit;
-  const ukMaleByName = voices.find(v => /george|oliver|arthur|daniel|google uk english male/i.test(v.name || ''));
+  // High-quality UK male names (Microsoft Online / Edge neural voices, 2022+)
+  const ukMaleNeural = voices.find(v => /ryan|thomas|roger|steffan/i.test(v.name || '') && isUK(v));
+  if (ukMaleNeural) return ukMaleNeural;
+  // Chrome's Google UK English Male is excellent quality
+  const googleUkMale = voices.find(v => /google uk english male/i.test(v.name || ''));
+  if (googleUkMale) return googleUkMale;
+  // macOS premium UK males (Daniel Premium / Oliver Enhanced)
+  const macUkPremium = voices.find(v => /(daniel|oliver|arthur).+(premium|enhanced)/i.test(v.name || ''));
+  if (macUkPremium) return macUkPremium;
+  // Any neural UK voice (could be female — UK female neural still sounds better than robotic anything)
+  const ukAnyNeural = voices.find(v => isUK(v) && isNeural(v));
+  if (ukAnyNeural) return ukAnyNeural;
+  // Fallback: older UK male SAPI voices (George etc.) — may sound robotic but at least UK
+  const ukMaleOlder = voices.find(v => /george|oliver|arthur|daniel/i.test(v.name || '') && isUK(v));
+  if (ukMaleOlder) return ukMaleOlder;
+  const ukMaleByName = voices.find(v => /george|oliver|arthur|daniel/i.test(v.name || ''));
   if (ukMaleByName) return ukMaleByName;
-  const ukAndMale = voices.find(v => isUK(v) && /male/i.test(v.name || ''));
-  if (ukAndMale) return ukAndMale;
+  // Any UK voice
   const anyUK = voices.find(isUK);
   if (anyUK) return anyUK;
+  // Saved non-UK choice still honored if user picked it deliberately
   if (savedHit) return savedHit;
-  const anyEnMale = voices.find(v => /male|david|mark|alex|fred|tom|james|paul/i.test(v.name || '') && /en/i.test(v.lang || ''));
-  if (anyEnMale) return anyEnMale;
+  // High-quality English male anywhere (Microsoft Guy / Davis / Eric Online)
+  const enMaleNeural = voices.find(v => /guy|davis|eric|brandon|tony/i.test(v.name || '') && isNeural(v));
+  if (enMaleNeural) return enMaleNeural;
+  const enMaleByName = voices.find(v => /male|david|mark|alex|fred|tom|james|paul/i.test(v.name || '') && /en/i.test(v.lang || ''));
+  if (enMaleByName) return enMaleByName;
   return voices.find(v => /^en/i.test(v.lang || '')) || voices[0] || null;
 }
 
@@ -4213,7 +4255,10 @@ function jrvShowActionToast(action) {
 }
 
 // Speak text via browser SpeechSynthesis (Phase 5 swaps this for ElevenLabs)
-const JRV_VOICE_KEY = 'jrv_chosen_voice_v1';
+// Bumped v1 → v2 on 2026-05-29 so old "robotic SAPI George/David" picks get
+// re-evaluated against the new neural-first picker. Travis can re-pick from
+// the voice picker UI any time; this just doesn't honor stale low-quality picks.
+const JRV_VOICE_KEY = 'jrv_chosen_voice_v2';
 
 // Track what's being spoken so wake-word interruption can capture it for "continue" resume
 let jrvCurrentSpeechText = null;
@@ -4295,7 +4340,7 @@ function jrvSpeakOut(text) {
     u.pitch = 0.95;
     u.volume = 1.0; // max — JARVIS must stay loud over the background song
     const pick = jrvPickVoice(speechSynthesis.getVoices(), localStorage.getItem(JRV_VOICE_KEY));
-    if (pick) u.voice = pick;
+    if (pick) { u.voice = pick; jrvLogVoiceOnce(pick); }
     // Sphere talking-pulse hooks
     u.onstart = () => {
       jrvState.speaking = true;
