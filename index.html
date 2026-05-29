@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-AG-MARKET-INTEL-MONTHLY -->
+<!-- ELEVATE-2026-0528-AH-MARKET-INTEL-CRON -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2234,11 +2234,14 @@ const JRV_CONFIG = {
   SIGNALS_URL: 'https://hook.us2.make.com/u5omv41orexphg4nxldq6f3vvxp67ygu', // Pending Retrieval Fetch → datastore 97143
   SCRIBE_URL: '/.netlify/functions/scribe', // Phase 3 — RCRM/Outlook follow-up lists
   JARVIS_URL: '/.netlify/functions/jarvis', // Phase 2 brain. Empty string = force demo mode.
-  MARKET_INTEL_URL: '/.netlify/functions/market-hotspots', // Job Bank + news scan via Claude web search
+  // Primary read path: Make webhook that serves a cached JSON written by the monthly
+  // cron scenario (Make 5224292) on the 1st of every month at 8am Toronto time.
+  // Fallback: the direct Netlify function does the live Claude web_search.
+  MARKET_INTEL_URL:      'https://hook.us2.make.com/v7qngbadothuecm06p7cmoh35h2s8d0d',
+  MARKET_INTEL_FALLBACK: '/.netlify/functions/market-hotspots',
   MARKET_INTEL_CACHE_KEY: 'jrv_market_intel_v1',
-  // Monthly refresh — the labor market doesn't change enough day-to-day to justify
-  // daily token spend. First dashboard load of any new calendar month triggers a fresh
-  // fetch; everything else this month uses the cached payload. Manual ↻ still works.
+  // Same calendar-month check on the frontend cache so subsequent loads this month
+  // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
   HISTORY_MAX: 20, // turns sent to brain each call
   HISTORY_STORE_MAX: 60, // turns kept in localStorage across sessions
@@ -2403,11 +2406,24 @@ function jrvLoadMarketIntel(force) {
   if (!force && cached && cached.ok && jrvSameCalendarMonth(cached.fetched_at)) return;
 
   // Fetch fresh — set a visible loading hint if we have nothing to paint
-  if (!cached || !cached.ok) jrvSetMarketIntelStatus('Researching live hiring data…');
+  if (!cached || !cached.ok) jrvSetMarketIntelStatus('Loading monthly snapshot…');
   else jrvSetMarketIntelStatus('Refreshing monthly snapshot…');
 
+  // Step 1: try the Make cache webhook (cheap, fast). It returns the JSON written by
+  // the monthly cron — or {"ok":false,"error":"no_cache_yet"} if the cron hasn't run.
   fetch(JRV_CONFIG.MARKET_INTEL_URL, { method: 'GET' })
-    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j)))
+    .then(r => r.json())
+    .then(data => {
+      if (data && data.ok && Array.isArray(data.areas)) return data;
+      // Cache empty or invalid → fall through to live fetch
+      throw new Error(data && data.error ? data.error : 'cache_empty');
+    })
+    .catch(() => {
+      // Step 2: fall back to the direct Netlify function for a live web_search.
+      jrvSetMarketIntelStatus('Researching live hiring data…');
+      return fetch(JRV_CONFIG.MARKET_INTEL_FALLBACK, { method: 'GET' })
+        .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j)));
+    })
     .then(data => {
       if (!data || !data.ok) throw new Error(data && data.error || 'No data');
       jrvState.marketIntel = data;
@@ -2418,8 +2434,7 @@ function jrvLoadMarketIntel(force) {
     .catch(err => {
       const msg = (err && err.error) || (err && err.message) || String(err);
       console.warn('[Market Intel] fetch failed:', msg);
-      // Keep showing cached data if we have it
-      jrvSetMarketIntelStatus(cached && cached.ok ? `Live refresh failed: ${msg}` : `Could not load live intel: ${msg}`);
+      jrvSetMarketIntelStatus(cached && cached.ok ? `Refresh failed: ${msg}` : `Could not load: ${msg}`);
     });
 }
 
