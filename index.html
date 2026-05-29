@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0528-AD-MARKET-HOTSPOTS -->
+<!-- ELEVATE-2026-0528-AE-MARKET-HOTSPOTS-V2 -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -498,7 +498,7 @@
   .jrv-agent-role { color: var(--text-muted); font-size:10px; margin-top:2px; }
   .jrv-agent-text { flex:1; }
 
-  .jrv-center { background: var(--dark2); border:1px solid var(--border); border-radius:12px; padding:24px; display:flex; flex-direction:column; align-items:center; justify-content:space-between; min-height:520px; position:relative; overflow:hidden; }
+  .jrv-center { background: var(--dark2); border:1px solid var(--border); border-radius:12px; padding:24px; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:16px; min-height:520px; position:relative; overflow:hidden; align-self:start; position:sticky; top:16px; }
   .jrv-status { display:flex; gap:14px; align-items:center; color: var(--text-muted); font-size:11px; letter-spacing:0.14em; font-family:'Consolas', monospace; }
   .jrv-status .jrv-badge { padding:4px 10px; border:1px solid var(--border); border-radius:4px; }
   .jrv-status .jrv-badge.live { color: #4ade80; border-color: rgba(74,222,128,0.4); }
@@ -550,46 +550,44 @@
   .jrv-stage-count { color: var(--gold); font-weight:700; font-size:13px; }
   .jrv-stage-row.empty .jrv-stage-count { color: var(--text-muted); }
 
-  /* Market Hot Spots — Ontario map + top areas + profession pie */
-  .jrv-mhs-map { background: var(--dark3); border:1px solid var(--border); border-radius:8px; padding:8px; }
+  /* Market Hot Spots — compact Ontario map + ranked bar chart */
+  .jrv-mhs-map { background:#0a0a0c; border:1px solid #2a2118; border-radius:8px; padding:4px; position:relative; }
   .jrv-mhs-map svg { display:block; width:100%; height:auto; }
-  .jrv-mhs-ont-fill { fill:#1a1a1a; stroke:#3a2f1a; stroke-width:1; }
-  .jrv-mhs-lake { fill:#0e0e10; stroke:#222; stroke-width:0.5; }
-  .jrv-mhs-pin { fill: var(--gold); stroke:#000; stroke-width:0.5; opacity:0.95; cursor:pointer; transition: all 0.15s; }
-  .jrv-mhs-pin:hover { transform-origin:center; }
-  .jrv-mhs-pin-ring { fill:none; stroke: var(--gold); stroke-width:1; opacity:0.4; pointer-events:none; }
-  .jrv-mhs-pin-label { font:600 9px 'Consolas', monospace; fill: var(--gold); pointer-events:none; }
+  .jrv-mhs-ont-fill { fill:#15120c; stroke:#3a2f1a; stroke-width:0.8; }
+  .jrv-mhs-lake { fill:#06070a; stroke:#15161a; stroke-width:0.4; }
+  .jrv-mhs-pin { fill: var(--gold); stroke:#000; stroke-width:0.4; opacity:0.95; cursor:pointer; transition: all 0.15s; filter: drop-shadow(0 0 2px var(--gold)); }
+  .jrv-mhs-pin:hover { filter: drop-shadow(0 0 4px var(--gold)); }
+  .jrv-mhs-pin-ring { fill:none; stroke: var(--gold); stroke-width:0.7; opacity:0.35; pointer-events:none; }
+  .jrv-mhs-pin-label { font:600 6px 'Consolas', monospace; fill: var(--gold); pointer-events:none; }
+  @keyframes jrvMhsPulse { 0%,100%{r:5}50%{r:7} }
+  .jrv-mhs-pin-pulse { fill:none; stroke: var(--gold); stroke-width:0.5; opacity:0.3; animation: jrvMhsPulse 2.6s ease-in-out infinite; pointer-events:none; }
 
-  .jrv-mhs-areas { display:flex; flex-direction:column; gap:6px; }
-  .jrv-mhs-row { display:grid; grid-template-columns: 22px 1fr auto; gap:8px; align-items:center; padding:8px 10px; background: var(--dark3); border:1px solid var(--border); border-radius:6px; cursor:pointer; transition: all 0.15s; }
-  .jrv-mhs-row:hover { border-color: var(--gold); }
-  .jrv-mhs-row.active { border-color: var(--gold); background:#1c1410; }
+  .jrv-mhs-areas { display:flex; flex-direction:column; gap:4px; }
+  .jrv-mhs-row { display:grid; grid-template-columns: 18px 1fr auto; gap:8px; align-items:center; padding:6px 10px; background: var(--dark3); border:1px solid var(--border); border-radius:5px; cursor:pointer; transition: all 0.15s; font-size:12px; }
+  .jrv-mhs-row:hover, .jrv-mhs-row.active { border-color: var(--gold); background:#1c1410; }
   .jrv-mhs-rank { color: var(--gold); font:700 11px 'Consolas',monospace; }
-  .jrv-mhs-name { color: var(--text); font-size:12px; }
-  .jrv-mhs-count { color: var(--text-muted); font:700 11px 'Consolas',monospace; }
+  .jrv-mhs-name { color: var(--text); }
+  .jrv-mhs-count { color: var(--gold); font:700 10px 'Consolas',monospace; }
 
-  .jrv-mhs-detail { background: var(--dark3); border:1px solid var(--gold); border-radius:8px; padding:12px; font-size:12px; line-height:1.5; color: var(--text); }
-  .jrv-mhs-detail-title { color: var(--gold); font-weight:700; font-size:12px; letter-spacing:0.05em; margin-bottom:6px; text-transform:uppercase; }
+  .jrv-mhs-detail { background: var(--dark3); border:1px solid var(--gold); border-radius:6px; padding:10px 12px; font-size:11.5px; line-height:1.5; color: var(--text); margin-top:4px; }
+  .jrv-mhs-detail-title { color: var(--gold); font-weight:700; font-size:11px; letter-spacing:0.06em; margin-bottom:4px; text-transform:uppercase; }
   .jrv-mhs-detail-body { white-space:pre-wrap; }
-  .jrv-mhs-detail.loading .jrv-mhs-detail-body::after { content:'…'; animation: jrvDots 1s infinite; }
+  .jrv-mhs-detail.loading .jrv-mhs-detail-body::after { content:''; display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--gold); margin-left:6px; animation: jrvDots 1s infinite; }
   .jrv-mhs-detail-close { float:right; background:none; border:none; color: var(--text-muted); cursor:pointer; font-size:14px; line-height:1; padding:0; }
   .jrv-mhs-detail-close:hover { color: var(--gold); }
   @keyframes jrvDots { 0%,100%{opacity:0.3}50%{opacity:1} }
 
-  .jrv-mhs-pie-wrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
-  .jrv-mhs-pie-svg { width:180px; height:180px; }
-  .jrv-mhs-pie-slice { cursor:pointer; transition: opacity 0.15s; }
-  .jrv-mhs-pie-slice:hover { opacity:0.85; }
-  .jrv-mhs-pie-slice.active { stroke: var(--gold); stroke-width:2; }
-  .jrv-mhs-pie-legend { width:100%; display:flex; flex-direction:column; gap:4px; }
-  .jrv-mhs-legend-row { display:grid; grid-template-columns: 10px 1fr auto; gap:6px; align-items:center; padding:5px 8px; background: var(--dark3); border:1px solid var(--border); border-radius:5px; cursor:pointer; font-size:11px; transition: all 0.15s; }
-  .jrv-mhs-legend-row:hover { border-color: var(--gold); }
-  .jrv-mhs-legend-row.active { border-color: var(--gold); background:#1c1410; }
-  .jrv-mhs-legend-dot { width:8px; height:8px; border-radius:50%; }
-  .jrv-mhs-legend-title { color: var(--text); }
-  .jrv-mhs-legend-pct { color: var(--gold); font:600 10px 'Consolas',monospace; }
+  /* Horizontal bar chart for Hot Hiring Positions — way more legible than a pie at this width */
+  .jrv-mhs-bars { display:flex; flex-direction:column; gap:4px; }
+  .jrv-mhs-bar-row { background: var(--dark3); border:1px solid var(--border); border-radius:5px; padding:6px 10px; cursor:pointer; transition: all 0.15s; position:relative; overflow:hidden; }
+  .jrv-mhs-bar-row:hover, .jrv-mhs-bar-row.active { border-color: var(--gold); }
+  .jrv-mhs-bar-fill { position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, rgba(200,130,10,0.32) 0%, rgba(200,130,10,0.10) 100%); border-right:1px solid rgba(200,130,10,0.55); z-index:0; transition: width 0.4s ease-out; }
+  .jrv-mhs-bar-text { position:relative; z-index:1; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .jrv-mhs-bar-title { color: var(--text); font-size:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .jrv-mhs-bar-count { color: var(--gold); font:700 11px 'Consolas',monospace; flex-shrink:0; }
 
-  .jrv-mhs-empty { color: var(--text-muted); font-size:11px; text-align:center; padding:14px; font-style:italic; }
+  .jrv-mhs-empty { color: var(--text-muted); font-size:11px; text-align:center; padding:10px; font-style:italic; }
+  .jrv-mhs-source-note { color: var(--text-muted); font-size:10px; font-style:italic; padding:2px 4px; }
 
   .jrv-log { display:flex; flex-direction:column; gap:8px; max-height:380px; overflow-y:auto; }
   .jrv-log-item { background: var(--dark3); border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:11px; line-height:1.4; }
@@ -731,9 +729,10 @@
         </div>
         <div class="jrv-mhs-areas" id="jrvMhsAreas"></div>
         <div id="jrvMhsAreaDetailWrap"></div>
+        <div class="jrv-mhs-source-note">Live from hiring signals · external sources (Job Bank, news) coming next</div>
 
-        <div class="jrv-rail-title" style="margin-top:14px;">Top Hiring Roles</div>
-        <div class="jrv-mhs-pie-wrap" id="jrvMhsPieWrap">
+        <div class="jrv-rail-title" style="margin-top:14px;">Hot Hiring Positions</div>
+        <div class="jrv-mhs-bars" id="jrvMhsBars">
           <div class="jrv-mhs-empty">Waiting for hiring signals…</div>
         </div>
         <div id="jrvMhsProfDetailWrap"></div>
@@ -2428,15 +2427,26 @@ const JRV_MHS_PIE_COLORS = [
   '#D89240', '#A87010', '#FFD78A', '#5C3A00', '#B07820'
 ];
 
-// Normalize a geography string into a city key for lookup.
+// Words that are NOT cities — province/country/region labels we must drop so they
+// don't poison the top-5 ranking. Anything matching these is rejected outright.
+const JRV_MHS_NON_CITY = new Set([
+  'ontario', 'on', 'canada', 'ca', 'central canada', 'eastern canada', 'western canada',
+  'gta', 'greater toronto area', 'southern ontario', 'northern ontario', 'eastern ontario',
+  'central ontario', 'southwestern ontario', 'province', 'unknown', 'remote', 'tbd', 'n/a',
+]);
+
+// Normalize a geography string into a city key. Returns null if the entry isn't a
+// recognized city (province-only entries, blanks, garbage) — keeps the ranking clean.
 function jrvMhsCityKey(raw) {
   if (!raw) return null;
   let s = String(raw).toLowerCase().trim();
-  // Strip ", ON" / ", Ontario" / " Canada" suffixes and parenthetical area names
   s = s.replace(/[,].*$/, '').replace(/\s+\(.*\)$/, '').trim();
   if (!s) return null;
-  // Common GTA shorthand
-  if (s.includes('gta') || s === 'greater toronto area') return 'toronto';
+  if (JRV_MHS_NON_CITY.has(s)) return null;
+  // Map any GTA shorthand that survived the non-city filter to Toronto
+  if (s.includes('gta')) return 'toronto';
+  // Only accept cities we have pin coordinates for. Anything else is "uncategorized."
+  if (!JRV_MHS_CITY_COORDS[s]) return null;
   return s;
 }
 
@@ -2517,31 +2527,47 @@ function jrvRenderMhsMap(top5) {
   const host = document.getElementById('jrvMhsMap');
   if (!host) return;
   if (!top5.length) {
-    host.innerHTML = '<div class="jrv-mhs-empty">No hiring-signal geography yet — pulling signals…</div>';
+    host.innerHTML = '<div class="jrv-mhs-empty">No hiring-signal city data yet.</div>';
     return;
   }
-  // Stylized Southern-Ontario silhouette. Not cartographically perfect — meant as a
-  // visual reference so the pins land in roughly the right place.
-  const land = 'M 25 60 L 60 50 L 110 45 L 160 50 L 210 55 L 260 60 L 290 75 L 285 95 L 270 110 L 250 125 L 220 140 L 190 145 L 160 150 L 130 152 L 100 150 L 70 142 L 50 130 L 35 110 L 28 90 Z';
-  // Lakes — Erie (south), Ontario (south of Toronto), Huron (west)
-  const lakes = '<path d="M 30 175 L 100 178 L 165 175 L 175 165 L 110 162 L 50 165 Z" class="jrv-mhs-lake"/>' +
-                '<path d="M 175 145 L 240 142 L 230 158 L 178 158 Z" class="jrv-mhs-lake"/>' +
-                '<path d="M 30 35 L 40 70 L 25 100 L 15 70 L 18 40 Z" class="jrv-mhs-lake"/>';
+  // Recognizable Ontario silhouette. Includes the northwestern bulge (Kenora),
+  // Hudson/James Bay coast (top), the eastern Quebec border, and the Great Lakes
+  // shoreline at the south. Coordinates in a 300×200 viewBox.
+  const ontario =
+    'M 35 60 ' +                       // NW corner (near Manitoba border)
+    'L 30 50 L 55 38 L 90 32 L 115 30 ' + // NW shore arc
+    'L 135 38 L 150 28 L 178 22 L 200 20 ' + // James Bay coastline
+    'L 220 28 L 235 38 L 248 32 L 260 38 ' + // Hudson Bay edge
+    'L 275 50 L 285 75 ' +             // far NE/top right
+    'L 282 95 L 270 108 L 258 118 ' +  // Quebec border descending
+    'L 240 130 L 222 138 L 208 140 ' + // SE coast curve
+    'L 200 152 L 188 155 L 170 152 ' + // Lake Ontario shore
+    'L 158 142 L 145 150 L 130 152 ' + // Niagara peninsula
+    'L 115 148 L 100 142 L 85 138 ' +  // Lake Erie shore
+    'L 70 142 L 55 145 L 42 138 ' +    // Windsor / Lambton
+    'L 33 128 L 28 110 L 25 92 L 30 75 Z';
+  // Lakes — drawn as cuts into the bottom + west edges
+  const lakes =
+    '<path d="M 28 175 L 50 168 L 90 172 L 130 175 L 165 173 L 175 168 L 178 162 L 145 158 L 100 158 L 55 162 L 28 168 Z" class="jrv-mhs-lake"/>' + // Lake Erie
+    '<path d="M 178 158 L 220 152 L 250 150 L 245 162 L 225 165 L 195 168 L 178 163 Z" class="jrv-mhs-lake"/>' + // Lake Ontario
+    '<path d="M 24 30 L 18 60 L 22 95 L 30 120 L 22 135 L 8 110 L 5 70 L 10 35 Z" class="jrv-mhs-lake"/>' +     // Lake Huron / Superior west
+    '<path d="M 145 60 L 165 65 L 170 80 L 155 88 L 142 78 Z" class="jrv-mhs-lake"/>';                          // Georgian Bay
   const pins = top5.map((a, i) => {
     const coords = JRV_MHS_CITY_COORDS[a.key];
     if (!coords) return '';
-    const r = 4 + (5 - i) * 0.8; // bigger pins for higher ranks
+    const r = 3 + (5 - i) * 0.5; // gentle size differential by rank
     return `
-      <circle class="jrv-mhs-pin-ring" cx="${coords.x}" cy="${coords.y}" r="${r + 4}"/>
+      <circle class="jrv-mhs-pin-pulse" cx="${coords.x}" cy="${coords.y}" r="${r + 2}"/>
+      <circle class="jrv-mhs-pin-ring" cx="${coords.x}" cy="${coords.y}" r="${r + 3}"/>
       <circle class="jrv-mhs-pin" cx="${coords.x}" cy="${coords.y}" r="${r}" onclick="jrvMhsAreaClick('${a.key.replace(/'/g, "\\'")}')">
         <title>${a.name} · ${a.count} signals</title>
       </circle>
-      <text class="jrv-mhs-pin-label" x="${coords.x + r + 3}" y="${coords.y + 3}">${a.name}</text>
+      <text class="jrv-mhs-pin-label" x="${coords.x + r + 2}" y="${coords.y + 2}">${a.name}</text>
     `;
   }).join('');
   host.innerHTML = `
-    <svg viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg" aria-label="Southern Ontario hot spots">
-      <path d="${land}" class="jrv-mhs-ont-fill"/>
+    <svg viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg" aria-label="Ontario hot spots">
+      <path d="${ontario}" class="jrv-mhs-ont-fill"/>
       ${lakes}
       ${pins}
     </svg>
@@ -2561,45 +2587,29 @@ function jrvRenderMhsAreas(top5) {
   `).join('');
 }
 
+// Horizontal bar chart — pie charts are unreadable for 10 items at 300px. Bars
+// rank intuitively, the gold fill IS the visual hierarchy, and labels stay legible.
 function jrvRenderMhsPie(profs) {
-  const host = document.getElementById('jrvMhsPieWrap');
+  const host = document.getElementById('jrvMhsBars');
   if (!host) return;
   if (!profs.length) {
     host.innerHTML = '<div class="jrv-mhs-empty">No role data in signals yet.</div>';
     return;
   }
-  const total = profs.reduce((s, p) => s + p.count, 0);
-  // Build slices — vanilla SVG arcs at cx=50 cy=50 r=44
-  const cx = 50, cy = 50, r = 44;
-  let acc = 0;
-  const slices = profs.map((p, i) => {
-    const start = (acc / total) * Math.PI * 2 - Math.PI / 2;
-    acc += p.count;
-    const end = (acc / total) * Math.PI * 2 - Math.PI / 2;
-    const x1 = cx + r * Math.cos(start), y1 = cy + r * Math.sin(start);
-    const x2 = cx + r * Math.cos(end),   y2 = cy + r * Math.sin(end);
-    const largeArc = (end - start) > Math.PI ? 1 : 0;
-    const d = `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
-    const color = JRV_MHS_PIE_COLORS[i % JRV_MHS_PIE_COLORS.length];
-    const safeTitle = p.title.replace(/'/g, "\\'");
-    return `<path class="jrv-mhs-pie-slice" data-prof="${escapeHtml(p.title)}" d="${d}" fill="${color}" onclick="jrvMhsProfClick('${safeTitle}')"><title>${escapeHtml(p.title)} · ${p.count}</title></path>`;
-  }).join('');
-  const legend = profs.map((p, i) => {
-    const color = JRV_MHS_PIE_COLORS[i % JRV_MHS_PIE_COLORS.length];
-    const pct = Math.round((p.count / total) * 100);
+  const maxCount = Math.max(1, ...profs.map(p => p.count));
+  host.innerHTML = profs.map(p => {
+    const pct = Math.round((p.count / maxCount) * 100);
     const safeTitle = p.title.replace(/'/g, "\\'");
     return `
-      <div class="jrv-mhs-legend-row" data-prof="${escapeHtml(p.title)}" onclick="jrvMhsProfClick('${safeTitle}')">
-        <span class="jrv-mhs-legend-dot" style="background:${color}"></span>
-        <span class="jrv-mhs-legend-title">${escapeHtml(p.title)}</span>
-        <span class="jrv-mhs-legend-pct">${pct}%</span>
+      <div class="jrv-mhs-bar-row" data-prof="${escapeHtml(p.title)}" onclick="jrvMhsProfClick('${safeTitle}')">
+        <div class="jrv-mhs-bar-fill" style="width:${pct}%"></div>
+        <div class="jrv-mhs-bar-text">
+          <span class="jrv-mhs-bar-title" title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</span>
+          <span class="jrv-mhs-bar-count">${p.count}</span>
+        </div>
       </div>
     `;
   }).join('');
-  host.innerHTML = `
-    <svg viewBox="0 0 100 100" class="jrv-mhs-pie-svg" xmlns="http://www.w3.org/2000/svg">${slices}</svg>
-    <div class="jrv-mhs-pie-legend">${legend}</div>
-  `;
 }
 
 // Click handler — area pin or area row. Fires a focused brain call and shows
@@ -2626,8 +2636,7 @@ function jrvMhsProfClick(title) {
   const { professions } = jrvComputeMarketHotSpots();
   const p = professions.find(x => x.title === title);
   if (!p) return;
-  document.querySelectorAll('.jrv-mhs-legend-row').forEach(r => r.classList.toggle('active', r.dataset.prof === title));
-  document.querySelectorAll('.jrv-mhs-pie-slice').forEach(r => r.classList.toggle('active', r.dataset.prof === title));
+  document.querySelectorAll('.jrv-mhs-bar-row').forEach(r => r.classList.toggle('active', r.dataset.prof === title));
   const topAreas = Array.from(p.areas.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${jrvTitleCase(k)} (${v})`);
   jrvMhsAskBrain('profession', {
     title: p.title,
