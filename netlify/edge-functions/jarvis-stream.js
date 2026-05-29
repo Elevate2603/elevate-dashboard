@@ -93,6 +93,7 @@ export default async (request) => {
       headers: {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
+        "anthropic-beta": "prompt-caching-2024-07-31",
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -260,6 +261,7 @@ async function keepalivePing() {
       headers: {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
+        "anthropic-beta": "prompt-caching-2024-07-31",
         "content-type": "application/json",
       },
       body: JSON.stringify({
