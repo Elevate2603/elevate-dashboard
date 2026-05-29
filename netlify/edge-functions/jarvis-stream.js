@@ -28,6 +28,13 @@ export default async (request) => {
     return new Response(null, { status: 204, headers: CORS });
   }
   if (request.method === "GET") {
+    const url = new URL(request.url);
+    // GET ?keepalive=1 → fire a 1-token Anthropic call to refresh the prompt cache.
+    // The Python voice loop pings this every ~4 minutes so warm-cache TTFB never
+    // expires while Travis is in a session. Returns cache_read/create metrics.
+    if (url.searchParams.get("keepalive") === "1") {
+      return await keepalivePing();
+    }
     return new Response(
       JSON.stringify({
         ok: true,
@@ -233,6 +240,51 @@ function errorEvent(message) {
     status: 200,
     headers: { ...CORS, "content-type": "text/event-stream; charset=utf-8" },
   });
+}
+
+// Cache-warming heartbeat. Fires a 1-token Anthropic call with the same cached
+// system prompt so the ephemeral cache (5 min TTL) gets refreshed. Cost: ~75 cached
+// input tokens billed at 10% rate + 1 output token = ~$0.00006/call.
+async function keepalivePing() {
+  const apiKey = Netlify.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) {
+    return new Response(JSON.stringify({ ok: false, error: "ANTHROPIC_API_KEY missing" }), {
+      status: 500, headers: { ...CORS, "content-type": "application/json" },
+    });
+  }
+  const model = Netlify.env.get("JARVIS_MODEL") || MODEL_DEFAULT;
+  const t0 = Date.now();
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 1,
+        system: [{ type: "text", text: ROUTING_PROMPT, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: "ping" }],
+      }),
+    });
+    const data = await resp.json();
+    const u = data?.usage || {};
+    return new Response(JSON.stringify({
+      ok: resp.ok,
+      kind: "keepalive",
+      duration_ms: Date.now() - t0,
+      cache_read_tokens: u.cache_read_input_tokens || 0,
+      cache_create_tokens: u.cache_creation_input_tokens || 0,
+      input_tokens: u.input_tokens || 0,
+      status: resp.status,
+    }), { headers: { ...CORS, "content-type": "application/json" } });
+  } catch (e) {
+    return new Response(JSON.stringify({
+      ok: false, kind: "keepalive", error: String(e?.message || e), duration_ms: Date.now() - t0,
+    }), { status: 502, headers: { ...CORS, "content-type": "application/json" } });
+  }
 }
 
 // State-machine that scans Claude's accumulating JSON output, locks onto the

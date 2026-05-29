@@ -25,8 +25,12 @@ import asyncio
 import re
 import signal
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+
+import httpx
 
 from config import CONFIG
 from vad import VADStream
@@ -34,6 +38,12 @@ from stt import STT
 from brain import BrainClient, BrainEvent
 from tts import TTS
 import state as state_mod
+
+
+# Keepalive cadence — refresh the Anthropic prompt cache before the 5-min TTL expires.
+# Skip the heartbeat if there's been a real call within KEEPALIVE_GRACE_S.
+KEEPALIVE_INTERVAL_S = 240   # 4 min — comfortable margin under the 5-min TTL
+KEEPALIVE_GRACE_S = 180      # 3 min — don't bother pinging if Travis just talked to JARVIS
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -53,6 +63,14 @@ def strip_wake_word(text: str) -> str:
 
 def log(level: str, msg: str) -> None:
     print(f"[{level}] {msg}", flush=True)
+
+
+def _build_keepalive_url(brain_url: str) -> str:
+    """Append ?keepalive=1 to the brain URL (preserving any existing query string)."""
+    parsed = urlparse(brain_url)
+    query = dict(parse_qsl(parsed.query))
+    query["keepalive"] = "1"
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -79,13 +97,21 @@ class JarvisVoice:
         )
 
         self.brain = BrainClient(CONFIG.jarvis_url)
+        self._keepalive_url = _build_keepalive_url(CONFIG.jarvis_url)
 
         self._current_brain_task: Optional[asyncio.Task] = None
+        self._keepalive_task: Optional[asyncio.Task] = None
         self._speaking = False
+        self._last_brain_call_at: float = 0.0
         self._shutdown = asyncio.Event()
 
     async def run(self) -> None:
         await self.vad.start()
+
+        # Prime the cache so the FIRST real utterance hits a warm cache too.
+        self._keepalive_task = asyncio.create_task(self._keepalive_loop())
+        asyncio.create_task(self._prime_cache())
+
         log("ready", "listening for voice. say JARVIS or just start talking — Ctrl+C to quit.")
 
         try:
@@ -143,6 +169,7 @@ class JarvisVoice:
 
     async def _run_brain_turn(self, transcript: str, context: Dict[str, Any]) -> None:
         self._speaking = True
+        self._last_brain_call_at = time.time()
         full_speak = ""
         final_payload: Dict[str, Any] = {}
 
@@ -199,6 +226,51 @@ class JarvisVoice:
         # Refine later by tracking last-turn time in memory.
         return False
 
+    # ── Keepalive (prompt-cache refresh) ─────────────────────────────
+
+    async def _prime_cache(self) -> None:
+        """Fire one keepalive at startup so the FIRST real call hits a warm cache."""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                t0 = time.time()
+                resp = await client.get(self._keepalive_url)
+                ms = (time.time() - t0) * 1000
+                if resp.status_code == 200:
+                    data = resp.json()
+                    log("keepalive", f"primed in {ms:.0f}ms (read={data.get('cache_read_tokens',0)}, create={data.get('cache_create_tokens',0)})")
+                else:
+                    log("keepalive", f"prime got HTTP {resp.status_code}")
+        except Exception as exc:
+            log("keepalive-err", f"prime failed: {exc}")
+
+    async def _keepalive_loop(self) -> None:
+        """Every KEEPALIVE_INTERVAL_S, ping /jarvis-stream?keepalive=1 to refresh the cache.
+
+        Skips the ping if a real brain call happened within the last KEEPALIVE_GRACE_S —
+        those calls already refresh the cache for free.
+        """
+        while not self._shutdown.is_set():
+            try:
+                await asyncio.sleep(KEEPALIVE_INTERVAL_S)
+                if self._shutdown.is_set():
+                    return
+                idle = time.time() - self._last_brain_call_at
+                if idle < KEEPALIVE_GRACE_S:
+                    continue
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    t0 = time.time()
+                    resp = await client.get(self._keepalive_url)
+                    ms = (time.time() - t0) * 1000
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        log("keepalive", f"refreshed in {ms:.0f}ms (read={data.get('cache_read_tokens',0)}, create={data.get('cache_create_tokens',0)})")
+                    else:
+                        log("keepalive", f"got HTTP {resp.status_code}")
+            except asyncio.CancelledError:
+                return
+            except Exception as exc:
+                log("keepalive-err", str(exc))
+
     # ── Shutdown ─────────────────────────────────────────────────────
 
     def request_shutdown(self) -> None:
@@ -211,6 +283,8 @@ class JarvisVoice:
         try:
             if self._current_brain_task and not self._current_brain_task.done():
                 self._current_brain_task.cancel()
+            if self._keepalive_task and not self._keepalive_task.done():
+                self._keepalive_task.cancel()
             await self.tts.cancel()
         except Exception: pass
         try: self.stt.close()
