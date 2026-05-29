@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0529-AR-BRIEF-V1-LIVE -->
+<!-- ELEVATE-2026-0529-AS-TASKS-PANEL -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -483,7 +483,7 @@
      JARVIS COMMAND CENTER (jrv-* prefix only)
      New tab; does not touch existing rules above.
      ═══════════════════════════════════════════ */
-  .jrv-wrap { display:grid; grid-template-columns: 220px 1fr 300px; gap:24px; min-height: calc(100vh - 220px); padding: 16px 0; }
+  .jrv-wrap { display:grid; grid-template-columns: 260px 1fr 300px; gap:24px; min-height: calc(100vh - 220px); padding: 16px 0; }
   @media (max-width: 1100px) { .jrv-wrap { grid-template-columns: 1fr; } }
 
   .jrv-rail { background: var(--dark2); border:1px solid var(--border); border-radius:12px; padding:18px 16px; display:flex; flex-direction:column; gap:12px; }
@@ -497,6 +497,49 @@
   .jrv-agent-name { color: var(--text); font-size:12px; font-weight:600; letter-spacing:0.08em; font-family:'Consolas', monospace; }
   .jrv-agent-role { color: var(--text-muted); font-size:10px; margin-top:2px; }
   .jrv-agent-text { flex:1; }
+
+  /* Agent TAB STRIP — horizontal version above the sphere. Overrides the card styling
+     for .jrv-agent when inside .jrv-tabstrip. Keeps .jrv-agent class so existing
+     selectors (jrvSelectAgent, querySelectorAll('.jrv-agent')) still match. */
+  .jrv-tabstrip { display:flex; flex-direction:row; gap:6px; width:100%; overflow-x:auto; overflow-y:hidden; padding:4px 0 6px 0; scrollbar-width:thin; }
+  .jrv-tabstrip::-webkit-scrollbar { height:4px; }
+  .jrv-tabstrip::-webkit-scrollbar-thumb { background:#3a3a42; border-radius:2px; }
+  .jrv-tabstrip .jrv-agent { background:transparent; border:1px solid transparent; border-radius:6px; padding:7px 14px; flex:0 0 auto; flex-direction:row; gap:7px; color:#8a8a93; }
+  .jrv-tabstrip .jrv-agent:hover { background:rgba(200,130,10,0.04); border-color:rgba(200,130,10,0.25); color:#bdbdc6; }
+  .jrv-tabstrip .jrv-agent.active { background:#1a1408; border-color:var(--gold); color:#E8A234; }
+  .jrv-tabstrip .jrv-agent-name { color:inherit; font-size:11px; letter-spacing:0.12em; }
+  .jrv-tabstrip .jrv-agent-role { display:none; }
+  .jrv-tabstrip .jrv-agent-text { flex:0 0 auto; }
+
+  /* TASKS panel — left rail (replaces the agents card list). Pulls from elevate_tasks. */
+  .jrv-tasks-list { display:flex; flex-direction:column; gap:6px; }
+  .jrv-tasks-loading, .jrv-tasks-empty { color:var(--text-muted); font-size:11px; text-align:center; padding:14px 6px; font-style:italic; }
+  .jrv-task-row { background:var(--dark3); border:1px solid var(--border); border-left:3px solid var(--gold); border-radius:6px; padding:8px 10px; display:flex; gap:8px; align-items:flex-start; font-size:11px; line-height:1.4; transition: opacity .25s, transform .25s; }
+  .jrv-task-row.age-fresh { border-left-color:#C8820A; }
+  .jrv-task-row.age-mid { border-left-color:#a3582a; }
+  .jrv-task-row.age-stale { border-left-color:#5a5a62; }
+  .jrv-task-row.completing { opacity:0; transform:translateX(40px); }
+  .jrv-task-check { appearance:none; -webkit-appearance:none; width:14px; height:14px; border:1.5px solid var(--gold); border-radius:3px; cursor:pointer; flex-shrink:0; margin-top:1px; background:transparent; position:relative; }
+  .jrv-task-check:hover { background:rgba(200,130,10,0.15); }
+  .jrv-task-check:checked { background:var(--gold); }
+  .jrv-task-check:checked::after { content:'✓'; color:#000; font-size:11px; font-weight:bold; position:absolute; top:-2px; left:1px; }
+  .jrv-task-body { flex:1; min-width:0; }
+  .jrv-task-text { color:var(--text); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word; }
+  .jrv-task-meta { color:var(--text-muted); font-size:10px; margin-top:2px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .jrv-task-followup-badge { background:rgba(200,130,10,0.18); color:var(--gold); border-radius:3px; padding:1px 5px; font-size:9px; letter-spacing:0.06em; font-weight:600; }
+  .jrv-tasks-expand { background:none; border:1px dashed rgba(200,130,10,0.4); color:var(--gold); font-size:10px; letter-spacing:0.14em; padding:6px 8px; border-radius:4px; cursor:pointer; font-family:'Consolas', monospace; margin-top:4px; }
+  .jrv-tasks-expand:hover { background:rgba(200,130,10,0.08); border-style:solid; }
+
+  /* TASKS modal — full open task list */
+  .jrv-task-modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9000; align-items:center; justify-content:center; padding:24px; }
+  .jrv-task-modal-backdrop.open { display:flex; }
+  .jrv-task-modal { background:var(--dark2); border:1px solid var(--border); border-radius:12px; width:min(680px, 100%); max-height:calc(100vh - 100px); display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.6); }
+  .jrv-task-modal-header { display:flex; justify-content:space-between; align-items:center; padding:18px 22px; border-bottom:1px solid var(--border); color:var(--gold); font-size:14px; letter-spacing:0.14em; text-transform:uppercase; font-family:'Consolas', monospace; }
+  .jrv-task-modal-close { background:none; border:none; color:var(--text-muted); font-size:22px; cursor:pointer; line-height:1; padding:0 4px; }
+  .jrv-task-modal-close:hover { color:var(--text); }
+  .jrv-task-modal-list { flex:1; overflow-y:auto; padding:16px 22px; display:flex; flex-direction:column; gap:8px; }
+  .jrv-task-modal-list .jrv-task-text { -webkit-line-clamp:initial; display:block; font-size:12px; line-height:1.5; }
+  .jrv-task-modal-footer { padding:12px 22px; border-top:1px solid var(--border); color:var(--text-muted); font-size:10px; letter-spacing:0.16em; font-family:'Consolas', monospace; text-align:center; text-transform:uppercase; }
 
   .jrv-center { background: var(--dark2); border:1px solid var(--border); border-radius:12px; padding:24px; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:16px; min-height:520px; position:relative; overflow:hidden; align-self:start; position:sticky; top:16px; }
   .jrv-status { display:flex; gap:14px; align-items:center; color: var(--text-muted); font-size:11px; letter-spacing:0.14em; font-family:'Consolas', monospace; }
@@ -796,33 +839,39 @@
     </div>
     <div class="jrv-wrap">
 
-      <!-- LEFT RAIL: AGENTS -->
+      <!-- LEFT RAIL: TASKS PANEL (was Agents — moved to top tab strip in center) -->
       <aside class="jrv-rail">
-        <div class="jrv-rail-title">Agents</div>
-        <div class="jrv-agent active" data-agent="jarvis" onclick="jrvSelectAgent('jarvis', this)">
-          <span class="jrv-agent-dot"></span>
-          <div class="jrv-agent-text"><div class="jrv-agent-name">JARVIS</div><div class="jrv-agent-role">The brain</div></div>
+        <div class="jrv-rail-title">&#9673; Open Tasks &middot; <span id="jrvTasksCount">&mdash;</span></div>
+        <div class="jrv-tasks-list" id="jrvTasksList">
+          <div class="jrv-tasks-loading">Loading tasks&hellip;</div>
         </div>
-        <div class="jrv-agent" data-agent="scout" onclick="jrvSelectAgent('scout', this)">
-          <span class="jrv-agent-dot"></span>
-          <div class="jrv-agent-text"><div class="jrv-agent-name">SCOUT</div><div class="jrv-agent-role">Sourcing</div></div>
-        </div>
-        <div class="jrv-agent" data-agent="queue" onclick="jrvSelectAgent('queue', this)">
-          <span class="jrv-agent-dot"></span>
-          <div class="jrv-agent-text"><div class="jrv-agent-name">QUEUE</div><div class="jrv-agent-role">Pipeline</div></div>
-        </div>
-        <div class="jrv-agent" data-agent="intel" onclick="jrvSelectAgent('intel', this)">
-          <span class="jrv-agent-dot"></span>
-          <div class="jrv-agent-text"><div class="jrv-agent-name">INTEL</div><div class="jrv-agent-role">Market signals</div></div>
-        </div>
-        <div class="jrv-agent" data-agent="scribe" onclick="jrvSelectAgent('scribe', this)">
-          <span class="jrv-agent-dot"></span>
-          <div class="jrv-agent-text"><div class="jrv-agent-name">SCRIBE</div><div class="jrv-agent-role">Notes &amp; replies</div></div>
-        </div>
+        <button class="jrv-tasks-expand" id="jrvTasksExpand" style="display:none;" onclick="jrvOpenTasksModal()">&#9662; Expand &middot; <span id="jrvTasksMore">0</span> more</button>
       </aside>
 
-      <!-- CENTER: SPHERE + VOICE -->
+      <!-- CENTER: TAB STRIP + SPHERE + VOICE -->
       <section class="jrv-center">
+        <div class="jrv-tabstrip" id="jrvTabstrip">
+          <div class="jrv-agent active" data-agent="jarvis" onclick="jrvSelectAgent('jarvis', this)">
+            <span class="jrv-agent-dot"></span>
+            <div class="jrv-agent-text"><div class="jrv-agent-name">JARVIS</div></div>
+          </div>
+          <div class="jrv-agent" data-agent="scout" onclick="jrvSelectAgent('scout', this)">
+            <span class="jrv-agent-dot"></span>
+            <div class="jrv-agent-text"><div class="jrv-agent-name">SCOUT</div></div>
+          </div>
+          <div class="jrv-agent" data-agent="queue" onclick="jrvSelectAgent('queue', this)">
+            <span class="jrv-agent-dot"></span>
+            <div class="jrv-agent-text"><div class="jrv-agent-name">QUEUE</div></div>
+          </div>
+          <div class="jrv-agent" data-agent="intel" onclick="jrvSelectAgent('intel', this)">
+            <span class="jrv-agent-dot"></span>
+            <div class="jrv-agent-text"><div class="jrv-agent-name">INTEL</div></div>
+          </div>
+          <div class="jrv-agent" data-agent="scribe" onclick="jrvSelectAgent('scribe', this)">
+            <span class="jrv-agent-dot"></span>
+            <div class="jrv-agent-text"><div class="jrv-agent-name">SCRIBE</div></div>
+          </div>
+        </div>
         <div class="jrv-status">
           <span class="jrv-badge" id="jrvFeedBadge">CONNECTING…</span>
           <span id="jrvActiveAgentLabel">JARVIS · IDLE</span>
@@ -2449,6 +2498,10 @@ const JRV_CONFIG = {
   // Morning Brief — Brief Fetch webhook (Make scenario 5229693), reads elevate_morning_brief_cache.
   // Pull scenarios stagger 7:30 (Active Clients), 7:45 (Outlook Triage), 7:55 (Assembler).
   BRIEF_URL: 'https://hook.us2.make.com/1u4418ksb6jkc37lpbrylswtuj9hl56m',
+  // Open tasks list (Make scenario 5230971) — wraps each task in {aggregate: {...}} per Make BasicAggregator.
+  TASKS_FETCH_URL: 'https://hook.us2.make.com/mvksjvfv5kjexyq1iiinblrx1mw5ki4i',
+  // Mark task complete (Make scenario 5230413). POST {task_id} → sets status="complete" on elevate_tasks record.
+  TASK_COMPLETE_URL: 'https://hook.us2.make.com/71f5tfgy3fidl8ble4riwqio6cupomnu',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -2494,6 +2547,7 @@ function jrvInit() {
   jrvLoadHiringSignals();
   jrvLoadMarketIntel();
   jrvLoadMorningBrief();
+  jrvLoadTasks();
   jrvLoadFollowUps();
   jrvCheckBrain();
   jrvPrimeVoices();
@@ -2776,6 +2830,181 @@ function jrvPlayBriefNarration() {
   if (!jrvBriefData || !jrvBriefData.narration_text) return;
   jrvSpeakOut(jrvBriefData.narration_text);
   jrvMarkBriefSpoken();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// TASKS PANEL — left rail (replaces the old Agents card list, which moved to
+// the horizontal tab strip above the sphere). Pulls from elevate_tasks via
+// the Tasks Fetch webhook. Mark-complete uses the dedicated complete webhook.
+// Make's BasicAggregator wraps each task under {aggregate: {...}} — we unwrap
+// here so the UI works with flat objects.
+// ════════════════════════════════════════════════════════════════════════
+
+let jrvTasks = [];                          // current open tasks (unwrapped, sorted newest-first)
+const JRV_TASKS_INLINE_MAX = 4;             // tasks shown directly in the left rail before "Expand"
+
+function jrvLoadTasks() {
+  if (!JRV_CONFIG.TASKS_FETCH_URL) return;
+  fetch(JRV_CONFIG.TASKS_FETCH_URL, { method: 'GET' })
+    .then(r => r.ok ? r.json() : [])
+    .then(arr => {
+      if (!Array.isArray(arr)) arr = [];
+      // Make's BasicAggregator wraps each entry under {aggregate: {…}}.
+      // Unwrap defensively so we work with flat objects either way.
+      jrvTasks = arr.map(t => (t && t.aggregate) ? t.aggregate : t).filter(Boolean);
+      jrvRenderTasks();
+    })
+    .catch(e => { console.warn('[tasks] fetch failed', e); jrvTasks = []; jrvRenderTasks(); });
+}
+
+function jrvTaskAgeClass(createdAt) {
+  if (!createdAt) return 'age-stale';
+  const hours = (Date.now() - new Date(createdAt).getTime()) / 36e5;
+  if (hours < 24) return 'age-fresh';
+  if (hours < 24 * 4) return 'age-mid';   // 1-3 days
+  return 'age-stale';                       // 4+ days
+}
+
+function jrvRelTime(iso) {
+  if (!iso) return '';
+  const secs = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (secs < 60) return 'just now';
+  if (secs < 3600) return Math.round(secs / 60) + 'm ago';
+  if (secs < 86400) return Math.round(secs / 3600) + 'h ago';
+  return Math.round(secs / 86400) + 'd ago';
+}
+
+function jrvRenderTasks() {
+  const countEl = document.getElementById('jrvTasksCount');
+  const listEl = document.getElementById('jrvTasksList');
+  const expandBtn = document.getElementById('jrvTasksExpand');
+  const moreEl = document.getElementById('jrvTasksMore');
+  if (!listEl) return;
+  const n = jrvTasks.length;
+  if (countEl) countEl.textContent = n;
+  if (!n) {
+    listEl.innerHTML = '<div class="jrv-tasks-empty">Inbox quiet. No open tasks.</div>';
+    if (expandBtn) expandBtn.style.display = 'none';
+    return;
+  }
+  const inline = jrvTasks.slice(0, JRV_TASKS_INLINE_MAX);
+  listEl.innerHTML = inline.map(t => jrvRenderTaskRow(t, false)).join('');
+  const overflow = n - inline.length;
+  if (expandBtn) {
+    if (overflow > 0) {
+      expandBtn.style.display = 'block';
+      expandBtn.innerHTML = '&#9662; Expand &middot; <span id="jrvTasksMore">' + overflow + '</span> more';
+    } else {
+      expandBtn.style.display = 'none';
+    }
+  }
+}
+
+function jrvRenderTaskRow(t, inModal) {
+  const id = escapeAttr(t.task_id || '');
+  const ageClass = jrvTaskAgeClass(t.created_at);
+  const senderBits = [t.sender_name || t.sender_email || ''].filter(Boolean).join(' ');
+  const rel = jrvRelTime(t.created_at);
+  const followups = Number(t.related_email_count) || 1;
+  const badge = followups > 1 ? '<span class="jrv-task-followup-badge">' + followups + ' emails</span>' : '';
+  return ''
+    + '<div class="jrv-task-row ' + ageClass + '" data-task-id="' + id + '">'
+    +   '<input type="checkbox" class="jrv-task-check" onclick="jrvMarkTaskComplete(\'' + id + '\', this)">'
+    +   '<div class="jrv-task-body">'
+    +     '<div class="jrv-task-text">' + escapeHtml(t.task_text || '') + '</div>'
+    +     '<div class="jrv-task-meta">'
+    +       (senderBits ? '<span>' + escapeHtml(senderBits) + '</span>' : '')
+    +       (rel ? '<span>&middot; ' + rel + '</span>' : '')
+    +       badge
+    +     '</div>'
+    +   '</div>'
+    + '</div>';
+}
+
+function jrvMarkTaskComplete(taskId, checkboxEl) {
+  if (!taskId) return;
+  // Optimistic UI: fade + slide the row out, remove from list locally, then call webhook.
+  // If the webhook fails, jrvLoadTasks() refresh restores reality.
+  const rows = document.querySelectorAll('.jrv-task-row[data-task-id="' + taskId.replace(/"/g, '\\"') + '"]');
+  rows.forEach(r => r.classList.add('completing'));
+  jrvTasks = jrvTasks.filter(t => t.task_id !== taskId);
+  setTimeout(() => { jrvRenderTasks(); jrvRenderTaskModal(); }, 250);
+  if (!JRV_CONFIG.TASK_COMPLETE_URL) return;
+  fetch(JRV_CONFIG.TASK_COMPLETE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task_id: taskId })
+  }).then(r => {
+    if (!r.ok) { console.warn('[tasks] mark complete returned HTTP ' + r.status); jrvLoadTasks(); }
+  }).catch(e => { console.warn('[tasks] mark complete failed', e); jrvLoadTasks(); });
+}
+
+function jrvOpenTasksModal() {
+  jrvRenderTaskModal();
+  const bd = document.getElementById('jrvTaskModalBackdrop');
+  if (bd) bd.classList.add('open');
+}
+function jrvCloseTasksModal() {
+  const bd = document.getElementById('jrvTaskModalBackdrop');
+  if (bd) bd.classList.remove('open');
+}
+function jrvRenderTaskModal() {
+  const list = document.getElementById('jrvTaskModalList');
+  const countEl = document.getElementById('jrvTaskModalCount');
+  if (!list) return;
+  if (countEl) countEl.textContent = jrvTasks.length;
+  if (!jrvTasks.length) {
+    list.innerHTML = '<div class="jrv-tasks-empty">No open tasks.</div>';
+    return;
+  }
+  list.innerHTML = jrvTasks.map(t => jrvRenderTaskRow(t, true)).join('');
+}
+
+// ── Voice command — "Jarvis mark X complete" / "Jarvis remove X" ───────────
+// Three match strategies, scored. Best match wins.
+//   1) Position word ("first", "second", "third", "one", "two", "three", "1", "2", "3", "top")
+//   2) Sender name partial match (any token from sender_name appears in command)
+//   3) Topic / company word — any word from task_text >= 4 chars appears in command
+function jrvMatchTaskFromPhrase(phrase) {
+  if (!jrvTasks.length) return null;
+  const p = (phrase || '').toLowerCase().trim();
+  if (!p) return null;
+  // Position words → fixed index
+  const posMap = { first: 0, one: 0, '1': 0, top: 0, '#1': 0,
+                   second: 1, two: 1, '2': 1, '#2': 1,
+                   third: 2, three: 2, '3': 2, '#3': 2,
+                   fourth: 3, four: 3, '4': 3, '#4': 3,
+                   fifth: 4, five: 4, '5': 4 };
+  for (const word of Object.keys(posMap)) {
+    const re = new RegExp('\\b' + word.replace(/[#$.*+?^{}()|[\]\\]/g, '\\$&') + '\\b');
+    if (re.test(p) && jrvTasks[posMap[word]]) return { task: jrvTasks[posMap[word]], how: 'position:' + word };
+  }
+  // Sender / topic scoring
+  let best = null, bestScore = 0;
+  for (const t of jrvTasks) {
+    let score = 0;
+    const senderTokens = (t.sender_name || '').toLowerCase().split(/\W+/).filter(w => w.length >= 3);
+    for (const tok of senderTokens) if (p.indexOf(tok) >= 0) score += 3;
+    const textTokens = (t.task_text || '').toLowerCase().split(/\W+/).filter(w => w.length >= 4);
+    for (const tok of textTokens) if (p.indexOf(tok) >= 0) score += 1;
+    if (score > bestScore) { bestScore = score; best = t; }
+  }
+  return best && bestScore >= 3 ? { task: best, how: 'sender/topic score=' + bestScore } : null;
+}
+
+function jrvTryHandleTaskVoiceCommand(command) {
+  if (!command) return false;
+  const m = command.toLowerCase().match(/(?:mark|complete|finish|remove|delete|clear)\s+(.+?)(?:\s+(?:complete|completed|done|finished))?\s*$/);
+  if (!m) return false;
+  const target = m[1];
+  const match = jrvMatchTaskFromPhrase(target);
+  if (!match) {
+    jrvSpeakOut("I couldn't match that to an open task, sir.");
+    return true;
+  }
+  jrvSpeakOut("Marking complete: " + (match.task.sender_name || 'task') + ".");
+  jrvMarkTaskComplete(match.task.task_id, null);
+  return true;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -3783,6 +4012,13 @@ function jrvProcessCommand(command) {
   // Covers the case where Travis logs in and dives straight into a command.
   jrvPlayBgSong();
   jrvMarkInteraction();
+  // Intercept task-completion commands before the brain call. Saves a Claude
+  // round-trip and lets JARVIS act instantly on "mark Bryce complete" etc.
+  if (jrvTryHandleTaskVoiceCommand(command)) {
+    jrvPushHistory('user', command);
+    jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
+    return;
+  }
   // Persistent conversation memory — survives refresh, builds across sessions
   jrvPushHistory('user', command);
 
@@ -4545,5 +4781,16 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<!-- TASKS modal — rendered at body end so z-index sits above the rest of the dashboard -->
+<div class="jrv-task-modal-backdrop" id="jrvTaskModalBackdrop" onclick="if(event.target===this)jrvCloseTasksModal()">
+  <div class="jrv-task-modal" role="dialog" aria-label="Open tasks">
+    <div class="jrv-task-modal-header">
+      <span>&#9673; Open Tasks &middot; <span id="jrvTaskModalCount">0</span></span>
+      <button class="jrv-task-modal-close" onclick="jrvCloseTasksModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="jrv-task-modal-list" id="jrvTaskModalList"></div>
+    <div class="jrv-task-modal-footer">SAY &laquo; JARVIS, MARK [TASK] COMPLETE &raquo;</div>
+  </div>
+</div>
 
 </body></html>
