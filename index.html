@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0529-AS-TASKS-PANEL -->
+<!-- ELEVATE-2026-0529-AT-TASKS-EMPTY-FIX -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2850,8 +2850,12 @@ function jrvLoadTasks() {
     .then(arr => {
       if (!Array.isArray(arr)) arr = [];
       // Make's BasicAggregator wraps each entry under {aggregate: {…}}.
-      // Unwrap defensively so we work with flat objects either way.
-      jrvTasks = arr.map(t => (t && t.aggregate) ? t.aggregate : t).filter(Boolean);
+      // Unwrap defensively. When the upstream SearchRecord returns zero records,
+      // BasicAggregator still emits one phantom bundle with all-null fields —
+      // drop it by requiring a non-empty task_text.
+      jrvTasks = arr
+        .map(t => (t && t.aggregate) ? t.aggregate : t)
+        .filter(t => t && t.task_text);
       jrvRenderTasks();
     })
     .catch(e => { console.warn('[tasks] fetch failed', e); jrvTasks = []; jrvRenderTasks(); });
