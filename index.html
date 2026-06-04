@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0529-AZ-NEWS-PANEL-UNDER-TASKS -->
+<!-- ELEVATE-2026-0604-A -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -565,6 +565,32 @@
   .jrv-news-modal-item-meta { color:var(--text-muted); font-size:10px; margin-top:4px; }
   .jrv-news-modal-item-summary { color:var(--text); font-size:12px; line-height:1.55; margin-top:8px; }
 
+  /* BIDS & TENDERS panel — left rail, below News. Amber-themed cards with state tints
+     (New/Pursuing amber, Submitted yellow, Won green, Lost red). Closing-date urgency
+     color shifts the closing line itself: green >14d, amber <=14d, red <=7d. */
+  .jrv-tenders-list { display:flex; flex-direction:column; gap:8px; max-height:420px; overflow-y:auto; padding-right:2px; }
+  .jrv-tender-empty { color:var(--text-muted); font-size:11px; text-align:center; padding:12px 6px; font-style:italic; }
+  .jrv-tender-card { background:var(--dark3); border:1px solid var(--border); border-left:3px solid var(--gold); border-radius:6px; padding:9px 11px; font-size:11px; line-height:1.35; transition: background 0.12s, border-color 0.12s; }
+  .jrv-tender-card.state-new       { border-left-color:#C8820A; }
+  .jrv-tender-card.state-pursuing  { border-left-color:#E8A234; background:#1c1410; }
+  .jrv-tender-card.state-submitted { border-left-color:#facc15; background:#1d1605; }
+  .jrv-tender-card.state-won       { border-left-color:#4ade80; background:#0f1d12; }
+  .jrv-tender-card.state-lost      { border-left-color:#f87171; background:#1e1010; }
+  .jrv-tender-head { display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:4px; }
+  .jrv-tender-agency { color:var(--gold); font-weight:700; font-size:10.5px; letter-spacing:0.04em; }
+  .jrv-tender-category { color:var(--text-muted); font-size:9px; letter-spacing:0.08em; text-transform:uppercase; background:rgba(200,130,10,0.12); border:1px solid rgba(200,130,10,0.3); border-radius:3px; padding:1px 6px; white-space:nowrap; }
+  .jrv-tender-title { color:var(--text); font-weight:600; font-size:11.5px; margin:2px 0 5px; word-break:break-word; }
+  .jrv-tender-meta { color:var(--text-muted); font-size:9px; letter-spacing:0.04em; display:flex; gap:5px; align-items:center; flex-wrap:wrap; margin-bottom:5px; }
+  .jrv-tender-dates { display:flex; flex-direction:column; gap:2px; color:var(--text-muted); font-size:9.5px; }
+  .jrv-tender-closing.urgency-cool { color:#4ade80; }
+  .jrv-tender-closing.urgency-warn { color:#facc15; }
+  .jrv-tender-closing.urgency-hot  { color:#f87171; font-weight:700; }
+  .jrv-tender-actions { display:flex; gap:6px; align-items:center; margin-top:7px; }
+  .jrv-tender-link { color:var(--gold); font-size:10px; text-decoration:none; border:1px solid rgba(200,130,10,0.4); border-radius:3px; padding:3px 7px; letter-spacing:0.04em; flex-shrink:0; }
+  .jrv-tender-link:hover { background:rgba(200,130,10,0.1); }
+  .jrv-tender-stage { background:var(--dark2); border:1px solid var(--border); color:var(--text); border-radius:3px; padding:3px 6px; font-size:10px; font-family:inherit; flex:1; cursor:pointer; }
+  .jrv-tender-stage:focus { outline:none; border-color:var(--gold); }
+
   /* TASKS modal — full open task list */
   .jrv-task-modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9000; align-items:center; justify-content:center; padding:24px; }
   .jrv-task-modal-backdrop.open { display:flex; }
@@ -908,6 +934,11 @@
           <div class="jrv-news-loading">Loading news&hellip;</div>
         </div>
         <button class="jrv-news-expand" id="jrvNewsExpand" style="display:none;" onclick="jrvOpenNewsModal()">&#9662; Open all &middot; <span id="jrvNewsMore">0</span> more</button>
+
+        <div class="jrv-rail-title" style="margin-top:14px;">&#9670; Bids &amp; Tenders &middot; <span id="jrvTendersCount">&mdash;</span></div>
+        <div class="jrv-tenders-list" id="jrvTendersList">
+          <div class="jrv-tender-empty">Loading tenders&hellip;</div>
+        </div>
       </aside>
 
       <!-- CENTER: TAB STRIP + SPHERE + VOICE -->
@@ -2564,6 +2595,11 @@ const JRV_CONFIG = {
   TASKS_FETCH_URL: 'https://hook.us2.make.com/mvksjvfv5kjexyq1iiinblrx1mw5ki4i',
   // Mark task complete (Make scenario 5230413). POST {task_id} → sets status="complete" on elevate_tasks record.
   TASK_COMPLETE_URL: 'https://hook.us2.make.com/71f5tfgy3fidl8ble4riwqio6cupomnu',
+  // Bids & Tenders — Tender Fetch (Make scenario 5289494) reads elevate_tenders datastore 105264
+  // and returns the unarchived list. Tender Update (Make scenario 5289495) accepts {tender_id, stage}
+  // and flips archived=true on terminal stages so the card drops from view.
+  TENDER_FETCH_URL:  'https://hook.us2.make.com/9xjtewlkvkwp4mex887ff8y1jf4xw92k',
+  TENDER_UPDATE_URL: 'https://hook.us2.make.com/33a8rqo3dv8we4ppavsqt34znvwjbdda',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -2610,6 +2646,7 @@ function jrvInit() {
   jrvLoadMarketIntel();
   jrvLoadMorningBrief();
   jrvLoadTasks();
+  jrvLoadTenders();
   jrvLoadFollowUps();
   jrvCheckBrain();
   jrvPrimeVoices();
@@ -2886,6 +2923,115 @@ function jrvOpenNewsModal() {
 function jrvCloseNewsModal() {
   const bd = document.getElementById('jrvNewsModalBackdrop');
   if (bd) bd.classList.remove('open');
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// BIDS & TENDERS — left rail under News. Reads elevate_tenders via the Tender
+// Fetch webhook. Stage dropdown POSTs to Tender Update; on terminal stages
+// (Submitted/Pass/Won/Lost) the card drops from view immediately and Make
+// flips archived=true so it won't return on the next fetch.
+// ════════════════════════════════════════════════════════════════════════
+const JRV_TENDERS_INLINE_MAX = 6;
+let jrvTenders = [];
+
+function jrvLoadTenders() {
+  if (!JRV_CONFIG.TENDER_FETCH_URL) return;
+  fetch(JRV_CONFIG.TENDER_FETCH_URL, { method: 'GET' })
+    .then(r => r.ok ? r.json() : [])
+    .then(arr => {
+      if (!Array.isArray(arr)) arr = [];
+      // Make BasicAggregator wraps entries under {aggregate: {...}} — unwrap defensively.
+      jrvTenders = arr
+        .map(t => (t && t.aggregate) ? t.aggregate : t)
+        .filter(t => t && t.tender_id);
+      jrvRenderTenders();
+    })
+    .catch(e => { console.warn('[tenders] fetch failed', e); jrvTenders = []; jrvRenderTenders(); });
+}
+
+function jrvDaysUntil(dateStr) {
+  if (!dateStr) return null;
+  const dt = new Date(dateStr);
+  if (isNaN(dt.getTime())) return null;
+  return Math.ceil((dt.getTime() - Date.now()) / 86400000);
+}
+
+function jrvTenderUrgencyClass(closingDate) {
+  const d = jrvDaysUntil(closingDate);
+  if (d === null) return '';
+  if (d <= 7) return 'urgency-hot';
+  if (d <= 14) return 'urgency-warn';
+  return 'urgency-cool';
+}
+
+function jrvTenderStageClass(stage, outcome) {
+  if (outcome === 'Won') return 'state-won';
+  if (outcome === 'Lost') return 'state-lost';
+  if (stage === 'Submitted') return 'state-submitted';
+  if (stage === 'Pursuing' || stage === 'Questions Sent') return 'state-pursuing';
+  return 'state-new';
+}
+
+function jrvRenderTenders() {
+  const listEl = document.getElementById('jrvTendersList');
+  const countEl = document.getElementById('jrvTendersCount');
+  if (!listEl) return;
+  if (countEl) countEl.textContent = jrvTenders.length || '0';
+  if (!jrvTenders.length) {
+    listEl.innerHTML = '<div class="jrv-tender-empty">No active tenders.</div>';
+    return;
+  }
+  listEl.innerHTML = jrvTenders.slice(0, JRV_TENDERS_INLINE_MAX).map(t => jrvTenderCardHtml(t)).join('');
+}
+
+function jrvTenderCardHtml(t) {
+  const id = escapeAttr(t.tender_id || '');
+  const stage = String(t.stage || 'New');
+  const outcome = String(t.outcome || '');
+  const stageClass = jrvTenderStageClass(stage, outcome);
+  const closing = String(t.closing_date || '');
+  const urgencyClass = jrvTenderUrgencyClass(closing);
+  const stageOpts = ['New','Pursuing','Questions Sent','Submitted','Won','Lost','Pass']
+    .map(s => '<option value="' + s + '"' + (s===stage?' selected':'') + '>' + s + '</option>').join('');
+  const url = String(t.bid_url || '').trim();
+  const linkBtn = url ? '<a class="jrv-tender-link" href="' + escapeAttr(url) + '" target="_blank" rel="noopener">View bid &#8599;</a>' : '';
+  const dueDays = jrvDaysUntil(closing);
+  const dueLabel = dueDays === null ? '' : (dueDays <= 0 ? 'CLOSED' : (dueDays + 'd left'));
+  return ''
+    + '<div class="jrv-tender-card ' + stageClass + '" data-tender-id="' + id + '">'
+    +   '<div class="jrv-tender-head">'
+    +     '<span class="jrv-tender-agency">' + escapeHtml(t.agency || '—') + '</span>'
+    +     '<span class="jrv-tender-category">' + escapeHtml(t.category || '—') + '</span>'
+    +   '</div>'
+    +   '<div class="jrv-tender-title">' + escapeHtml(t.title || 'Untitled tender') + '</div>'
+    +   '<div class="jrv-tender-meta"><span>' + escapeHtml(t.bid_number || '') + '</span>' + (t.region ? '<span>·</span><span>' + escapeHtml(t.region) + '</span>' : '') + '</div>'
+    +   '<div class="jrv-tender-dates">'
+    +     '<span>Posted: ' + escapeHtml(t.posted_date || '—') + '</span>'
+    +     '<span>Questions: ' + escapeHtml(t.questions_due || '—') + '</span>'
+    +     '<span class="jrv-tender-closing ' + urgencyClass + '">Closes: ' + escapeHtml(closing || '—') + (dueLabel ? ' (' + dueLabel + ')' : '') + '</span>'
+    +   '</div>'
+    +   '<div class="jrv-tender-actions">'
+    +     linkBtn
+    +     '<select class="jrv-tender-stage" onchange="jrvUpdateTenderStage(\'' + id + '\', this.value)">' + stageOpts + '</select>'
+    +   '</div>'
+    + '</div>';
+}
+
+function jrvUpdateTenderStage(tenderId, newStage) {
+  if (!tenderId || !JRV_CONFIG.TENDER_UPDATE_URL) return;
+  fetch(JRV_CONFIG.TENDER_UPDATE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tender_id: tenderId, stage: newStage })
+  }).catch(e => console.warn('[tender update] failed', e));
+  // Terminal stages drop from view; non-terminal just recolor the card.
+  const TERMINAL = ['Submitted','Pass','Won','Lost'];
+  if (TERMINAL.indexOf(newStage) !== -1) {
+    jrvTenders = jrvTenders.filter(t => t.tender_id !== tenderId);
+  } else {
+    jrvTenders = jrvTenders.map(t => t.tender_id === tenderId ? Object.assign({}, t, { stage: newStage }) : t);
+  }
+  jrvRenderTenders();
 }
 
 // ════════════════════════════════════════════════════════════════════════
