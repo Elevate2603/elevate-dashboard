@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0604-A -->
+<!-- ELEVATE-2026-0604-B -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -568,7 +568,7 @@
   /* BIDS & TENDERS panel — left rail, below News. Amber-themed cards with state tints
      (New/Pursuing amber, Submitted yellow, Won green, Lost red). Closing-date urgency
      color shifts the closing line itself: green >14d, amber <=14d, red <=7d. */
-  .jrv-tenders-list { display:flex; flex-direction:column; gap:8px; max-height:420px; overflow-y:auto; padding-right:2px; }
+  .jrv-tenders-list { display:flex; flex-direction:column; gap:8px; max-height:600px; overflow-y:auto; padding-right:4px; }
   .jrv-tender-empty { color:var(--text-muted); font-size:11px; text-align:center; padding:12px 6px; font-style:italic; }
   .jrv-tender-card { background:var(--dark3); border:1px solid var(--border); border-left:3px solid var(--gold); border-radius:6px; padding:9px 11px; font-size:11px; line-height:1.35; transition: background 0.12s, border-color 0.12s; }
   .jrv-tender-card.state-new       { border-left-color:#C8820A; }
@@ -2931,7 +2931,6 @@ function jrvCloseNewsModal() {
 // (Submitted/Pass/Won/Lost) the card drops from view immediately and Make
 // flips archived=true so it won't return on the next fetch.
 // ════════════════════════════════════════════════════════════════════════
-const JRV_TENDERS_INLINE_MAX = 6;
 let jrvTenders = [];
 
 function jrvLoadTenders() {
@@ -2981,7 +2980,14 @@ function jrvRenderTenders() {
     listEl.innerHTML = '<div class="jrv-tender-empty">No active tenders.</div>';
     return;
   }
-  listEl.innerHTML = jrvTenders.slice(0, JRV_TENDERS_INLINE_MAX).map(t => jrvTenderCardHtml(t)).join('');
+  // Sort by closing date ascending so the most-urgent tenders show first.
+  // Records with no closing_date sink to the bottom.
+  const sorted = jrvTenders.slice().sort((a, b) => {
+    const ad = a.closing_date || '9999-99-99';
+    const bd = b.closing_date || '9999-99-99';
+    return ad.localeCompare(bd);
+  });
+  listEl.innerHTML = sorted.map(t => jrvTenderCardHtml(t)).join('');
 }
 
 function jrvTenderCardHtml(t) {
