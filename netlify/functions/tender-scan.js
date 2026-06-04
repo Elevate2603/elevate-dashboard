@@ -140,55 +140,48 @@ function jsonError(status, error, extra) {
 }
 
 function buildPrompt() {
-  return `You are a procurement analyst for Elevate Recruitment, a staffing agency in Windsor, Ontario. Your job: surface CURRENTLY OPEN tenders/RFPs/RFQs across Ontario that Elevate could pursue.
+  // Today's date in YYYY-MM-DD so Claude can filter for tenders that haven't closed
+  const today = new Date().toISOString().slice(0, 10);
+  return `You are extracting currently-open procurement opportunities for Elevate Recruitment (Windsor ON staffing agency). Today is ${today}.
 
-Search these portals via web_search:
-1. MERX Ontario solicitations (merx.com/public/solicitations/ontario-355)
-2. Wonable Canadian tenders (wonable.io/canadian-tenders) — Ontario filter
-3. Biddingo (biddingo.com) — Ontario services
-4. CanadaBuys (canadabuys.canada.ca) — Ontario open opportunities
-5. Major bidsandtenders.ca municipal portals (windsor, essex, brampton, mississauga, peel, toronto, london, ottawa subdomains)
+YOUR TASK: Use web_search to find AT LEAST 15 currently-open Ontario tenders/RFPs/RFQs where Elevate could supply labour or services. Then return them as JSON.
 
-Geography priority: Ontario, especially Windsor-Essex, GTA, Brampton corridor. Toronto core acceptable. Far-north Ontario only if very strong fit.
+USE web_search 3 TIMES with these exact queries (one per round):
+1. site:merx.com Ontario open tenders cleaning OR janitorial OR security OR custodial OR landscaping OR transportation OR waste OR food
+2. site:wonable.io Canadian tenders Ontario open 2026 services cleaning security custodial
+3. Ontario municipal open tenders 2026 services labour staffing custodial security waste transportation closing date
 
-INCLUDE any tender where Elevate could supply LABOUR or SERVICES, across ALL sectors:
-- Sectors: public sector (municipal, school boards, health), manufacturing (auto, EV/battery, food, industrial), transportation/logistics (warehousing, distribution, transit), waste management (collection, recycling), private-sector RFQs from large companies
-- Labour types: custodial/janitorial, security guards, snow removal, landscaping/grounds, waste collection, transit/transportation, food services/dietary, healthcare support (PSW, dietary, housekeeping), staffing/temp services, general labour, customer service/call centre, office/admin temp, warehouse/distribution, traffic control flagging, parking enforcement, courier/delivery, school bus, paratransit, fleet maintenance services
+EXTRACT from search results — every tender shown in the listings, not just the first few. The MERX Ontario page alone typically shows 20-50 open services tenders; the Wonable cleaning tenders page lists 8-15. Pull all relevant ones.
 
-SKIP ONLY:
-- Pure construction / capital build projects
-- IT software / SaaS subscriptions
-- Equipment-only purchases (no labour component)
-- Professional consulting (legal, accounting, architecture, engineering design — these are credentialed professional services, not staffing)
+INCLUDE — any tender where Elevate could supply labour or services:
+- Sectors: public sector (municipal, school board, health), manufacturing, transportation/logistics, waste management, private-sector RFQs
+- Labour types: custodial/janitorial, security, snow removal, landscaping, waste collection, transit, food services/dietary, healthcare support (PSW/dietary/housekeeping), staffing/temp, general labour, CSR/call centre, office/admin temp, warehouse, traffic control, parking enforcement, courier, school bus, paratransit, fleet maintenance services
 
-Return ONLY a JSON object — no markdown, no preamble, no explanation. Shape:
+SKIP ONLY: pure construction/capital build, IT software/SaaS, equipment-only purchases, professional consulting (legal/accounting/architecture/engineering design).
+
+Geography priority: Ontario, especially Windsor-Essex, GTA, Brampton corridor. Toronto/London/Ottawa acceptable. Skip far-north Ontario unless very strong fit.
+
+RETURN FORMAT — JSON object only, no markdown, no preamble:
 
 {
   "tenders": [
     {
-      "title": "RFB - Provision of Janitorial Services for Double Stack",
-      "agency": "Toronto Transit Commission",
-      "bid_number": "T57DL26355",
-      "category": "Custodial",
-      "region": "Toronto, ON",
-      "source_portal": "merx",
-      "posted_date": "2026-05-15",
-      "questions_due": "2026-06-03",
-      "closing_date": "2026-06-12",
-      "bid_url": "https://www.merx.com/...",
-      "relevance_score": 90
+      "title": "exact title from listing",
+      "agency": "buyer/agency name",
+      "bid_number": "official reference if shown, else derive from title",
+      "category": "one of: Office/Admin, General Labour, Skilled Trades, Warehouse/Logistics, Custodial, Healthcare Support, Security, Other",
+      "region": "city, ON or 'Ontario' if general",
+      "source_portal": "merx or wonable or biddingo or canadabuys or bidsandtenders.ca",
+      "posted_date": "YYYY-MM-DD or blank",
+      "questions_due": "YYYY-MM-DD or blank",
+      "closing_date": "YYYY-MM-DD — must be after ${today}",
+      "bid_url": "direct https URL to the bid detail page",
+      "relevance_score": "0-100 integer (Elevate fit + geo proximity)"
     }
   ]
 }
 
-Rules:
-- Up to 25 tenders, ordered by relevance_score descending
-- category must be one of: Office/Admin, General Labour, Skilled Trades, Warehouse/Logistics, Custodial, Healthcare Support, Security, Other
-- Dates YYYY-MM-DD or blank
-- relevance_score 0-100 — score on (a) labour-intensiveness fit for Elevate, (b) geography proximity to Windsor/GTA, (c) contract size/recurrence
-- bid_url must be the direct link to the bid detail page
-- bid_number: use the official agency reference if shown; otherwise derive from title
-- Only currently OPEN tenders (closing_date in the future). Exclude closed/awarded/cancelled.
+CRITICAL — DO NOT return empty array. If your search results contain ANY services/labour tender in Ontario that hasn't closed, INCLUDE IT. When uncertain whether Elevate could staff it, INCLUDE it and use relevance_score to grade. Target 15-25 tenders, minimum 10.
 
 Output ONLY the JSON. Start with { and end with }.`;
 }
