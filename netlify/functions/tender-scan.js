@@ -18,10 +18,10 @@ const CORS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-// Haiku is the wrong tool for this — we need real reasoning to triage
-// "is this tender something Elevate can staff" across a long candidate list.
-// Sonnet 4.6 fits the 26s Netlify budget with web_search (3-5 rounds).
-const MODEL = process.env.TENDER_SCAN_MODEL || "claude-sonnet-4-6";
+// Haiku 4.5 fits comfortably under Netlify's 26s free-tier cap with web_search.
+// We tried Sonnet 4.6 first and it timed out at 30s. Triage of "could Elevate
+// staff this" is more pattern-matching than deep reasoning — Haiku is fine.
+const MODEL = process.env.TENDER_SCAN_MODEL || "claude-haiku-4-5-20251001";
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: CORS, body: "" };
@@ -57,9 +57,9 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        // 5 search rounds × ~4-5s each + ~4000 output tokens = ~22-25s; fits Netlify's 26s cap
-        max_tokens: 4000,
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
+        // 3 search rounds × ~3-4s + 2500 output tokens with Haiku = ~12-18s, well under 26s
+        max_tokens: 2500,
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
         messages: [{ role: "user", content: prompt }],
       }),
     });
