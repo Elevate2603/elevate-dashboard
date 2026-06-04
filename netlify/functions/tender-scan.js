@@ -1,16 +1,16 @@
 // netlify/functions/tender-scan.js
-// Live Ontario tender scanner — Claude w/ web_search tool researches MERX,
-// Wonable, biddingo, canadabuys, and major bidsandtenders.ca municipal
-// subdomains for open public-sector + private-sector services tenders
-// Elevate Recruitment (Windsor ON staffing agency) could pursue.
+// Live Ontario tender scanner. Pre-fetches MERX Ontario + Wonable Canadian
+// tenders directly (these aggregator pages render server-side, unlike the
+// bidsandtenders.ca municipal portals which need JS), strips HTML to text,
+// then asks Claude Haiku to extract structured tender records.
 //
-// Returns:
-//   { ok: true, fetched_at, source, tenders: [...] }
+// This pattern is FAR more reliable than letting Claude orchestrate
+// web_search itself — that approach kept either bailing with 0 tenders or
+// timing out under Netlify's 26s free-tier cap. With pre-fetched content,
+// Claude only does extraction (no browsing) and lands in ~6-10s.
 //
-// Called daily by Make scenario "Elevate - Tender Scan (daily)" which
-// iterates the tenders array and writes each into the elevate_tenders
-// datastore (105264). The dashboard reads from the existing Tender Fetch
-// webhook so this function does not need to be hit from the browser.
+// Returns: { ok, fetched_at, source, count, tenders: [...] }
+// Called by Make scenario "Elevate - Tender Scan (daily web sweep)" (5291896).
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -18,10 +18,12 @@ const CORS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-// Haiku 4.5 fits comfortably under Netlify's 26s free-tier cap with web_search.
-// We tried Sonnet 4.6 first and it timed out at 30s. Triage of "could Elevate
-// staff this" is more pattern-matching than deep reasoning — Haiku is fine.
 const MODEL = process.env.TENDER_SCAN_MODEL || "claude-haiku-4-5-20251001";
+
+const SOURCES = [
+  { name: "MERX",    url: "https://www.merx.com/public/solicitations/ontario-355" },
+  { name: "Wonable", url: "https://wonable.io/canadian-tenders" },
+];
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: CORS, body: "" };
@@ -34,6 +36,7 @@ exports.handler = async (event) => {
         service: "tender-scan",
         hasKey: Boolean(process.env.ANTHROPIC_API_KEY),
         model: MODEL,
+        sources: SOURCES.map(s => s.name),
       }),
     };
   }
@@ -44,7 +47,30 @@ exports.handler = async (event) => {
     return jsonError(500, "ANTHROPIC_API_KEY not configured");
   }
 
-  const prompt = buildPrompt();
+  // Pre-fetch all aggregator pages in parallel and strip HTML to text.
+  const fetched = await Promise.all(SOURCES.map(async (s) => {
+    try {
+      const r = await fetch(s.url, {
+        headers: { "User-Agent": "Mozilla/5.0 (Elevate tender-scan)" },
+      });
+      if (!r.ok) return { name: s.name, text: "", error: `HTTP ${r.status}` };
+      const html = await r.text();
+      return { name: s.name, text: stripHtml(html).slice(0, 18000) };
+    } catch (e) {
+      return { name: s.name, text: "", error: String(e && e.message || e) };
+    }
+  }));
+
+  const context = fetched
+    .filter(f => f.text)
+    .map(f => `=== ${f.name} (${f.text.length} chars) ===\n${f.text}`)
+    .join("\n\n");
+
+  if (!context) {
+    return jsonError(502, "All source pages failed to fetch", { fetched });
+  }
+
+  const prompt = buildPrompt(context);
 
   let resp;
   try {
@@ -57,9 +83,7 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        // 3 search rounds × ~3-4s + 2500 output tokens with Haiku = ~12-18s, well under 26s
-        max_tokens: 2500,
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
+        max_tokens: 3000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -91,8 +115,6 @@ exports.handler = async (event) => {
     return jsonError(502, "Tender JSON missing required shape", { got: Object.keys(parsed || {}) });
   }
 
-  // Sanitize + add tender_id (bid_number + agency) so the downstream Make
-  // scenario can use it as the datastore key and dedup naturally.
   const tenders = parsed.tenders
     .filter(t => t && t.title && t.agency)
     .map(t => {
@@ -121,10 +143,12 @@ exports.handler = async (event) => {
     body: JSON.stringify({
       ok: true,
       fetched_at: new Date().toISOString(),
-      source: "MERX + Wonable + bidsandtenders.ca + biddingo + canadabuys (via Claude web search)",
+      source: SOURCES.map(s => s.name).join(" + "),
       model: MODEL,
       input_tokens: tokensUsed.input_tokens || 0,
       output_tokens: tokensUsed.output_tokens || 0,
+      pages_fetched: fetched.filter(f => f.text).length,
+      pages_failed: fetched.filter(f => !f.text).length,
       count: tenders.length,
       tenders,
     }),
@@ -139,49 +163,70 @@ function jsonError(status, error, extra) {
   };
 }
 
-function buildPrompt() {
-  // Today's date in YYYY-MM-DD so Claude can filter for tenders that haven't closed
+// Quick-and-dirty HTML strip — drops script/style blocks, then tags, then
+// collapses whitespace. Good enough for the listing pages we care about.
+function stripHtml(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildPrompt(context) {
   const today = new Date().toISOString().slice(0, 10);
-  return `You are extracting currently-open procurement opportunities for Elevate Recruitment (Windsor ON staffing agency). Today is ${today}.
+  return `You are extracting Ontario procurement opportunities for Elevate Recruitment (Windsor ON staffing agency). Today is ${today}.
 
-YOUR TASK: Use web_search to find AT LEAST 15 currently-open Ontario tenders/RFPs/RFQs where Elevate could supply labour or services. Then return them as JSON.
-
-USE web_search 3 TIMES with these exact queries (one per round):
-1. site:merx.com Ontario open tenders cleaning OR janitorial OR security OR custodial OR landscaping OR transportation OR waste OR food
-2. site:wonable.io Canadian tenders Ontario open 2026 services cleaning security custodial
-3. Ontario municipal open tenders 2026 services labour staffing custodial security waste transportation closing date
-
-EXTRACT from search results — every tender shown in the listings, not just the first few. The MERX Ontario page alone typically shows 20-50 open services tenders; the Wonable cleaning tenders page lists 8-15. Pull all relevant ones.
+Below are two pre-fetched listing pages from MERX and Wonable. EXTRACT every currently-open tender that Elevate could supply LABOUR or SERVICES for, return as JSON.
 
 INCLUDE — any tender where Elevate could supply labour or services:
-- Sectors: public sector (municipal, school board, health), manufacturing, transportation/logistics, waste management, private-sector RFQs
-- Labour types: custodial/janitorial, security, snow removal, landscaping, waste collection, transit, food services/dietary, healthcare support (PSW/dietary/housekeeping), staffing/temp, general labour, CSR/call centre, office/admin temp, warehouse, traffic control, parking enforcement, courier, school bus, paratransit, fleet maintenance services
+- Sectors: public (municipal, school board, health), manufacturing, transportation/logistics, waste management, private RFQs
+- Labour types: custodial/janitorial, security, snow removal, landscaping, waste collection, transit, food services/dietary, healthcare support (PSW/dietary/housekeeping), staffing/temp, general labour, CSR/call centre, office/admin temp, warehouse, traffic control, parking enforcement, courier, school bus, paratransit, fleet maintenance
 
 SKIP ONLY: pure construction/capital build, IT software/SaaS, equipment-only purchases, professional consulting (legal/accounting/architecture/engineering design).
 
-Geography priority: Ontario, especially Windsor-Essex, GTA, Brampton corridor. Toronto/London/Ottawa acceptable. Skip far-north Ontario unless very strong fit.
+Geography priority: Ontario, especially Windsor-Essex, GTA, Brampton corridor. Toronto/London/Ottawa acceptable. Skip far-north unless very strong fit.
 
-RETURN FORMAT — JSON object only, no markdown, no preamble:
+OUTPUT FORMAT — JSON object only, no markdown, no preamble:
 
 {
   "tenders": [
     {
       "title": "exact title from listing",
       "agency": "buyer/agency name",
-      "bid_number": "official reference if shown, else derive from title",
+      "bid_number": "official reference, or derive from title if none shown",
       "category": "one of: Office/Admin, General Labour, Skilled Trades, Warehouse/Logistics, Custodial, Healthcare Support, Security, Other",
-      "region": "city, ON or 'Ontario' if general",
-      "source_portal": "merx or wonable or biddingo or canadabuys or bidsandtenders.ca",
+      "region": "city, ON",
+      "source_portal": "merx or wonable",
       "posted_date": "YYYY-MM-DD or blank",
       "questions_due": "YYYY-MM-DD or blank",
-      "closing_date": "YYYY-MM-DD — must be after ${today}",
-      "bid_url": "direct https URL to the bid detail page",
-      "relevance_score": "0-100 integer (Elevate fit + geo proximity)"
+      "closing_date": "YYYY-MM-DD",
+      "bid_url": "direct https URL",
+      "relevance_score": "0-100 integer"
     }
   ]
 }
 
-CRITICAL — DO NOT return empty array. If your search results contain ANY services/labour tender in Ontario that hasn't closed, INCLUDE IT. When uncertain whether Elevate could staff it, INCLUDE it and use relevance_score to grade. Target 15-25 tenders, minimum 10.
+CRITICAL:
+- Extract ALL relevant tenders shown in the pages below. Both pages contain real listings.
+- closing_date must be after ${today}. Skip closed ones.
+- When uncertain whether Elevate could staff it, INCLUDE with lower relevance_score.
+- Target 10-25 tenders. Do NOT return empty array unless both pages genuinely show no Ontario services tenders.
+
+========== LISTING PAGES ==========
+
+${context}
+
+========== END LISTINGS ==========
 
 Output ONLY the JSON. Start with { and end with }.`;
 }
