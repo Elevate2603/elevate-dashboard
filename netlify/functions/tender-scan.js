@@ -184,19 +184,32 @@ function stripHtml(html) {
 
 function buildPrompt(context) {
   const today = new Date().toISOString().slice(0, 10);
-  return `You are extracting Ontario procurement opportunities for Elevate Recruitment (Windsor ON staffing agency). Today is ${today}.
+  return `You are extracting Ontario procurement opportunities for Elevate Recruitment, a STAFFING AGENCY in Windsor, Ontario. Today is ${today}.
 
-Below are two pre-fetched listing pages from MERX and Wonable. EXTRACT every currently-open tender that Elevate could supply LABOUR or SERVICES for, return as JSON.
+Elevate's business model: they PLACE PEOPLE in ongoing services jobs (recurring labour contracts). They do NOT build, install, design, supply equipment, or do one-off project work.
 
-INCLUDE — any tender where Elevate could supply labour or services:
-- Sectors: public (municipal, school board, health), manufacturing, transportation/logistics, waste management, private RFQs
-- Labour types: custodial/janitorial, security, snow removal, landscaping, waste collection, transit, food services/dietary, healthcare support (PSW/dietary/housekeeping), staffing/temp, general labour, CSR/call centre, office/admin temp, warehouse, traffic control, parking enforcement, courier, school bus, paratransit, fleet maintenance
+Below are two pre-fetched listing pages from MERX and Wonable. Extract ONLY tenders that match Elevate's actual business — return as JSON.
 
-SKIP ONLY: pure construction/capital build, IT software/SaaS, equipment-only purchases, professional consulting (legal/accounting/architecture/engineering design).
+═══════════ STRICT INCLUSION TEST ═══════════
+A tender is INCLUDED only if ALL FOUR of these are true:
 
-Geography priority: Ontario, especially Windsor-Essex, GTA, Brampton corridor. Toronto/London/Ottawa acceptable. Skip far-north unless very strong fit.
+1. **Ongoing labour/services contract** — the deliverable is people doing recurring work (not building a thing, not installing equipment, not supplying goods)
+2. **Work performed in Ontario** — work site is in Ontario (NOT just the agency being Ontario-based; Embassy contracts abroad are OUT even if the agency is in Ottawa)
+3. **Within Elevate's geography** — Windsor-Essex, GTA, Brampton corridor, Toronto core, London, Hamilton, Kitchener-Waterloo-Cambridge, Niagara, Ottawa. SKIP: Thunder Bay, Sudbury, North Bay, Smooth Rock Falls, Kenora, Timmins, any far-north Ontario
+4. **Labour categories Elevate places**: custodial/janitorial, security guards, snow removal/landscaping, waste collection drivers, food services/dietary, healthcare support (PSW/dietary/housekeeping), general labour, customer service/call centre, office/admin temp, warehouse, traffic control flagging, parking enforcement, courier, school bus drivers, paratransit drivers, fleet maintenance (mechanics/drivers)
 
-OUTPUT FORMAT — JSON object only, no markdown, no preamble:
+═══════════ HARD SKIPS — DO NOT INCLUDE ═══════════
+- **Construction or capital projects** (anything with build, install, upgrade, repair, renovation, sidewalk, road, paving, waterworks, lagoon, exhaust fan access, signage installation, HVAC, electrical install, plumbing)
+- **Equipment/goods supply** (fire trucks, vehicles, uniforms, clothing supply, IT equipment, machinery — even if there's a "services" wrapper)
+- **Technology installation** (CCTV install, access controls install, network install, software deployment, system integration)
+- **Professional/credentialed services** (legal, accounting, architecture, engineering design, consulting, audit, financial advisory)
+- **IT/SaaS** subscriptions
+- **One-shot projects** (study, assessment, plan, design, research)
+- **Work outside Ontario** even if posted by an Ontario agency (e.g., Embassy cleaning abroad)
+- **Far-north Ontario** (see geography list above)
+
+═══════════ OUTPUT ═══════════
+JSON object only, no markdown, no preamble:
 
 {
   "tenders": [
@@ -211,16 +224,16 @@ OUTPUT FORMAT — JSON object only, no markdown, no preamble:
       "questions_due": "YYYY-MM-DD or blank",
       "closing_date": "YYYY-MM-DD",
       "bid_url": "direct https URL",
-      "relevance_score": "0-100 integer"
+      "relevance_score": "60-100 integer"
     }
   ]
 }
 
-CRITICAL:
-- Extract ALL relevant tenders shown in the pages below. Both pages contain real listings.
-- closing_date must be after ${today}. Skip closed ones.
-- When uncertain whether Elevate could staff it, INCLUDE with lower relevance_score.
-- Target 10-25 tenders. Do NOT return empty array unless both pages genuinely show no Ontario services tenders.
+═══════════ RULES ═══════════
+- relevance_score must be ≥ 60. If a tender doesn't clear 60, EXCLUDE it entirely (don't lower the score, just skip)
+- closing_date must be after ${today}
+- Be SELECTIVE — better to return 5 great matches than 20 with junk. Empty array is acceptable if no listing meets the 4-criteria test.
+- Apply the hard-skip list strictly. When in doubt, SKIP.
 
 ========== LISTING PAGES ==========
 
