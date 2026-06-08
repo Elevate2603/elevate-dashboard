@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0604-B -->
+<!-- ELEVATE-2026-0608-A-DRAFTV2 -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -170,19 +170,27 @@
   .hs-amber-card { background:#fffbeb !important; border:1px solid #fde68a !important; border-left:4px solid #f59e0b !important; }
   .hs-source-badge { background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
 
-  /* Draft email tooltip on queue cards */
-  .hs-queue-actions { display:flex; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid #fde68a; position:relative; }
-  .hs-queue-btn { background:#f59e0b; color:#fff; border:none; font-size:12px; font-weight:600; padding:8px 14px; border-radius:5px; cursor:pointer; flex:1; transition:all 0.15s; }
+  /* Draft email — inline expanded preview (click to open) */
+  .hs-queue-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid #fde68a; }
+  .hs-queue-btn { background:#f59e0b; color:#fff; border:none; font-size:12px; font-weight:600; padding:8px 14px; border-radius:5px; cursor:pointer; flex:1; min-width:140px; transition:all 0.15s; }
   .hs-queue-btn:hover:not(:disabled) { background:#d97706; }
   .hs-queue-btn:disabled { opacity:0.6; cursor:not-allowed; }
   .hs-queue-btn.sent { background:#10b981; }
   .hs-queue-btn.outline { background:#fff; color:#92400e; border:1px solid #fde68a; }
   .hs-queue-btn.outline:hover:not(:disabled) { background:#fef3c7; }
-  .hs-draft-preview { display:none; position:absolute; bottom:calc(100% + 8px); left:0; right:0; background:#1c1c1f; color:#e8e8e8; border:1px solid #f59e0b; border-radius:8px; padding:14px; box-shadow:0 8px 24px rgba(0,0,0,0.3); z-index:50; font-size:12px; line-height:1.5; max-height:300px; overflow-y:auto; }
-  .hs-queue-actions:hover .hs-draft-preview.has-draft { display:block; }
-  .hs-draft-subject { font-weight:700; color:#f59e0b; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #333; }
-  .hs-draft-body { white-space:pre-wrap; font-family:'Segoe UI', system-ui, sans-serif; }
-  .hs-draft-loading { color:#999; font-style:italic; }
+  .hs-draft-preview { display:none; width:100%; margin-top:10px; background:#1c1c1f; color:#e8e8e8; border:1px solid #f59e0b; border-radius:8px; padding:16px; box-shadow:0 4px 16px rgba(0,0,0,0.25); font-size:13px; line-height:1.55; }
+  .hs-draft-preview.expanded { display:block; }
+  .hs-draft-preview-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #333; }
+  .hs-draft-subject { font-weight:700; color:#f59e0b; font-size:14px; flex:1; }
+  .hs-draft-close { background:transparent; border:none; color:#888; font-size:18px; cursor:pointer; padding:0 4px; line-height:1; }
+  .hs-draft-close:hover { color:#fff; }
+  .hs-draft-body { white-space:pre-wrap; font-family:'Segoe UI', system-ui, sans-serif; color:#e8e8e8; }
+  .hs-draft-loading { color:#999; font-style:italic; padding:8px 0; }
+  .hs-draft-send-row { margin-top:14px; padding-top:12px; border-top:1px solid #333; display:flex; justify-content:flex-end; }
+  .hs-draft-send-btn { background:#10b981; color:#fff; border:none; font-size:13px; font-weight:700; padding:10px 18px; border-radius:5px; cursor:pointer; transition:all 0.15s; }
+  .hs-draft-send-btn:hover:not(:disabled) { background:#059669; }
+  .hs-draft-send-btn:disabled { opacity:0.6; cursor:not-allowed; }
+  .hs-draft-send-btn.sent { background:#6b7280; }
 
   /* ═══════════════════════ SALES INTEL TAB ═══════════════════════ */
   #tabSales {
@@ -1694,16 +1702,26 @@ async function hsBlockCompany(signalKey, company, btn) {
 
 // Called from queue cards (lead_source = hiring_signals)
 async function hsDraftEmail(queueKey, btn, cardEl) {
-  if (!queueKey) return;
-  if (hsDrafts[queueKey]) {
-    hsShowDraftPreview(cardEl, hsDrafts[queueKey]);
+  if (!queueKey || !cardEl) return;
+  const previewEl = cardEl.querySelector('.hs-draft-preview');
+  if (!previewEl) return;
+
+  // Toggle: if draft already shown, collapse it
+  if (previewEl.classList.contains('expanded') && hsDrafts[queueKey]) {
+    previewEl.classList.remove('expanded');
+    if (btn) btn.textContent = '✉ Show Draft';
     return;
   }
-  const previewEl = cardEl ? cardEl.querySelector('.hs-draft-preview') : null;
-  if (previewEl) {
-    previewEl.classList.add('has-draft');
-    previewEl.innerHTML = '<div class="hs-draft-loading">Drafting email with Claude…</div>';
+
+  // Already-fetched draft: just expand
+  if (hsDrafts[queueKey]) {
+    hsShowDraftPreview(cardEl, hsDrafts[queueKey], queueKey);
+    if (btn) btn.textContent = '✉ Hide Draft';
+    return;
   }
+
+  previewEl.classList.add('expanded');
+  previewEl.innerHTML = '<div class="hs-draft-loading">Drafting email with Claude…</div>';
   if (btn) { btn.disabled = true; btn.textContent = 'Drafting…'; }
   try {
     const url = `${HS_DRAFT_EMAIL}?queue_key=${encodeURIComponent(queueKey)}`;
@@ -1711,30 +1729,55 @@ async function hsDraftEmail(queueKey, btn, cardEl) {
     if (!res.ok) throw new Error('Draft failed: ' + res.status);
     const text = await res.text();
     let draft;
-    try { draft = JSON.parse(text); } catch(e) {
-      const subjectMatch = text.match(/SUBJECT:\s*(.+)/i);
-      const bodyMatch = text.match(/BODY:\s*([\s\S]+)/i);
+    try {
+      const json = JSON.parse(text);
+      if (json && (json.subject || json.body)) {
+        draft = { subject: json.subject || '', body: json.body || '' };
+      } else {
+        throw new Error('JSON had no subject/body');
+      }
+    } catch(e) {
+      const subjectMatch = text.match(/SUBJECT:\s*(.+?)(?=###BODY###|BODY:|$)/is);
+      const bodyMatch = text.match(/(?:###BODY###|BODY:)\s*([\s\S]+)$/i);
       draft = { subject: subjectMatch ? subjectMatch[1].trim() : 'Quick question', body: bodyMatch ? bodyMatch[1].trim() : text };
     }
     hsDrafts[queueKey] = draft;
-    hsShowDraftPreview(cardEl, draft);
-    if (btn) { btn.disabled = false; btn.textContent = '✉ Draft ready'; }
+    hsShowDraftPreview(cardEl, draft, queueKey);
+    if (btn) { btn.disabled = false; btn.textContent = '✉ Hide Draft'; }
   } catch (e) {
     console.error('[HS] Draft error:', e);
-    if (previewEl) previewEl.innerHTML = '<div class="hs-draft-loading">Error: ' + e.message + '</div>';
+    previewEl.innerHTML = '<div class="hs-draft-loading">Error: ' + escapeHtml(e.message) + '</div>';
     if (btn) { btn.disabled = false; btn.textContent = '✉ Draft Email'; }
   }
 }
 
-function hsShowDraftPreview(cardEl, draft) {
+function hsShowDraftPreview(cardEl, draft, queueKey) {
   if (!cardEl) return;
   const previewEl = cardEl.querySelector('.hs-draft-preview');
   if (!previewEl) return;
-  previewEl.classList.add('has-draft');
+  previewEl.classList.add('expanded');
+  const body = String(draft.body || '').replace(/\\n/g, '\n');
+  const subj = String(draft.subject || '');
+  const qk = queueKey || '';
   previewEl.innerHTML = `
-    <div class="hs-draft-subject">Subject: ${escapeHtml(draft.subject || '')}</div>
-    <div class="hs-draft-body">${escapeHtml(draft.body || '').replace(/\\n/g, '\n')}</div>
+    <div class="hs-draft-preview-header">
+      <div class="hs-draft-subject">Subject: ${escapeHtml(subj)}</div>
+      <button class="hs-draft-close" title="Collapse" onclick="hsToggleDraft('${escapeAttr(qk)}', this.closest('.contact-card'))">×</button>
+    </div>
+    <div class="hs-draft-body">${escapeHtml(body)}</div>
+    <div class="hs-draft-send-row">
+      <button class="hs-draft-send-btn" onclick="hsSendOutlook('${escapeAttr(qk)}', this)">Send via Outlook</button>
+    </div>
   `;
+}
+
+function hsToggleDraft(queueKey, cardEl) {
+  if (!cardEl) return;
+  const previewEl = cardEl.querySelector('.hs-draft-preview');
+  if (!previewEl) return;
+  previewEl.classList.remove('expanded');
+  const btn = cardEl.querySelector('.hs-queue-actions .hs-queue-btn.outline');
+  if (btn) btn.textContent = hsDrafts[queueKey] ? '✉ Show Draft' : '✉ Draft Email';
 }
 
 async function hsSendOutlook(queueKey, btn) {
@@ -1819,6 +1862,14 @@ function renderQueue() {
     list.innerHTML = '<div class="empty-queue"><p>No contacts pending approval.</p></div>';
     return;
   }
+  // Prime in-memory draft cache from persisted queue data so clicking
+  // "Show Draft" expands the saved draft instead of re-firing the drafter.
+  queueContacts.forEach(c => {
+    const k = c.key || '';
+    if (k && c.email_draft_body && !hsDrafts[k]) {
+      hsDrafts[k] = { subject: c.email_draft_subject || '', body: c.email_draft_body || '' };
+    }
+  });
   list.innerHTML = queueContacts.map((c, i) => {
     const name = c.contact_name || c.full_name || 'Unknown';
     const initial = name.charAt(0).toUpperCase();
@@ -1888,12 +1939,9 @@ function renderQueue() {
         </div>
         ${isHiringSignal ? `
         <div class="hs-queue-actions">
-          <button class="hs-queue-btn outline" onmouseenter="hsDraftEmail('${escapeAttr(queueKey)}', this, this.closest('.contact-card'))" onclick="hsDraftEmail('${escapeAttr(queueKey)}', this, this.closest('.contact-card'))">${c.email_draft_body ? '✉ Draft ready (hover to view)' : '✉ Draft Email'}</button>
-          <button class="hs-queue-btn ${emailSent ? 'sent' : ''}" ${emailSent ? 'disabled' : ''} onclick="hsSendOutlook('${escapeAttr(queueKey)}', this)">${emailSent ? '✓ Sent' : 'Send via Outlook'}</button>
-          <div class="hs-draft-preview ${c.email_draft_body ? 'has-draft' : ''}">
-            ${c.email_draft_subject ? `<div class="hs-draft-subject">Subject: ${escapeHtml(c.email_draft_subject)}</div>` : ''}
-            ${c.email_draft_body ? `<div class="hs-draft-body">${escapeHtml(c.email_draft_body)}</div>` : '<div class="hs-draft-loading">Hover Draft Email to generate…</div>'}
-          </div>
+          <button class="hs-queue-btn outline" onclick="hsDraftEmail('${escapeAttr(queueKey)}', this, this.closest('.contact-card'))">${c.email_draft_body ? '✉ Show Draft' : '✉ Draft Email'}</button>
+          ${emailSent ? `<button class="hs-queue-btn sent" disabled>✓ Sent</button>` : ''}
+          <div class="hs-draft-preview"></div>
         </div>` : ''}
         ${c.about_company ? `<div class="about-company-box">📋 ${escapeHtml(c.about_company)}</div>` : `
         <div class="about-company-missing">
