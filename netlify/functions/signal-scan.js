@@ -1,14 +1,19 @@
 // netlify/functions/signal-scan.js
-// Daily Mon-Fri Ontario hiring-signal scanner for Elevate Recruitment.
-// Uses Claude Haiku 4.5 + web_search to identify companies in Travis's geo
-// (Windsor-Essex + 30km Brampton + GTA corridor) showing fresh hiring activity
-// signals — job posting surges, expansion announcements, scoop-style 12-month
-// highs in operations/engineering hiring.
+// Daily Mon-Fri Ontario hiring-signal scanner.
+//
+// Pre-fetches Job Bank Canada listing pages for high-signal role families
+// (mgmt, engineering, production/skilled trades), strips HTML to text, then
+// has Claude Haiku group postings by employer and score "hiring surge"
+// signals — multiple roles, multiple locations, fresh dates.
+//
+// Why pre-fetch: tried web_search route first (3 rounds, Haiku) — kept
+// returning 0 signals because the model bailed when extracting structured
+// data from search snippets. Same fix tender-scan needed. Pre-fetching
+// gives Claude clean tabular data to extract from, ~6-12s wall time.
 //
 // Returns: { ok, fetched_at, source, count, signals: [...] }
-// Called by Make scenario "Elevate - Hiring Signal Scan (Mon-Fri)" which
-// iterates the signals array and upserts into datastore 97143
-// (elevate_pending_retrieval) with overwrite:false for dedup.
+// Called by Make scenario 5323960, which iterates `signals` and upserts
+// into datastore 97143 (elevate_pending_retrieval) with overwrite:false.
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -16,9 +21,17 @@ const CORS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-// Haiku 4.5 fits comfortably under Netlify's 26s free-tier cap with web_search.
-// Same model that powers market-hotspots and tender-scan reliably.
 const MODEL = process.env.SIGNAL_SCAN_MODEL || "claude-haiku-4-5-20251001";
+
+// Job Bank Canada Ontario listings, last 7 days, sorted by date desc.
+// Each page returns ~25 postings with employer + title + city + date — perfect
+// for grouping by company to detect hiring surges.
+const SOURCES = [
+  { name: "JobBank-Mgmt",       url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=manager&locationstring=Ontario&fage=7&sort=D" },
+  { name: "JobBank-Production", url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=production&locationstring=Ontario&fage=7&sort=D" },
+  { name: "JobBank-Trades",     url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=millwright+OR+electrician+OR+welder&locationstring=Ontario&fage=7&sort=D" },
+  { name: "JobBank-Warehouse",  url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=warehouse+OR+logistics&locationstring=Ontario&fage=7&sort=D" },
+];
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: CORS, body: "" };
@@ -31,6 +44,7 @@ exports.handler = async (event) => {
         service: "signal-scan",
         hasKey: Boolean(process.env.ANTHROPIC_API_KEY),
         model: MODEL,
+        sources: SOURCES.map(s => s.name),
       }),
     };
   }
@@ -41,7 +55,31 @@ exports.handler = async (event) => {
     return jsonError(500, "ANTHROPIC_API_KEY not configured");
   }
 
-  const prompt = buildPrompt();
+  // Pre-fetch all source pages in parallel; strip to text; cap each page at
+  // 18KB to keep total prompt under ~80KB.
+  const fetched = await Promise.all(SOURCES.map(async (s) => {
+    try {
+      const r = await fetch(s.url, {
+        headers: { "User-Agent": "Mozilla/5.0 (Elevate signal-scan)" },
+      });
+      if (!r.ok) return { name: s.name, text: "", error: `HTTP ${r.status}` };
+      const html = await r.text();
+      return { name: s.name, text: stripHtml(html).slice(0, 18000) };
+    } catch (e) {
+      return { name: s.name, text: "", error: String(e && e.message || e) };
+    }
+  }));
+
+  const context = fetched
+    .filter(f => f.text)
+    .map(f => `=== ${f.name} (${f.text.length} chars) ===\n${f.text}`)
+    .join("\n\n");
+
+  if (!context) {
+    return jsonError(502, "All source pages failed to fetch", { fetched });
+  }
+
+  const prompt = buildPrompt(context);
 
   let resp;
   try {
@@ -54,9 +92,7 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        // 3 search rounds × ~4-5s + 3000 output tokens with Haiku = ~15-20s
-        max_tokens: 3000,
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
+        max_tokens: 3500,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -88,7 +124,6 @@ exports.handler = async (event) => {
     return jsonError(502, "Signals JSON missing required shape", { got: Object.keys(parsed || {}) });
   }
 
-  // Normalize for downstream Make scenario — signal_key derived from company slug
   const signals = parsed.signals
     .filter(s => s && s.company_name)
     .map(s => {
@@ -107,7 +142,7 @@ exports.handler = async (event) => {
         signal_tag: String(s.signal_tag || "").trim(),
         pitch_angle: String(s.pitch_angle || "").trim(),
         why_now: String(s.why_now || "").trim(),
-        score: Number(s.score) || 70,
+        score: Number(s.score) || 60,
         urgency: String(s.urgency || "immediate").trim(),
         action_deadline: String(s.action_deadline || "Within 14 days").trim(),
         trigger_phrase: `retrieve contacts for signal-${slug}`,
@@ -125,10 +160,12 @@ exports.handler = async (event) => {
     body: JSON.stringify({
       ok: true,
       fetched_at: new Date().toISOString(),
-      source: "Job Bank Canada + Indeed + news (via Claude web search)",
+      source: SOURCES.map(s => s.name).join(" + "),
       model: MODEL,
       input_tokens: tokensUsed.input_tokens || 0,
       output_tokens: tokensUsed.output_tokens || 0,
+      pages_fetched: fetched.filter(f => f.text).length,
+      pages_failed: fetched.filter(f => !f.text).length,
       count: signals.length,
       signals,
     }),
@@ -143,52 +180,87 @@ function jsonError(status, error, extra) {
   };
 }
 
-function buildPrompt() {
+function stripHtml(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildPrompt(context) {
   const today = new Date().toISOString().slice(0, 10);
   return `You are a labour-market analyst for Elevate Recruitment, a Windsor ON staffing agency. Today is ${today}.
 
-YOUR TASK: Use web_search (3 rounds) to identify CURRENT Ontario companies showing fresh HIRING SIGNALS — surging job posting counts, expansion announcements, plant ramps, leadership hiring pushes. Return up to 10 as JSON signals Elevate can pursue.
+Below are four pre-fetched Job Bank Canada Ontario listing pages from the last 7 days. Each lists ~25 currently-open postings with employer + title + city + date.
 
-SEARCH STRATEGY — use these 3 queries (one per web_search round):
-1. Ontario manufacturing hiring expansion 2026 site:linkedin.com OR site:thespec.com OR site:windsorstar.com OR site:cbc.ca
-2. site:ca.indeed.com Ontario plant manager OR production manager OR engineering manager posted last 7 days
-3. "now hiring" OR "hiring surge" OR "expanding workforce" Ontario auto manufacturing OR food processing OR logistics 2026
+YOUR JOB: Group the postings by EMPLOYER. Identify companies showing a "hiring surge" — 2+ open postings, or a single high-signal role at a target-sector company. Return up to 10 as JSON signals Elevate can pursue.
 
-GEOGRAPHY PRIORITY: Windsor-Essex, Brampton corridor (Mississauga, Vaughan, Markham, Oakville, Bolton, Caledon, Halton Hills), Toronto core, Hamilton, Kitchener-Waterloo, London. SKIP far-north Ontario (Thunder Bay, Sudbury, Smooth Rock Falls, etc.).
+═══════════ SECTOR PRIORITY (include) ═══════════
+- Automotive Tier 1/2 (Magna, Martinrea, Linamar suppliers, etc.)
+- EV / battery manufacturing
+- Food & beverage processing
+- Industrial machinery / metal forming / plastics
+- Logistics, warehousing, distribution, 3PL, trucking
+- Aerospace
+- Waste management / recycling
+- Public sector if it's clearly labour-services (custodial, dietary, security, drivers)
 
-INCLUDE these sectors: automotive Tier 1/2, EV/battery manufacturing, food & beverage processing, industrial machinery, logistics/warehousing/distribution, plastics/metal forming, aerospace, transportation services, waste management.
+═══════════ GEOGRAPHY (priority) ═══════════
+Windsor-Essex, Brampton, Mississauga, Vaughan, Markham, Oakville, Bolton, Caledon, Halton Hills, Toronto, Hamilton, Kitchener-Waterloo-Cambridge, London, Niagara, Ottawa.
+SKIP far-north: Thunder Bay, Sudbury, North Bay, Smooth Rock Falls, Kenora, Timmins.
 
-LABOUR TYPES Elevate places: skilled trades (electricians, millwrights, welders), production supervisors, plant/production managers, HR managers, engineering managers (mechanical, controls, manufacturing), warehouse/logistics, general labour, CSR/call centre, office/admin temp, custodial, food-mfg HACCP operators, AZ drivers, dispatchers.
+═══════════ HARD SKIPS ═══════════
+- Pure tech/SaaS, financial services, retail stores, healthcare clinics, professional services (legal/accounting/consulting), construction firms, mining, oil & gas
+- Staffing agencies themselves (don't recommend Randstad, Adecco, Aerotek, ASAP, Quantum etc. as targets — they're competitors)
+- Generic franchises (Tim Hortons, McDonald's, gas stations)
 
-SKIP COMPLETELY: pure tech/SaaS companies, financial services, healthcare clinics, retail stores, professional services (consulting/legal/accounting), construction firms, mining, oil & gas, anything outside Ontario.
+═══════════ SCORING (0-100) ═══════════
+- 80-100: 3+ open roles same employer, target sector, priority geography
+- 65-79: 2 open roles target sector, OR 1 senior role (Plant Mgr / Ops Mgr / Eng Mgr) at clear-fit company
+- 55-64: 1 production/skilled-trades role at clear-fit manufacturer
+- Below 55: skip
 
-OUTPUT — JSON object only, no markdown, no preamble:
+═══════════ OUTPUT — JSON object only ═══════════
 
 {
   "signals": [
     {
-      "company_name": "exact company name",
-      "company_website": "https://...",
-      "industry": "specific industry (e.g. 'Automotive Tier 1 / Metal Forming')",
+      "company_name": "exact employer name from listing",
+      "company_website": "leave blank if not in listing",
+      "industry": "specific industry (e.g. 'Automotive Tier 1', 'Food Processing', 'Logistics 3PL')",
       "geography": "City, Ontario",
-      "target_titles_json": "Plant Manager OR Production Manager OR Operations Manager OR HR Manager OR Engineering Manager OR ...",
-      "signal_tag": "concise tag — e.g. 'Indeed posting surge 2026-06 | 8+ active production roles | EV battery ramp'",
-      "pitch_angle": "2-3 sentence pitch on how Elevate fits — what labour types, why now",
-      "why_now": "concrete one-sentence catalyst (specific company event, contract, news)",
-      "score": "0-100 integer (sector fit + geo + signal strength)",
+      "target_titles_json": "Plant Manager OR Production Manager OR Operations Manager OR HR Manager OR Engineering Manager OR Maintenance Manager",
+      "signal_tag": "concise — e.g. 'Job Bank 3 open roles last 7d | Production + Maintenance + Logistics'",
+      "pitch_angle": "2-3 sentence pitch — what labour types Elevate fits, why now",
+      "why_now": "concrete one-sentence catalyst (e.g. '3 open roles posted last week including senior Plant Manager')",
+      "score": 75,
       "urgency": "immediate or watch",
       "action_deadline": "Within 14 days OR Within 30 days"
     }
   ]
 }
 
-CRITICAL:
-- Return up to 10 signals, ordered by score descending
-- Score ≥ 55 minimum — anything below is junk
-- Geography must be Ontario AND within the priority corridor above
-- company_name must be a specific real company (NO generic "various manufacturers")
-- BETTER TO RETURN 5 SOLID SIGNALS than 0 perfect ones. Travis triages on the dashboard — don't be over-conservative.
-- Prefer companies NOT in this already-active list, but if a clearly fresh signal appears on one of these, still include it: Stellantis, Magna, Martinrea, Multimatic, NEXTSTAR, Vuteq, Litens, Almag, Kromet, Mevotech, Eclipse Automation, Husky Injection, Cyclic Materials, Quarterhill, Reliance Home Comfort, IESO.
+═══════════ RULES ═══════════
+- Return 5-10 signals — better to return 5 great ones than 10 mediocre ones, but DON'T return 0 unless the data is genuinely empty
+- Order by score descending
+- company_name must be the exact specific real employer from a listing (no "various manufacturers", no agencies/staffing firms)
+- Already-active in pipeline (prefer NOT but include if fresh signal): Stellantis, Magna, Martinrea, Multimatic, NEXTSTAR, Vuteq, Litens, Almag, Kromet, Mevotech, Husky Injection, Cyclic Materials, Quarterhill, Reliance Home Comfort, IESO
+
+========== JOB BANK LISTINGS ==========
+
+${context}
+
+========== END LISTINGS ==========
 
 Output ONLY the JSON. Start with { and end with }.`;
 }
