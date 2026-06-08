@@ -183,11 +183,12 @@ OUTPUT — JSON object only, no markdown, no preamble:
 }
 
 CRITICAL:
-- Up to 10 signals, ordered by score descending
-- Score ≥ 65 minimum — skip weaker fits entirely
+- Return up to 10 signals, ordered by score descending
+- Score ≥ 55 minimum — anything below is junk
 - Geography must be Ontario AND within the priority corridor above
 - company_name must be a specific real company (NO generic "various manufacturers")
-- Avoid these companies already in Elevate's pipeline: Stellantis, Magna, AGF Group, Carte International, AGI, Armtec, Canada Packers, Ovivo, Dare Foods, Andrew Peller, Building Products Canada, Trojan Technologies, Reko, Narmco, Mitchell Plastics, Multimatic, NEXTSTAR, Vuteq, Litens, Almag, Kromet, Mevotech, Eclipse Automation, Walters Group, Valiant TMS, Centerline, Magellan, Husky Injection, Maple Leaf, Mucci, Mastronardi, Bombardier, Ground Effects, Cosma, AGS Automotive, Conestoga Cold Storage, Atlantic Packaging, Loblaw, Maple Lodge, Martinrea, Ford Canada, Cyclic Materials, Liftking, Quarterhill, Reliance Home Comfort, Metex, IESO, Contrans Tank, First National, Home Hardware, ZTR Control Systems.
+- BETTER TO RETURN 5 SOLID SIGNALS than 0 perfect ones. Travis triages on the dashboard — don't be over-conservative.
+- Prefer companies NOT in this already-active list, but if a clearly fresh signal appears on one of these, still include it: Stellantis, Magna, Martinrea, Multimatic, NEXTSTAR, Vuteq, Litens, Almag, Kromet, Mevotech, Eclipse Automation, Husky Injection, Cyclic Materials, Quarterhill, Reliance Home Comfort, IESO.
 
 Output ONLY the JSON. Start with { and end with }.`;
 }
