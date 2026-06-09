@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0609-F-INSEQ-PHASE3 -->
+<!-- ELEVATE-2026-0609-G-RCRM-OPEN -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -749,6 +749,11 @@
   .jrv-pending-btn.reject { background: transparent; border:1px solid rgba(239,68,68,0.5); color:#ef4444; }
   .jrv-pending-btn.reject:hover:not(:disabled) { background: rgba(239,68,68,0.12); }
   .jrv-pending-btn:disabled { opacity:0.5; cursor: wait; }
+
+  /* Open in RCRM — small consistent control across every pipeline section */
+  .rcrm-open { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; background:rgba(124,58,237,0.14); border:1px solid rgba(124,58,237,0.45); color:#a78bfa; font-family:'Consolas', monospace; font-size:10px; font-weight:700; letter-spacing:0.06em; border-radius:10px; text-decoration:none; cursor:pointer; line-height:1.2; white-space:nowrap; }
+  .rcrm-open:hover { background:rgba(124,58,237,0.28); color:#c4b5fd; }
+  .rcrm-open.disabled { opacity:0.4; cursor:not-allowed; pointer-events:none; }
 
   /* Review gate stub modal */
   .jrv-review-modal .jrv-modal { max-width: 560px; }
@@ -2096,6 +2101,7 @@ function renderQueue() {
           ${linkedin ? `<div class="contact-meta-item"><a href="${escapeAttr(linkedin)}" target="_blank" rel="noopener">Contact LinkedIn ↗</a></div>` : ''}
           ${c.company_linkedin ? `<div class="contact-meta-item"><a href="${escapeAttr(c.company_linkedin)}" target="_blank" rel="noopener">Company LinkedIn ↗</a></div>` : ''}
           ${c.company_website ? `<div class="contact-meta-item"><a href="${escapeAttr(c.company_website)}" target="_blank" rel="noopener">Website ↗</a></div>` : ''}
+          ${jrvRcrmContactUrl(c) ? `<div class="contact-meta-item">${jrvRcrmBtn(c)}</div>` : ''}
           ${c.annual_revenue ? `<div class="contact-meta-item"><strong>Revenue:</strong> ${escapeHtml(formatRevenue(c.annual_revenue))}</div>` : ''}
           ${(inRCRM || isClient) && c.last_communication ? `<div class="contact-meta-item"><strong>Last Contact:</strong> ${escapeHtml(c.last_communication)}</div>` : ''}
           ${(inRCRM || isClient) && c.rcrm_owner ? `<div class="contact-meta-item"><strong>Owner:</strong> ${escapeHtml(c.rcrm_owner)}</div>` : ''}
@@ -2413,6 +2419,31 @@ function escapeHtml(str) {
 function escapeAttr(str) {
   if (str == null) return '';
   return String(str).replace(/"/g, '&quot;');
+}
+
+// Open in RCRM — every contact row across pipeline sections gets this control.
+// Uses resource_url if RCRM returned it on the record; falls back to constructing
+// from the contact slug (rcrm_contact_id), which is what RCRM's UI accepts at
+// https://app.recruitcrm.io/contact/{slug}. Returns empty string if no slug yet
+// (manual-track contacts that haven't been written to RCRM).
+function jrvRcrmContactUrl(c) {
+  if (!c) return '';
+  const url = (c.resource_url || c.rcrm_resource_url || '').toString().trim();
+  if (url) {
+    // RCRM API returns resource_url like https://api.recruitcrm.io/v1/contacts/{slug}
+    // Convert to the UI URL the browser can open.
+    const m = url.match(/contacts?\/([A-Za-z0-9._-]+)/);
+    if (m) return 'https://app.recruitcrm.io/contact/' + m[1];
+    if (/^https?:\/\//.test(url)) return url;
+  }
+  const slug = (c.rcrm_contact_id || c.contact_slug || '').toString().trim();
+  if (!slug) return '';
+  return 'https://app.recruitcrm.io/contact/' + encodeURIComponent(slug);
+}
+function jrvRcrmBtn(c, extraClass) {
+  const u = jrvRcrmContactUrl(c);
+  if (!u) return '';
+  return `<a class="rcrm-open${extraClass ? ' ' + extraClass : ''}" href="${escapeAttr(u)}" target="_blank" rel="noopener" title="Open in RecruitCRM" onclick="event.stopPropagation()">RCRM ↗</a>`;
 }
 
 // ═══════════════════════════════════════════
@@ -5547,6 +5578,7 @@ function jrvRenderInSeq() {
                 <span class="jrv-inseq-reach${reachCls}" title="Outbound emails to this contact (Outlook sent items + Emailed notes)">${reachLabel}</span>
                 ${hasReplied ? `<span class="jrv-inseq-reply" title="Genuine human reply detected (auto-replies excluded)">Replied</span>` : ''}
                 ${bounced ? `<span class="jrv-inseq-bounce" title="${escapeAttr(bounceReason || 'Hard bounce detected — auto-removed from sequence, RCRM note logged')}">⚠ Bounced</span>` : ''}
+                ${jrvRcrmBtn(r)}
               </div>
               <div class="jrv-inseq-when">Last contact ${escapeHtml(rec.label)}</div>
             </div>
@@ -5589,6 +5621,7 @@ function jrvRenderInSeq() {
               <div class="jrv-pending-name">${escapeHtml(name)}</div>
               <div class="jrv-pending-meta">${escapeHtml(meta)}${phaseHint}</div>
             </div>
+            ${jrvRcrmBtn(r)}
           </div>
           <div class="jrv-pending-draft">
             <div class="jrv-pending-subject">Subject: ${escapeHtml(subj)}</div>
@@ -5875,7 +5908,7 @@ function jrvSetFeedBadge(live, count) {
       if (days <= THRESHOLDS.YELLOW_MAX_DAYS) return 'yellow';
       return 'red';
     }
-    function rcrmUrlFor(slug) { return 'https://app.recruitcrm.io/v1/company/' + encodeURIComponent(slug || ''); }
+    function rcrmUrlFor(slug) { return 'https://app.recruitcrm.io/company/' + encodeURIComponent(slug || ''); }
     function channelVerb(ch) {
       switch ((ch || '').toLowerCase()) {
         case 'email': return 'emailed';
