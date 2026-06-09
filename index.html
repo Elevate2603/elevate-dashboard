@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0609-D-INSEQ-PHASE1 -->
+<!-- ELEVATE-2026-0609-E-INSEQ-PHASE2 -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -726,6 +726,29 @@
   .jrv-inseq-msg-actions { margin-top: 8px; display: flex; gap: 6px; }
   .jrv-inseq-msg-open { background: rgba(0,114,198,0.15); border: 1px solid rgba(0,114,198,0.5); color: #5fa9e8; font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-family: inherit; }
   .jrv-inseq-msg-open:hover { background: rgba(0,114,198,0.3); }
+
+  /* Phase 2: Pending Reviews section (top of modal) */
+  .jrv-pending-section { background: rgba(200,130,10,0.06); border:1px solid rgba(200,130,10,0.35); border-radius:10px; padding:14px 16px; margin-bottom:20px; }
+  .jrv-pending-header { display:flex; align-items:center; gap:10px; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid rgba(200,130,10,0.25); }
+  .jrv-pending-title { font-family:'Consolas', monospace; font-size:12px; letter-spacing:0.14em; color: var(--gold); text-transform:uppercase; flex:1; }
+  .jrv-pending-count { background:#C8820A; color:#000; font-family:'Consolas', monospace; font-size:11px; padding:3px 10px; border-radius:10px; font-weight:700; }
+  .jrv-pending-card { background: var(--dark3); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:12px 14px; margin-top:10px; }
+  .jrv-pending-card:first-of-type { margin-top:0; }
+  .jrv-pending-who { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .jrv-pending-name { font-weight:700; color: var(--text); font-size:14px; }
+  .jrv-pending-meta { font-size:11px; color: var(--text-muted); }
+  .jrv-pending-draft { background:#1c1c1f; border:1px solid rgba(200,130,10,0.4); border-radius:6px; padding:10px 12px; margin-top:8px; }
+  .jrv-pending-subject { font-weight:600; color: var(--gold); font-size:13px; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.06); margin-bottom:6px; }
+  .jrv-pending-body { white-space:pre-wrap; font-family:'Segoe UI', system-ui, sans-serif; font-size:12px; color:#d8d8d8; line-height:1.5; max-height:200px; overflow-y:auto; }
+  .jrv-pending-actions { margin-top:12px; display:flex; gap:8px; }
+  .jrv-pending-btn { flex:1; padding:8px 14px; border-radius:5px; font-size:12px; font-weight:700; cursor:pointer; font-family: inherit; letter-spacing:0.04em; transition: all 0.15s; }
+  .jrv-pending-btn.approve { background:#10b981; color:#fff; border:none; }
+  .jrv-pending-btn.approve:hover:not(:disabled) { background:#059669; }
+  .jrv-pending-btn.skip { background: transparent; border:1px solid var(--border); color: var(--text-muted); }
+  .jrv-pending-btn.skip:hover:not(:disabled) { color: var(--text); border-color: var(--text-muted); }
+  .jrv-pending-btn.reject { background: transparent; border:1px solid rgba(239,68,68,0.5); color:#ef4444; }
+  .jrv-pending-btn.reject:hover:not(:disabled) { background: rgba(239,68,68,0.12); }
+  .jrv-pending-btn:disabled { opacity:0.5; cursor: wait; }
 
   /* Review gate stub modal */
   .jrv-review-modal .jrv-modal { max-width: 560px; }
@@ -2801,6 +2824,10 @@ const JRV_CONFIG = {
   INSEQ_FETCH_URL:  'https://hook.us2.make.com/6rhawvrqij4ukbnctjsedfvl8kbw9imr',
   INSEQ_REMOVE_URL: 'https://hook.us2.make.com/7ro4ws2slxxllh9ld3u9ypqegktbm4aa',
   INSEQ_THREAD_URL: 'https://hook.us2.make.com/l11gcmtsiij31b5hqwaiqneu68ngwrtj',
+  // Phase 2 cadence — Cadence Action (5337248) takes ?queue_key=X&action=approve|cancel|reject.
+  // Approve fires Outlook Send + advances state. Cancel skips this round. Reject switches to monthly tone.
+  // Cadence Tick (5337224) runs M-F 06:30, drafts 5 oldest-touched contacts per day and flips pending_review=true.
+  INSEQ_CADENCE_ACTION_URL: 'https://hook.us2.make.com/6xgf8mp9pk5253w4t8mn9q8bvgukwilw',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -5460,9 +5487,12 @@ function jrvRenderInSeq() {
     body.innerHTML = '<div class="jrv-inseq-empty">No matches for "' + escapeHtml(jrvInSeqState.searchTerm) + '". Clear the search to see everyone.</div>';
     return;
   }
-  // Group + sort
+  // Split pending review (Phase 2 cadence) from the rest
+  const pending = filtered.filter(r => r.pending_review === true || r.pending_review === 'true');
+  const nonPending = filtered.filter(r => !(r.pending_review === true || r.pending_review === 'true'));
+  // Group + sort the non-pending records by recency
   const buckets = { green: [], yellow: [], red: [] };
-  for (const r of filtered) {
+  for (const r of nonPending) {
     const rec = jrvInSeqRecency(r);
     buckets[rec.color].push({ r, rec });
   }
@@ -5535,7 +5565,74 @@ function jrvRenderInSeq() {
       </div>
     `;
   }).join('');
-  body.innerHTML = groupsHtml || '<div class="jrv-inseq-empty">No one currently in sequence.</div>';
+  // Pending review section (Phase 2 cadence): prepend before the recency groups
+  let pendingHtml = '';
+  if (pending.length) {
+    const pendingCards = pending.map(r => {
+      const name = (r.contact_name || r.contact_email || 'Unknown').trim();
+      const title = (r.contact_title || '').trim();
+      const company = (r.company_name || '').trim();
+      const meta = [title, company].filter(Boolean).join(', ');
+      const phase = (r.cadence_phase || '').toLowerCase();
+      const phaseHint = phase === 'monthly' ? ' · MONTHLY TOUCH' : '';
+      const subj = (r.email_draft_subject || '(no subject drafted)').trim();
+      const draftBody = (r.email_draft_body || '').replace(/\\n/g, '\n');
+      const qk = r.key || '';
+      return `
+        <div class="jrv-pending-card" data-key="${escapeAttr(qk)}">
+          <div class="jrv-pending-who">
+            <div>
+              <div class="jrv-pending-name">${escapeHtml(name)}</div>
+              <div class="jrv-pending-meta">${escapeHtml(meta)}${phaseHint}</div>
+            </div>
+          </div>
+          <div class="jrv-pending-draft">
+            <div class="jrv-pending-subject">Subject: ${escapeHtml(subj)}</div>
+            <div class="jrv-pending-body">${escapeHtml(draftBody)}</div>
+          </div>
+          <div class="jrv-pending-actions">
+            <button class="jrv-pending-btn approve" onclick="jrvCadenceAction('${escapeAttr(qk)}', 'approve', this)" title="Send via Outlook now">✓ Approve &amp; Send</button>
+            <button class="jrv-pending-btn skip" onclick="jrvCadenceAction('${escapeAttr(qk)}', 'cancel', this)" title="Skip this one, re-draft next tick">Skip</button>
+            <button class="jrv-pending-btn reject" onclick="jrvCadenceAction('${escapeAttr(qk)}', 'reject', this)" title="Switch to soft monthly cadence (no auto-stop)">Reject &rarr; Monthly</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    pendingHtml = `
+      <div class="jrv-pending-section">
+        <div class="jrv-pending-header">
+          <span class="jrv-pending-title">Pending Reviews</span>
+          <span class="jrv-pending-count">${pending.length}</span>
+        </div>
+        ${pendingCards}
+      </div>
+    `;
+  }
+  body.innerHTML = pendingHtml + (groupsHtml || '<div class="jrv-inseq-empty">No one currently in sequence.</div>');
+}
+
+async function jrvCadenceAction(queueKey, action, btn) {
+  if (!queueKey || !action) return;
+  const card = btn ? btn.closest('.jrv-pending-card') : null;
+  if (card) card.querySelectorAll('button').forEach(b => b.disabled = true);
+  if (btn) btn.textContent = action === 'approve' ? 'Sending…' : (action === 'reject' ? 'Switching…' : 'Skipping…');
+  try {
+    const url = `${JRV_CONFIG.INSEQ_CADENCE_ACTION_URL}?queue_key=${encodeURIComponent(queueKey)}&action=${encodeURIComponent(action)}`;
+    const res = await fetch(url, { method: 'GET' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    // Remove from state + re-render
+    jrvInSeqState.records = (jrvInSeqState.records || []).map(r => {
+      if ((r.key || '') === queueKey) {
+        return { ...r, pending_review: false, cadence_state: action === 'approve' ? 'sent' : (action === 'reject' ? 'monthly' : 'skipped'), cadence_phase: action === 'reject' ? 'monthly' : (r.cadence_phase || '') };
+      }
+      return r;
+    });
+    jrvRenderInSeq();
+  } catch (e) {
+    console.error('[InSeq cadence] action failed:', e);
+    if (card) card.querySelectorAll('button').forEach(b => b.disabled = false);
+    alert('Cadence action failed: ' + (e.message || ''));
+  }
 }
 
 async function jrvRemoveFromSeq(queueKey, rcrmContactId, btn) {
