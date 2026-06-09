@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0608-A-DRAFTV2 -->
+<!-- ELEVATE-2026-0609-B-INSEQ-STAGE1 -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -657,6 +657,45 @@
   .jrv-transcript-reply::before { content:"⊳ "; color: var(--gold); font-weight:700; }
 
   .jrv-stage-row { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background: var(--dark3); border:1px solid var(--border); border-radius:6px; font-family:'Consolas', monospace; font-size:12px; transition: all 0.2s; cursor: default; }
+  .jrv-stage-row.jrv-stage-clickable { cursor: pointer; }
+  .jrv-stage-row.jrv-stage-clickable:hover { background: rgba(200,130,10,0.12); border-color: rgba(200,130,10,0.5); }
+  .jrv-stage-row.jrv-stage-clickable:hover .jrv-stage-label { color: var(--gold); }
+
+  /* In Sequence modal */
+  .jrv-inseq-group { margin-top: 18px; }
+  .jrv-inseq-group:first-child { margin-top: 0; }
+  .jrv-inseq-group-head { display:flex; align-items:center; gap:10px; padding:8px 4px 8px 4px; border-bottom:1px solid var(--border); margin-bottom:10px; }
+  .jrv-inseq-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; box-shadow: 0 0 6px currentColor; }
+  .jrv-inseq-dot.green { background:#10b981; color:#10b981; }
+  .jrv-inseq-dot.yellow { background:#eab308; color:#eab308; }
+  .jrv-inseq-dot.red { background:#ef4444; color:#ef4444; }
+  .jrv-inseq-group-label { font-family:'Consolas', monospace; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color: var(--text-muted); flex:1; }
+  .jrv-inseq-group-count { font-family:'Consolas', monospace; font-size:11px; color: var(--text-muted); padding:2px 8px; background: var(--dark3); border-radius:10px; }
+  .jrv-inseq-group-action { background: rgba(200,130,10,0.12); border:1px solid rgba(200,130,10,0.4); color: var(--gold); font-size:10px; font-family:'Consolas', monospace; padding:5px 10px; border-radius:4px; cursor:pointer; letter-spacing:0.06em; }
+  .jrv-inseq-group-action:hover:not(:disabled) { background: rgba(200,130,10,0.2); }
+  .jrv-inseq-group-action:disabled { opacity:0.4; cursor:not-allowed; }
+  .jrv-inseq-row { display:flex; align-items:flex-start; gap:10px; padding:10px 8px; border-radius:6px; transition: background 0.15s; }
+  .jrv-inseq-row:hover { background: var(--dark3); }
+  .jrv-inseq-row + .jrv-inseq-row { border-top:1px solid rgba(255,255,255,0.04); }
+  .jrv-inseq-info { flex:1; min-width:0; }
+  .jrv-inseq-name { font-weight:600; color: var(--text); font-size:13px; }
+  .jrv-inseq-meta { font-size:11px; color: var(--text-muted); margin-top:2px; }
+  .jrv-inseq-when { font-family:'Consolas', monospace; font-size:10px; color: var(--text-muted); margin-top:3px; letter-spacing:0.04em; }
+  .jrv-inseq-stage { background: rgba(124,58,237,0.15); color:#a78bfa; font-family:'Consolas', monospace; font-size:10px; padding:3px 8px; border-radius:10px; letter-spacing:0.06em; align-self:flex-start; white-space:nowrap; }
+  .jrv-inseq-stage.outlook { background: rgba(16,185,129,0.15); color:#10b981; }
+  .jrv-inseq-remove { background: transparent; border:1px solid rgba(239,68,68,0.4); color:#ef4444; font-size:14px; line-height:1; width:24px; height:24px; border-radius:50%; cursor:pointer; padding:0; flex-shrink:0; }
+  .jrv-inseq-remove:hover:not(:disabled) { background: rgba(239,68,68,0.15); }
+  .jrv-inseq-remove:disabled { opacity:0.4; cursor:not-allowed; }
+  .jrv-inseq-modal .jrv-modal { max-width: 720px; max-height: 86vh; }
+  .jrv-inseq-empty { padding:24px; text-align:center; color: var(--text-muted); font-size:13px; }
+
+  /* Review gate stub modal */
+  .jrv-review-modal .jrv-modal { max-width: 560px; }
+  .jrv-review-stub { padding:20px; color: var(--text-muted); font-size:13px; line-height:1.5; }
+  .jrv-review-stub-actions { margin-top:16px; display:flex; gap:8px; justify-content:flex-end; }
+  .jrv-review-stub-cancel { background: transparent; border:1px solid var(--border); color: var(--text-muted); padding:8px 16px; border-radius:5px; cursor:pointer; font-size:12px; }
+  .jrv-review-stub-approve { background: var(--gold); color: #000; border:none; padding:8px 16px; border-radius:5px; cursor:pointer; font-size:12px; font-weight:600; }
+  .jrv-review-stub-approve:disabled { opacity:0.5; cursor:not-allowed; }
   .jrv-stage-row:hover { border-color: var(--gold); }
   .jrv-stage-label { color: var(--text); letter-spacing:0.08em; }
   .jrv-stage-count { color: var(--gold); font-weight:700; font-size:13px; }
@@ -993,9 +1032,7 @@
         </div>
         <div class="jrv-rail-title" style="margin-top:14px;">Pipeline</div>
         <div class="jrv-stage-row" id="jrvStageNew"><span class="jrv-stage-label">NEW LEAD</span><span class="jrv-stage-count">—</span></div>
-        <div class="jrv-stage-row" id="jrvStageStaged"><span class="jrv-stage-label">STAGED</span><span class="jrv-stage-count">—</span></div>
-        <div class="jrv-stage-row" id="jrvStageEnrolled"><span class="jrv-stage-label">IN SEQUENCE</span><span class="jrv-stage-count">—</span></div>
-        <div class="jrv-stage-row" id="jrvStageApproved"><span class="jrv-stage-label">APPROVED</span><span class="jrv-stage-count">—</span></div>
+        <div class="jrv-stage-row jrv-stage-clickable" id="jrvStageEnrolled" onclick="jrvOpenInSeqModal()" title="Click to view everyone currently in sequence"><span class="jrv-stage-label">IN SEQUENCE</span><span class="jrv-stage-count">—</span></div>
         <!-- ACTIVE CLIENT — expandable traffic-light list (jrv-ac- component, self-contained) -->
         <div class="jrv-ac-root">
           <div class="jrv-ac-row" id="jrvAcRow">
@@ -1780,23 +1817,92 @@ function hsToggleDraft(queueKey, cardEl) {
   if (btn) btn.textContent = hsDrafts[queueKey] ? '✉ Show Draft' : '✉ Draft Email';
 }
 
+// One-click Send via Outlook: email out → RCRM (company + contact + note, sequence
+// enrollment skipped via blank sequence_id) → background ZoomInfo enrichment.
+// Calls the SAME Approval Handler webhook that submitOne/submitQueue use, with
+// the SAME buildPayload mapping, so both paths can never drift on field shape.
 async function hsSendOutlook(queueKey, btn) {
   if (!queueKey) return;
-  if (!confirm('Send this email via Outlook now?')) return;
+  const c = (queueContacts || []).find(x => x && x.key === queueKey);
+  if (!c) {
+    console.error('[HS Send] No contact found for key', queueKey);
+    alert('Contact not loaded in queue. Refresh and try again.');
+    return;
+  }
+  if (!confirm('Send the email via Outlook, write contact + company + note to RCRM, and enrich in background?')) return;
+
   btn.disabled = true;
-  btn.textContent = 'Sending…';
+  btn.textContent = '1/3 Sending email…';
+
+  // Step 1 — send the email. Do not block on enrichment.
   try {
     const url = `${HS_SEND_OUTLOOK}?queue_key=${encodeURIComponent(queueKey)}`;
-    const res = await fetch(url, { method: 'GET' });
-    if (!res.ok) throw new Error('Send failed: ' + res.status);
-    btn.textContent = '✓ Sent';
-    btn.classList.add('sent');
+    const r = await fetch(url, { method: 'GET' });
+    if (!r.ok) throw new Error('Outlook send HTTP ' + r.status);
   } catch (e) {
-    console.error('[HS] Send error:', e);
+    console.error('[HS Send] Email failed:', e);
     btn.disabled = false;
     btn.textContent = 'Send via Outlook';
-    alert('Send failed: ' + e.message);
+    alert('Email send failed: ' + e.message + '\n\nNothing was written to RCRM. Try again.');
+    return;
   }
+
+  // Step 2 — write to RCRM via the SAME Approval Handler path, with sequence
+  // enrollment suppressed (sequence_id="" trips the Wave 8 enroll filter).
+  btn.textContent = '2/3 Logging to RCRM…';
+  const payload = buildPayload(c);
+  payload.decision = 'approve';
+  payload.sequence_id = '';
+  payload.sequence_name = 'Outlook Direct - No Sequence';
+  payload.data_collection_source = payload.data_collection_source || 'Outlook Direct Send';
+  try {
+    const resp = await fetch(APPROVAL_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const txt = await resp.text();
+    console.log('[HS Send] Approval Handler HTTP ' + resp.status + ' | ' + txt.slice(0, 300));
+    if (!resp.ok) throw new Error('Approval Handler HTTP ' + resp.status);
+  } catch (e) {
+    console.error('[HS Send] RCRM write failed:', e);
+    btn.disabled = false;
+    btn.textContent = '⚠ Email sent, RCRM failed — retry';
+    btn.classList.add('failed');
+    alert('Email went out but the RCRM write failed:\n' + e.message + '\n\nClick again to retry the RCRM step. The email will NOT re-send (already at the recipient).');
+    return;
+  }
+
+  // Step 3 — fire ZoomInfo enrichment in background. Never await this — a slow
+  // or failing ZoomInfo call must not block the UI. The enrich scenario writes
+  // back to the queue datastore on success; RCRM company can be backfilled
+  // either by re-running submit later or by a future enrich-to-rcrm bridge.
+  btn.textContent = '3/3 Queueing enrichment…';
+  try {
+    fetch(ENRICH_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: c.key,
+        zi_company_id: deriveZiCompanyId(c),
+        company_name: c.company_name || '',
+        company_industry: c.company_industry || '',
+        company_website: c.company_website || '',
+        employee_count: c.employee_count || '',
+        contact_city: c.contact_city || '',
+        contact_state: c.contact_state || '',
+        contact_country: c.contact_country || '',
+        trigger: 'outlook_send_background'
+      })
+    }).catch(e => console.warn('[HS Send] Background enrich failed (non-fatal):', e));
+  } catch (e) {
+    console.warn('[HS Send] Background enrich threw (non-fatal):', e);
+  }
+
+  btn.textContent = '✓ Sent + RCRM';
+  btn.classList.add('sent');
+  c.email_status = 'sent';
+  c.outlook_status = 'sent';
 }
 
 async function initQueue() {
@@ -1945,8 +2051,8 @@ function renderQueue() {
         </div>` : ''}
         ${c.about_company ? `<div class="about-company-box">📋 ${escapeHtml(c.about_company)}</div>` : `
         <div class="about-company-missing">
-          <span style="flex:1">No company info — enrichment pending</span>
-          <button class="btn-enrich" id="enrichBtn${i}" onclick="enrichContact(${i})">⚡ Enrich Now</button>
+          <span style="flex:1">No company info yet (Send via Outlook will enrich automatically)</span>
+          <button class="btn-enrich" id="enrichBtn${i}" onclick="enrichContact(${i})" title="Optional: enrich now before deciding. Sending via Outlook also triggers enrichment automatically.">⚡ Enrich Now (optional)</button>
         </div>`}
       </div>`;
   }).join('');
@@ -2648,6 +2754,11 @@ const JRV_CONFIG = {
   // and flips archived=true on terminal stages so the card drops from view.
   TENDER_FETCH_URL:  'https://hook.us2.make.com/9xjtewlkvkwp4mex887ff8y1jf4xw92k',
   TENDER_UPDATE_URL: 'https://hook.us2.make.com/33a8rqo3dv8we4ppavsqt34znvwjbdda',
+  // In Sequence panel (Stage 1) — Fetch (scenario 5336216) returns all queue records
+  // where in_sequence=true OR outlook_status=sent. Remove (scenario 5336221) posts to
+  // RCRM /v1/contacts/{slug}/un-enroll and marks the queue record removed.
+  INSEQ_FETCH_URL:  'https://hook.us2.make.com/6rhawvrqij4ukbnctjsedfvl8kbw9imr',
+  INSEQ_REMOVE_URL: 'https://hook.us2.make.com/7ro4ws2slxxllh9ld3u9ypqegktbm4aa',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -5171,6 +5282,213 @@ function jrvRenderStages() {
   }
 }
 
+// ═══════════════════════ IN SEQUENCE PANEL (Stage 1) ═══════════════════════
+// Aggregates queue datastore records where in_sequence=true OR outlook_status=sent
+// (via Make scenario 5336216 / INSEQ_FETCH_URL), groups by recency dot, and lets
+// you remove a contact via In Sequence Remove (5336221) which un-enrolls in RCRM
+// and flips the queue record's in_sequence to false.
+//
+// Recency = most recent of outlook_sent_at | last_communication | approved_at.
+// Stage 2 will add a per-contact Microsoft Graph mailbox scan (Mail.ReadWrite
+// scope is granted on connection 8250656, verified 2026-06-09).
+let jrvInSeqState = { records: [], loading: false };
+
+function jrvOpenInSeqModal() {
+  const modal = document.getElementById('jrvInSeqModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  jrvFetchInSeq();
+}
+
+function jrvCloseInSeqModal() {
+  const modal = document.getElementById('jrvInSeqModal');
+  if (!modal) return;
+  modal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function jrvFetchInSeq() {
+  const body = document.getElementById('jrvInSeqBody');
+  const countEl = document.getElementById('jrvInSeqCount');
+  if (!body) return;
+  if (jrvInSeqState.loading) return;
+  jrvInSeqState.loading = true;
+  body.innerHTML = '<div class="jrv-inseq-empty">Loading…</div>';
+  if (countEl) countEl.textContent = 'loading…';
+  try {
+    const res = await fetch(JRV_CONFIG.INSEQ_FETCH_URL, { method: 'GET' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const raw = Array.isArray(json) ? json : (json.records || json.data || []);
+    // Unwrap Make BasicAggregator wrapper: each item is {aggregate: {...}, group: ""}.
+    // (See feedback-make-iml-field-access memory and the queue Fetch pattern at index.html:1825.)
+    const records = raw.map(r => (r && r.aggregate) ? r.aggregate : r)
+                       .filter(r => r && (r.contact_name || r.contact_email))
+                       // Exclude already-removed and active clients (those aren't "in sequence")
+                       .filter(r => {
+                         if (r.removed_from_sequence === true || r.removed_from_sequence === 'true') return false;
+                         if (r.is_client === true || r.is_client === 'true') return false;
+                         return true;
+                       });
+    jrvInSeqState.records = records;
+    jrvRenderInSeq();
+  } catch (e) {
+    console.error('[InSeq] fetch error:', e);
+    body.innerHTML = '<div class="jrv-inseq-empty">Could not load. ' + escapeHtml(e.message || '') + '</div>';
+    if (countEl) countEl.textContent = 'error';
+  } finally {
+    jrvInSeqState.loading = false;
+  }
+}
+
+function jrvInSeqLastContactDate(r) {
+  // Most recent of the three fields we have today. Stage 2 will add Graph mailbox lookup.
+  const candidates = [r.outlook_sent_at, r.last_communication, r.approved_at]
+    .map(v => v ? Date.parse(v) : NaN)
+    .filter(t => !isNaN(t));
+  if (!candidates.length) return null;
+  return new Date(Math.max(...candidates));
+}
+
+function jrvInSeqRecency(r) {
+  const last = jrvInSeqLastContactDate(r);
+  if (!last) return { color: 'green', daysAgo: null, label: 'just added' };
+  const days = Math.floor((Date.now() - last.getTime()) / 86400000);
+  let color = 'red';
+  if (days <= 14) color = 'green';
+  else if (days <= 30) color = 'yellow';
+  const label = days === 0 ? 'today' : (days === 1 ? '1 day ago' : days + ' days ago');
+  return { color, daysAgo: days, label };
+}
+
+function jrvInSeqStageBadge(r) {
+  // Outlook-direct sends show "Outlook"; RCRM-enrolled show their sequence step if available.
+  const seq = (r.active_sequence_name || r.sequence_name || '').trim();
+  if (r.outlook_status === 'sent' && (!r.in_sequence || r.in_sequence === 'false')) {
+    return { text: 'Outlook', cls: 'outlook' };
+  }
+  if (/REMOVED/i.test(seq)) return { text: 'Removed', cls: '' };
+  if (!seq) return { text: 'In Sequence', cls: '' };
+  // Take a short slice — "Email 2", "Step 3", etc. If the name is long, truncate.
+  return { text: seq.length > 28 ? seq.slice(0, 26) + '…' : seq, cls: '' };
+}
+
+function jrvRenderInSeq() {
+  const body = document.getElementById('jrvInSeqBody');
+  const countEl = document.getElementById('jrvInSeqCount');
+  if (!body) return;
+  const records = jrvInSeqState.records || [];
+  if (!records.length) {
+    body.innerHTML = '<div class="jrv-inseq-empty">No one currently in sequence.</div>';
+    if (countEl) countEl.textContent = '0';
+    return;
+  }
+  // Group + sort
+  const buckets = { green: [], yellow: [], red: [] };
+  for (const r of records) {
+    const rec = jrvInSeqRecency(r);
+    buckets[rec.color].push({ r, rec });
+  }
+  // Within yellow/red, oldest-first (most overdue surfaces first)
+  const byDaysDesc = (a, b) => (b.rec.daysAgo || 0) - (a.rec.daysAgo || 0);
+  buckets.yellow.sort(byDaysDesc);
+  buckets.red.sort(byDaysDesc);
+  // Within green, newest-first feels right
+  buckets.green.sort((a, b) => (a.rec.daysAgo || 0) - (b.rec.daysAgo || 0));
+
+  if (countEl) countEl.textContent = String(records.length);
+
+  const groupOrder = [
+    { color: 'green',  label: 'Recently contacted (1–14 days)' },
+    { color: 'yellow', label: 'Getting stale (15–30 days)' },
+    { color: 'red',    label: 'Overdue (31+ days)' },
+  ];
+  const groupsHtml = groupOrder.map(g => {
+    const items = buckets[g.color];
+    if (!items.length) return '';
+    const showReengage = (g.color === 'yellow' || g.color === 'red');
+    const rowsHtml = items.map(({ r, rec }) => {
+      const name = (r.contact_name || r.contact_email || 'Unknown').trim();
+      const title = (r.contact_title || '').trim();
+      const company = (r.company_name || '').trim();
+      const meta = [title, company].filter(Boolean).join(', ');
+      const stage = jrvInSeqStageBadge(r);
+      const qk = r.key || '';
+      const rcrmId = r.rcrm_contact_id || '';
+      return `
+        <div class="jrv-inseq-row" data-key="${escapeAttr(qk)}">
+          <span class="jrv-inseq-dot ${g.color}" title="Last contact: ${escapeAttr(rec.label)}"></span>
+          <div class="jrv-inseq-info">
+            <div class="jrv-inseq-name">${escapeHtml(name)}</div>
+            ${meta ? `<div class="jrv-inseq-meta">${escapeHtml(meta)}</div>` : ''}
+            <div class="jrv-inseq-when">Last contact ${escapeHtml(rec.label)}</div>
+          </div>
+          <span class="jrv-inseq-stage ${stage.cls}">${escapeHtml(stage.text)}</span>
+          <button class="jrv-inseq-remove" onclick="jrvRemoveFromSeq('${escapeAttr(qk)}','${escapeAttr(rcrmId)}', this)" title="Un-enroll from sequence (RCRM /un-enroll + queue update)">×</button>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="jrv-inseq-group">
+        <div class="jrv-inseq-group-head">
+          <span class="jrv-inseq-dot ${g.color}"></span>
+          <span class="jrv-inseq-group-label">${escapeHtml(g.label)}</span>
+          <span class="jrv-inseq-group-count">${items.length}</span>
+          ${showReengage ? `<button class="jrv-inseq-group-action" onclick="jrvDraftReengageStub('${g.color}')" title="Stage 3 will wire the bulk re-engagement drafter">Draft re-engagement to all</button>` : ''}
+        </div>
+        ${rowsHtml}
+      </div>
+    `;
+  }).join('');
+  body.innerHTML = groupsHtml || '<div class="jrv-inseq-empty">No one currently in sequence.</div>';
+}
+
+async function jrvRemoveFromSeq(queueKey, rcrmContactId, btn) {
+  if (!queueKey) return;
+  if (!confirm('Un-enroll this contact from the sequence?\n\nThis posts to RCRM /v1/contacts/' + (rcrmContactId || '(no slug)') + '/un-enroll and removes them from this panel.')) return;
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const url = `${JRV_CONFIG.INSEQ_REMOVE_URL}?queue_key=${encodeURIComponent(queueKey)}&rcrm_contact_id=${encodeURIComponent(rcrmContactId || '')}`;
+    const res = await fetch(url, { method: 'GET' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    // Mark removed in local state and re-render
+    jrvInSeqState.records = jrvInSeqState.records.filter(r => (r.key || '') !== queueKey);
+    jrvRenderInSeq();
+  } catch (e) {
+    console.error('[InSeq] remove error:', e);
+    if (btn) { btn.disabled = false; btn.textContent = '×'; }
+    alert('Remove failed: ' + (e.message || ''));
+  }
+}
+
+function jrvDraftReengageStub(color) {
+  // Stage 1 stub. Stage 3 wires the bulk re-engagement drafter that routes through
+  // the review-gate modal (jrvOpenReviewGate / jrvCloseReviewGate).
+  console.log('[InSeq] Draft re-engagement to all (' + color + ') — Stage 3 wires this.');
+  jrvOpenReviewGate({ mode: 'reengage-bulk', color });
+}
+
+// ═══════════════════════ REVIEW GATE STUB (Stage 3 will wire) ═══════════════════════
+// All future sequence sends route through this gate. Stage 3 fills in the live draft
+// preview + approve/cancel. Stage 1 just opens the scaffold modal.
+function jrvOpenReviewGate(ctx) {
+  const modal = document.getElementById('jrvReviewGateModal');
+  if (!modal) return;
+  const body = document.getElementById('jrvReviewStubBody');
+  if (body && ctx) {
+    body.textContent = 'Review gate is scaffolded. Stage 3 will populate the draft preview and wire approve/cancel. Trigger: ' + (ctx.mode || 'unknown') + (ctx.color ? ' (' + ctx.color + ')' : '') + '.';
+  }
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function jrvCloseReviewGate() {
+  const modal = document.getElementById('jrvReviewGateModal');
+  if (!modal) return;
+  modal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
 function jrvRenderRecent(records) {
   const log = document.getElementById('jrvLog');
   if (!log) return;
@@ -5366,6 +5684,38 @@ document.addEventListener('DOMContentLoaded', function() {
       <button class="jrv-news-modal-close" onclick="jrvCloseNewsModal()" aria-label="Close">&times;</button>
     </div>
     <div class="jrv-news-modal-body" id="jrvNewsModalList"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ IN SEQUENCE MODAL (Stage 1) ═══════════════════════ -->
+<div id="jrvInSeqModal" class="jrv-modal-overlay jrv-inseq-modal" style="display:none;" onclick="if(event.target===this) jrvCloseInSeqModal()">
+  <div class="jrv-modal">
+    <div class="jrv-modal-head">
+      <div class="jrv-modal-title">IN SEQUENCE · <span id="jrvInSeqCount" style="color:var(--text-muted);">loading…</span></div>
+      <button class="jrv-modal-close" onclick="jrvCloseInSeqModal()" aria-label="Close">×</button>
+    </div>
+    <div class="jrv-modal-body" id="jrvInSeqBody">
+      <div class="jrv-inseq-empty">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ REVIEW GATE STUB (Stage 3 will wire) ═══════════════════════ -->
+<div id="jrvReviewGateModal" class="jrv-modal-overlay jrv-review-modal" style="display:none;" onclick="if(event.target===this) jrvCloseReviewGate()">
+  <div class="jrv-modal">
+    <div class="jrv-modal-head">
+      <div class="jrv-modal-title">REVIEW BEFORE SEND</div>
+      <button class="jrv-modal-close" onclick="jrvCloseReviewGate()" aria-label="Close">×</button>
+    </div>
+    <div class="jrv-modal-body">
+      <div class="jrv-review-stub" id="jrvReviewStubBody">
+        Review gate is scaffolded but not yet wired. Stage 3 fills this with the drafted email and live approve/cancel actions.
+      </div>
+      <div class="jrv-review-stub-actions">
+        <button class="jrv-review-stub-cancel" onclick="jrvCloseReviewGate()">Cancel</button>
+        <button class="jrv-review-stub-approve" disabled title="Wires in Stage 3">Approve & Send</button>
+      </div>
+    </div>
   </div>
 </div>
 
