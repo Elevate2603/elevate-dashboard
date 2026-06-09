@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0609-C-INSEQ-THREADS -->
+<!-- ELEVATE-2026-0609-D-INSEQ-PHASE1 -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -686,8 +686,26 @@
   .jrv-inseq-remove { background: transparent; border:1px solid rgba(239,68,68,0.4); color:#ef4444; font-size:14px; line-height:1; width:24px; height:24px; border-radius:50%; cursor:pointer; padding:0; flex-shrink:0; }
   .jrv-inseq-remove:hover:not(:disabled) { background: rgba(239,68,68,0.15); }
   .jrv-inseq-remove:disabled { opacity:0.4; cursor:not-allowed; }
-  .jrv-inseq-modal .jrv-modal { max-width: 720px; max-height: 86vh; }
+  .jrv-inseq-modal .jrv-modal { max-width: 760px; max-height: 86vh; }
   .jrv-inseq-empty { padding:24px; text-align:center; color: var(--text-muted); font-size:13px; }
+
+  /* Search bar */
+  .jrv-inseq-searchbar { padding:12px 24px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; position:sticky; top:0; background: var(--dark2); z-index:2; }
+  .jrv-inseq-search-input { flex:1; background: var(--dark3); border:1px solid var(--border); color: var(--text); padding:8px 12px; border-radius:5px; font-size:13px; font-family: inherit; }
+  .jrv-inseq-search-input::placeholder { color: var(--text-muted); }
+  .jrv-inseq-search-input:focus { outline:none; border-color: var(--gold); background: var(--dark); }
+  .jrv-inseq-search-clear { background:transparent; border:1px solid var(--border); color: var(--text-muted); cursor:pointer; padding:6px 10px; border-radius:4px; font-size:11px; font-family: inherit; }
+  .jrv-inseq-search-clear:hover { color: var(--text); border-color: var(--text-muted); }
+
+  /* Reach-out count + reply + bounce badges */
+  .jrv-inseq-reach { font-family:'Consolas', monospace; font-size:10px; padding:3px 7px; background: rgba(255,255,255,0.05); color: var(--text-muted); border-radius:8px; letter-spacing:0.04em; white-space:nowrap; }
+  .jrv-inseq-reach.gt2 { background: rgba(200,130,10,0.12); color: var(--gold); }
+  .jrv-inseq-reply { background: #10b981; color:#fff; font-family:'Consolas', monospace; font-size:10px; padding:3px 8px; border-radius:10px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; box-shadow:0 0 4px rgba(16,185,129,0.5); }
+  .jrv-inseq-bounce { background:#dc2626; color:#fff; font-family:'Consolas', monospace; font-size:10px; padding:3px 8px; border-radius:10px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; }
+  .jrv-inseq-track { font-family:'Consolas', monospace; font-size:9px; padding:2px 6px; border-radius:8px; letter-spacing:0.08em; text-transform:uppercase; }
+  .jrv-inseq-track.automated { background: rgba(124,58,237,0.15); color:#a78bfa; }
+  .jrv-inseq-track.manual { background: rgba(16,185,129,0.12); color:#34d399; }
+  .jrv-inseq-badges { display:flex; flex-wrap:wrap; gap:5px; align-items:center; margin-top:4px; }
 
   /* Thread view (click name → expand) */
   .jrv-inseq-row-wrap { display: flex; flex-direction: column; }
@@ -5315,7 +5333,33 @@ function jrvRenderStages() {
 // Recency = most recent of outlook_sent_at | last_communication | approved_at.
 // Stage 2 will add a per-contact Microsoft Graph mailbox scan (Mail.ReadWrite
 // scope is granted on connection 8250656, verified 2026-06-09).
-let jrvInSeqState = { records: [], loading: false };
+let jrvInSeqState = { records: [], loading: false, searchTerm: '' };
+
+function jrvInSeqOnSearch(value) {
+  jrvInSeqState.searchTerm = String(value || '').trim().toLowerCase();
+  jrvRenderInSeq();
+}
+function jrvInSeqClearSearch() {
+  const input = document.getElementById('jrvInSeqSearch');
+  if (input) input.value = '';
+  jrvInSeqState.searchTerm = '';
+  jrvRenderInSeq();
+}
+function jrvInSeqMatchesSearch(r) {
+  const term = jrvInSeqState.searchTerm;
+  if (!term) return true;
+  const hay = ((r.contact_name || '') + ' ' + (r.company_name || '') + ' ' + (r.contact_title || '')).toLowerCase();
+  return hay.includes(term);
+}
+
+// Track: contacts in an RCRM sequence are "automated" (auto-cadence in Phase 2).
+// Contacts emailed via Outlook from the queue without an active sequence are "manual"
+// — they are tracked here but never auto-sent to; Travis drives every follow-up.
+function jrvInSeqTrack(r) {
+  const seq = String(r.active_sequence_name || r.sequence_name || '').trim();
+  const inSeq = (r.in_sequence === true || r.in_sequence === 'true') && seq && !/REMOVED/i.test(seq);
+  return inSeq ? 'automated' : 'manual';
+}
 
 function jrvOpenInSeqModal() {
   const modal = document.getElementById('jrvInSeqModal');
@@ -5402,15 +5446,23 @@ function jrvRenderInSeq() {
   const body = document.getElementById('jrvInSeqBody');
   const countEl = document.getElementById('jrvInSeqCount');
   if (!body) return;
-  const records = jrvInSeqState.records || [];
-  if (!records.length) {
+  const all = jrvInSeqState.records || [];
+  const filtered = all.filter(jrvInSeqMatchesSearch);
+  const totalForCount = jrvInSeqState.searchTerm
+    ? filtered.length + ' / ' + all.length
+    : String(all.length);
+  if (countEl) countEl.textContent = totalForCount;
+  if (!all.length) {
     body.innerHTML = '<div class="jrv-inseq-empty">No one currently in sequence.</div>';
-    if (countEl) countEl.textContent = '0';
+    return;
+  }
+  if (!filtered.length) {
+    body.innerHTML = '<div class="jrv-inseq-empty">No matches for "' + escapeHtml(jrvInSeqState.searchTerm) + '". Clear the search to see everyone.</div>';
     return;
   }
   // Group + sort
   const buckets = { green: [], yellow: [], red: [] };
-  for (const r of records) {
+  for (const r of filtered) {
     const rec = jrvInSeqRecency(r);
     buckets[rec.color].push({ r, rec });
   }
@@ -5420,8 +5472,6 @@ function jrvRenderInSeq() {
   buckets.red.sort(byDaysDesc);
   // Within green, newest-first feels right
   buckets.green.sort((a, b) => (a.rec.daysAgo || 0) - (b.rec.daysAgo || 0));
-
-  if (countEl) countEl.textContent = String(records.length);
 
   const groupOrder = [
     { color: 'green',  label: 'Recently contacted (1–14 days)' },
@@ -5442,6 +5492,15 @@ function jrvRenderInSeq() {
       const qk = r.key || '';
       const rcrmId = r.rcrm_contact_id || '';
       const threadId = 'jrvThread_' + qk.replace(/[^a-z0-9_-]/gi, '_');
+      const track = jrvInSeqTrack(r);
+      const reachCount = Number(r.reach_out_count || 0);
+      const reachLabel = reachCount === 0 ? '0 reach-outs'
+                       : reachCount === 1 ? '1 reach-out'
+                       : reachCount + ' reach-outs';
+      const reachCls = reachCount >= 2 ? ' gt2' : '';
+      const hasReplied = (r.has_replied === true || r.has_replied === 'true');
+      const bounced = (r.bounced === true || r.bounced === 'true');
+      const bounceReason = (r.bounce_reason || '').trim();
       return `
         <div class="jrv-inseq-row-wrap">
           <div class="jrv-inseq-row" data-key="${escapeAttr(qk)}">
@@ -5449,6 +5508,12 @@ function jrvRenderInSeq() {
             <div class="jrv-inseq-info">
               <div class="jrv-inseq-name" onclick="jrvToggleThread('${escapeAttr(email)}','${threadId}', this)" title="Click to see recent emails">${escapeHtml(name)}</div>
               ${meta ? `<div class="jrv-inseq-meta">${escapeHtml(meta)}</div>` : ''}
+              <div class="jrv-inseq-badges">
+                <span class="jrv-inseq-track ${track}" title="${track === 'automated' ? 'In an RCRM sequence — auto-cadence (Phase 2)' : 'Manual track — never auto-sent; you drive every follow-up'}">${track === 'automated' ? '⚙ Auto' : '✋ Manual'}</span>
+                <span class="jrv-inseq-reach${reachCls}" title="Outbound emails to this contact (Outlook sent items + Emailed notes)">${reachLabel}</span>
+                ${hasReplied ? `<span class="jrv-inseq-reply" title="Genuine human reply detected (auto-replies excluded)">Replied</span>` : ''}
+                ${bounced ? `<span class="jrv-inseq-bounce" title="${escapeAttr(bounceReason || 'Hard bounce detected — auto-removed from sequence, RCRM note logged')}">⚠ Bounced</span>` : ''}
+              </div>
               <div class="jrv-inseq-when">Last contact ${escapeHtml(rec.label)}</div>
             </div>
             <span class="jrv-inseq-stage ${stage.cls}">${escapeHtml(stage.text)}</span>
@@ -5788,12 +5853,16 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
-<!-- ═══════════════════════ IN SEQUENCE MODAL (Stage 1) ═══════════════════════ -->
+<!-- ═══════════════════════ IN SEQUENCE MODAL (Stage 1+2) ═══════════════════════ -->
 <div id="jrvInSeqModal" class="jrv-modal-overlay jrv-inseq-modal" style="display:none;" onclick="if(event.target===this) jrvCloseInSeqModal()">
   <div class="jrv-modal">
     <div class="jrv-modal-head">
       <div class="jrv-modal-title">IN SEQUENCE · <span id="jrvInSeqCount" style="color:var(--text-muted);">loading…</span></div>
       <button class="jrv-modal-close" onclick="jrvCloseInSeqModal()" aria-label="Close">×</button>
+    </div>
+    <div class="jrv-inseq-searchbar">
+      <input type="text" id="jrvInSeqSearch" class="jrv-inseq-search-input" placeholder="Search by name, company, or title…" oninput="jrvInSeqOnSearch(this.value)" autocomplete="off">
+      <button class="jrv-inseq-search-clear" onclick="jrvInSeqClearSearch()">Clear</button>
     </div>
     <div class="jrv-modal-body" id="jrvInSeqBody">
       <div class="jrv-inseq-empty">Loading…</div>
