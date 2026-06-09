@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0609-E-INSEQ-PHASE2 -->
+<!-- ELEVATE-2026-0609-F-INSEQ-PHASE3 -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2828,6 +2828,10 @@ const JRV_CONFIG = {
   // Approve fires Outlook Send + advances state. Cancel skips this round. Reject switches to monthly tone.
   // Cadence Tick (5337224) runs M-F 06:30, drafts 5 oldest-touched contacts per day and flips pending_review=true.
   INSEQ_CADENCE_ACTION_URL: 'https://hook.us2.make.com/6xgf8mp9pk5253w4t8mn9q8bvgukwilw',
+  // Phase 3 bulk re-engagement — fires one contact per call (POSTed in parallel from the
+  // 'Draft re-engagement to all' yellow/red header buttons). Each call drafts via 4955815
+  // and flips pending_review=true with cadence_phase='reengage' so Travis reviews them.
+  INSEQ_REENGAGE_URL: 'https://hook.us2.make.com/n1esfwog7mbacq86de46g3wdc8vt9ykn',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -5653,11 +5657,53 @@ async function jrvRemoveFromSeq(queueKey, rcrmContactId, btn) {
   }
 }
 
-function jrvDraftReengageStub(color) {
-  // Stage 1 stub. Stage 3 wires the bulk re-engagement drafter that routes through
-  // the review-gate modal (jrvOpenReviewGate / jrvCloseReviewGate).
-  console.log('[InSeq] Draft re-engagement to all (' + color + ') — Stage 3 wires this.');
-  jrvOpenReviewGate({ mode: 'reengage-bulk', color });
+// Phase 3 bulk re-engagement: fires one Re-engage One call per contact in the color
+// bucket (yellow or red). Each call drafts a fresh email and flips pending_review=true.
+// They land in the Pending Reviews section at the top of the modal where Travis
+// approves / skips / rejects.
+async function jrvDraftReengageStub(color) {
+  if (!color || (color !== 'yellow' && color !== 'red')) return;
+  const records = (jrvInSeqState.records || [])
+    .filter(r => !(r.removed_from_sequence === true || r.removed_from_sequence === 'true'))
+    .filter(r => !(r.is_client === true || r.is_client === 'true'))
+    .filter(r => !(r.pending_review === true || r.pending_review === 'true'))
+    .filter(r => {
+      const rec = jrvInSeqRecency(r);
+      return rec.color === color;
+    });
+  if (!records.length) {
+    alert('No ' + color + ' contacts to re-engage.');
+    return;
+  }
+  const label = color === 'red' ? 'overdue (31+ days)' : 'getting stale (15-30 days)';
+  if (!confirm('Draft re-engagement emails for all ' + records.length + ' ' + label + ' contacts?\n\nEach draft routes through the review gate at the top of this modal. You approve, skip, or reject each one before anything sends.')) return;
+
+  const btn = document.querySelector('.jrv-inseq-group .jrv-inseq-dot.' + color)
+              ?.closest('.jrv-inseq-group-head')
+              ?.querySelector('.jrv-inseq-group-action');
+  if (btn) { btn.disabled = true; btn.textContent = 'Drafting 0 / ' + records.length + '…'; }
+
+  let done = 0, failed = 0;
+  await Promise.all(records.map(async r => {
+    try {
+      const url = `${JRV_CONFIG.INSEQ_REENGAGE_URL}?queue_key=${encodeURIComponent(r.key || '')}`;
+      const res = await fetch(url, { method: 'GET' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      done++;
+    } catch (e) {
+      console.error('[InSeq reengage] failed for', r.key, e);
+      failed++;
+    }
+    if (btn) btn.textContent = 'Drafting ' + (done + failed) + ' / ' + records.length + '…';
+  }));
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = failed ? 'Draft re-engagement to all (' + failed + ' failed)' : 'Draft re-engagement to all';
+  }
+  // Refresh modal to show new pending reviews
+  jrvFetchInSeq();
+  if (failed) alert(failed + ' of ' + records.length + ' drafts failed. The rest are in Pending Reviews above.');
 }
 
 // Thread expansion: click contact name → Graph $search via INSEQ_THREAD_URL →
