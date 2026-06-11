@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-F-MANUAL-LEAD -->
+<!-- ELEVATE-2026-0611-G-AUTO-CLASSIFY -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2924,6 +2924,10 @@ const JRV_CONFIG = {
   // first send via Outlook (frontend fires PIPELINE_STAGE_MOVE_URL with
   // stage=in_sequence inside jrvSendDraftViaOutlook).
   MANUAL_LEAD_ADD_URL: 'https://hook.us2.make.com/bv66ntduff488fam82gwvg5ilvngfblk',
+  // Response Classifier (5360135) — reads queue for has_replied=true + response_state=empty,
+  // classifies the last_communication_subject via Anthropic Haiku as warm/cold/auto_reply,
+  // writes response_state + responded_at back to queue. Fire-and-forget after each fetch.
+  RESPONSE_CLASSIFY_URL: 'https://hook.us2.make.com/2img2evtp2xf1uqou2dlz2yxwoobmpsd',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -5698,6 +5702,12 @@ async function jrvFetchInSeq() {
     // Lazy slug resolution for any displayed contact missing rcrm_contact_id.
     // Fires per-email, throttled, session-cached, scoped to ONLY what's on screen.
     jrvResolveMissingSlugs(records, jrvRenderInSeq);
+    // Fire-and-forget classifier — Anthropic Haiku classifies any
+    // newly-replied contacts as warm / cold / auto_reply, writes back to queue.
+    // Idempotent server-side (filters has_replied=true + response_state=empty).
+    if (JRV_CONFIG.RESPONSE_CLASSIFY_URL) {
+      fetch(JRV_CONFIG.RESPONSE_CLASSIFY_URL, { method: 'GET' }).catch(() => {});
+    }
   } catch (e) {
     console.error('[InSeq] fetch error:', e);
     body.innerHTML = '<div class="jrv-inseq-empty">Could not load. ' + escapeHtml(e.message || '') + '</div>';
