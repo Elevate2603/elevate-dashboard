@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-N-SILENCE-AND-SILENT-LEAD -->
+<!-- ELEVATE-2026-0611-O-PERSONAL-CONTEXT -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -4966,72 +4966,66 @@ function jrvShowUI(ui) {
   else if (ui.type === 'manual_lead_prefill') jrvShowManualLeadPrefill(ui);
 }
 
-// Voice-driven Manual Lead intake — runs SILENTLY. Brain parses the spoken intent
-// into structured fields and emits this directive. We do NOT open a form. We fetch
-// ZoomInfo contacts in the background, POST them straight to the Manual Lead Add
-// webhook, then refresh the In Sequence panel so the new Manual Lead section
-// surfaces with the contacts already populated. JARVIS speaks a tiny confirm only.
-async function jrvShowManualLeadPrefill(ui) {
-  const company = (ui.company_name || '').trim();
-  const city = (ui.company_city || '').trim();
-  const personas = Array.isArray(ui.target_personas) ? ui.target_personas : [];
-  if (!company || !personas.length) {
-    jrvSpeakOut("I need the company name and a role to target. Try that again.");
-    return;
-  }
-  // Build a clean context blob so it gets stored on each contact's queue record
-  let contextBlob = (ui.context || '').toString().trim();
-  if (ui.role_being_hired) {
-    const rolePrefix = `Hiring ${ui.role_being_hired}.`;
-    if (contextBlob && !contextBlob.toLowerCase().includes(ui.role_being_hired.toLowerCase())) {
-      contextBlob = rolePrefix + ' ' + contextBlob;
-    } else if (!contextBlob) {
-      contextBlob = rolePrefix;
+// Voice-driven Manual Lead intake — opens the Add Manual Lead popup pre-filled
+// with everything the brain parsed (company / city / business context / personal
+// context) and kicks off the ZoomInfo lookup in the background. Travis reviews,
+// adds anything missing (especially the relationship history that JARVIS won't
+// know unless he says it), and submits. The popup is a review-and-add step, not
+// a chatty interaction — JARVIS already said "on it" in the spoken reply.
+function jrvShowManualLeadPrefill(ui) {
+  // In Sequence modal underneath so the Manual Lead section is visible after submit
+  jrvOpenInSeqModal('in_sequence');
+  jrvOpenAddManualLead();
+  setTimeout(() => {
+    const companyEl = document.getElementById('jrvManualCompany');
+    const cityEl = document.getElementById('jrvManualCity');
+    const businessEl = document.getElementById('jrvManualContext');
+    const personalEl = document.getElementById('jrvManualPersonal');
+    const contactsEl = document.getElementById('jrvManualContacts');
+    if (companyEl) companyEl.value = ui.company_name || '';
+    if (cityEl) cityEl.value = ui.company_city || '';
+    // Business context (role being hired, urgency, market signals)
+    let businessBlob = (ui.context || '').toString().trim();
+    if (ui.role_being_hired) {
+      const rolePrefix = `Hiring ${ui.role_being_hired}.`;
+      if (businessBlob && !businessBlob.toLowerCase().includes(ui.role_being_hired.toLowerCase())) {
+        businessBlob = rolePrefix + ' ' + businessBlob;
+      } else if (!businessBlob) {
+        businessBlob = rolePrefix;
+      }
     }
-  }
-  if (personas.length) {
-    contextBlob += ` Targets: ${personas.join(', ')}.`;
-  }
-  contextBlob = contextBlob.trim();
-  // 1) Hit ZoomInfo in the background
-  let contacts = [];
-  try {
-    contacts = await jrvFetchZIContacts(company, city, personas);
-  } catch (e) {
-    console.error('[Manual lead voice] ZI lookup failed:', e);
-  }
-  if (!contacts.length) {
-    jrvSpeakOut(`Couldn't find ${company} contacts in ${city || 'that area'}. Try adding them through the form.`);
-    return;
-  }
-  // 2) POST the contacts straight to the Manual Lead Add webhook
-  try {
-    const res = await fetch(JRV_CONFIG.MANUAL_LEAD_ADD_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        company_name: company,
-        company_city: city,
-        context: contextBlob,
-        contacts,
-      }),
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-  } catch (e) {
-    console.error('[Manual lead voice] add failed:', e);
-    jrvSpeakOut("Couldn't add the lead. Try again.");
-    return;
-  }
-  // 3) Refresh the In Sequence panel if it's open so the Manual Lead section
-  //    shows the new contacts immediately. Otherwise the next time Travis opens
-  //    the panel they'll be there.
-  const seqModal = document.getElementById('jrvInSeqModal');
-  if (seqModal && seqModal.style.display !== 'none') {
-    jrvFetchInSeq();
-  }
-  // 4) Brief spoken confirmation — Travis explicitly asked for short replies
-  const noun = contacts.length === 1 ? 'contact' : 'contacts';
-  jrvSpeakOut(`Done. ${contacts.length} ${noun} added to Manual Lead for ${company}.`);
+    if (Array.isArray(ui.target_personas) && ui.target_personas.length) {
+      businessBlob += '\n\nSuggested targets (from JARVIS): ' + ui.target_personas.join(', ');
+    }
+    if (businessEl) businessEl.value = businessBlob.trim();
+    // Personal context — only set if the brain heard something relational in
+    // Travis's voice. Otherwise the field stays empty so Travis can add it.
+    if (personalEl) personalEl.value = (ui.personal_context || '').toString().trim();
+    // ZoomInfo lookup fires in parallel; populates contacts when it returns
+    if (contactsEl && Array.isArray(ui.target_personas) && ui.target_personas.length && ui.company_name && JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL) {
+      contactsEl.value = 'Fetching contacts from ZoomInfo…';
+      contactsEl.disabled = true;
+      jrvFetchZIContacts(ui.company_name, ui.company_city || '', ui.target_personas)
+        .then(contacts => {
+          contactsEl.disabled = false;
+          if (!contacts.length) {
+            contactsEl.value = '';
+            contactsEl.placeholder = 'ZoomInfo returned no matching contacts at this location. Paste manually: Name | email | title (one per line).';
+            return;
+          }
+          const lines = contacts.map(c => `${c.name} | ${c.email} | ${c.title}`);
+          contactsEl.value = lines.join('\n');
+        })
+        .catch(() => {
+          contactsEl.disabled = false;
+          contactsEl.value = '';
+          contactsEl.placeholder = 'ZoomInfo lookup failed. Paste contacts manually: Name | email | title (one per line).';
+        });
+    }
+    // Focus the personal context field so Travis can quickly type the relationship
+    // history that JARVIS wouldn't know from the voice command alone.
+    if (personalEl) personalEl.focus();
+  }, 100);
 }
 
 // Call the ZoomInfo Contacts Lookup webhook with company + city + titles. Unwrap
@@ -5741,7 +5735,7 @@ function jrvOpenAddManualLead() {
   const modal = document.getElementById('jrvAddManualModal');
   if (!modal) return;
   // Clear fields each open
-  ['jrvManualCompany','jrvManualCity','jrvManualContext','jrvManualContacts'].forEach(id => {
+  ['jrvManualCompany','jrvManualCity','jrvManualContext','jrvManualPersonal','jrvManualContacts'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -5759,7 +5753,8 @@ function jrvCloseAddManualLead() {
 async function jrvSubmitManualLead() {
   const company = (document.getElementById('jrvManualCompany').value || '').trim();
   const city = (document.getElementById('jrvManualCity').value || '').trim();
-  const context = (document.getElementById('jrvManualContext').value || '').trim();
+  const businessContext = (document.getElementById('jrvManualContext').value || '').trim();
+  const personalContext = (document.getElementById('jrvManualPersonal').value || '').trim();
   const contactsRaw = (document.getElementById('jrvManualContacts').value || '').trim();
   if (!company) { alert('Company name is required.'); return; }
   if (!contactsRaw) { alert('Add at least one contact (one per line: Name | email | title).'); return; }
@@ -5769,6 +5764,12 @@ async function jrvSubmitManualLead() {
     return { name: parts[0], email: parts[1] || '', title: parts[2] || '', linkedin: parts[3] || '', phone: parts[4] || '' };
   }).filter(Boolean);
   if (!contacts.length) { alert('Could not parse any contacts. Format: Name | email | title (one per line).'); return; }
+  // Compose the context blob with explicit section markers so the Email Drafter
+  // can pick up the relationship cues and warm the tone accordingly.
+  let context = businessContext;
+  if (personalContext) {
+    context = (context ? context + '\n\n' : '') + 'PERSONAL CONTEXT: ' + personalContext;
+  }
   const btn = document.getElementById('jrvManualAddBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
   try {
@@ -6723,8 +6724,12 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
       </div>
       <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Why this lead (context for the drafter)</label>
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Why this lead (business context)</label>
         <textarea id="jrvManualContext" placeholder="e.g. Hiring a production manager. Role has been open ~6 weeks. Posted 3 times. ZoomInfo shows growing 12 percent year over year." class="jrv-manual-input" style="height:80px;resize:vertical;"></textarea>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:11px;color:var(--gold);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Personal context / Relationship <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal;">— optional, but the drafter uses this to warm the tone</span></label>
+        <textarea id="jrvManualPersonal" placeholder="e.g. I've known Craig 25 years, we played hockey together at York Mills, still play every Tuesday. — or — Met John briefly at the SME conference in March, talked about EV battery hiring. — or — His son works with my brother." class="jrv-manual-input" style="height:80px;resize:vertical;"></textarea>
       </div>
       <div style="margin-bottom:14px;">
         <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Contacts (one per line: Name | email | title)</label>
