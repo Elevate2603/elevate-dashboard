@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-Q-COMPANY-CANDIDATES -->
+<!-- ELEVATE-2026-0611-R-RCRM-FIRST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -737,11 +737,18 @@
   .jrv-mic-btn:hover { background: rgba(200,130,10,0.18); border-color: var(--gold); color: var(--gold); }
   .jrv-mic-btn.jrv-mic-recording { background: rgba(239,68,68,0.22); border-color:#ef4444; color:#ef4444; animation: jrv-mic-pulse 1.2s ease-in-out infinite; }
   @keyframes jrv-mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.45); } 50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); } }
-  /* ZoomInfo company-candidate picker */
+  /* Company-candidate picker (RCRM + ZoomInfo merged) */
   .jrv-candidate-list { display:flex; flex-direction:column; gap:6px; }
   .jrv-candidate-card { background: rgba(200,130,10,0.08); border:1px solid rgba(200,130,10,0.35); color: var(--text); cursor:pointer; padding:10px 12px; border-radius:6px; text-align:left; font-family:inherit; transition: background 0.12s, border-color 0.12s; }
   .jrv-candidate-card:hover { background: rgba(200,130,10,0.2); border-color: var(--gold); }
-  .jrv-candidate-name { font-size:13px; font-weight:600; color: var(--gold); margin-bottom:2px; }
+  .jrv-candidate-rcrm { background: rgba(74,222,128,0.10); border-color: rgba(74,222,128,0.45); }
+  .jrv-candidate-rcrm:hover { background: rgba(74,222,128,0.22); border-color:#4ade80; }
+  .jrv-candidate-rcrm .jrv-candidate-name { color:#4ade80; }
+  .jrv-candidate-row1 { display:flex; align-items:center; gap:8px; margin-bottom:2px; }
+  .jrv-candidate-name { font-size:13px; font-weight:600; color: var(--gold); }
+  .jrv-cand-tag { font-size:9px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase; padding:2px 6px; border-radius:8px; }
+  .jrv-cand-tag-rcrm { background:#4ade80; color:#0d0d0d; }
+  .jrv-cand-tag-zi { background: rgba(200,130,10,0.35); color: var(--gold); border:1px solid rgba(200,130,10,0.55); }
   .jrv-candidate-detail { font-size:11px; color: var(--text-muted); }
   .jrv-candidate-none { background: rgba(255,255,255,0.03); border:1px dashed rgba(255,255,255,0.15); }
   .jrv-candidate-none .jrv-candidate-name { color: var(--text-muted); }
@@ -2953,6 +2960,12 @@ const JRV_CONFIG = {
   // candidates for Travis to confirm, then uses the chosen company's exact
   // name for the contacts search.
   ZI_COMPANY_CANDIDATES_URL: 'https://hook.us2.make.com/4p2mdjyb14srofx2dfkv3bkgjcpst64q',
+  // RCRM-first lookup — saves ZoomInfo credits when the company is already in
+  // our CRM. Frontend fires these in parallel with ZI candidate search; RCRM
+  // matches show up tagged in the picker. Selecting one skips ZI entirely and
+  // pulls contacts straight from RCRM with their existing slug + resource_url.
+  RCRM_COMPANY_CANDIDATES_URL: 'https://hook.us2.make.com/5cqk1rech2gv64c5q953xopxul7ig4rp',
+  RCRM_COMPANY_CONTACTS_URL: 'https://hook.us2.make.com/0qcvedc6276yzt58r0c8u3ujv5oi8knk',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -5023,51 +5036,145 @@ function jrvShowManualLeadPrefill(ui) {
     // Personal context — only set if the brain heard something relational in
     // Travis's voice. Otherwise the field stays empty so Travis can add it.
     if (personalEl) personalEl.value = (ui.personal_context || '').toString().trim();
-    // First step: ask ZoomInfo for company candidates so Travis can confirm
-    // which variant ("SMI Automation" vs "SMI Automation Canada") is the
-    // right one. The candidates panel shows each match with city/employees/
-    // industry so the choice is obvious. Selection then kicks off the
-    // contacts lookup using the confirmed canonical name.
-    if (contactsEl && ui.company_name && Array.isArray(ui.target_personas) && ui.target_personas.length && JRV_CONFIG.ZI_COMPANY_CANDIDATES_URL) {
-      contactsEl.value = 'Confirming company match in ZoomInfo…';
+    // Step 1: check RCRM first (free) AND ZoomInfo (paid) in parallel for
+    // company candidates. Saves a ZI credit when the company is already in
+    // our CRM. The merged candidate list shows RCRM matches first with a
+    // "✓ In RCRM" tag so the cheap choice is obvious at a glance.
+    if (contactsEl && ui.company_name && Array.isArray(ui.target_personas) && ui.target_personas.length) {
+      contactsEl.value = 'Checking RCRM + ZoomInfo for company match…';
       contactsEl.disabled = true;
-      jrvFetchZICompanyCandidates(ui.company_name, ui.company_city || '')
-        .then(candidates => {
-          if (!candidates.length) {
-            // No matches even after the retry — let Travis paste contacts manually
+      Promise.all([
+        jrvFetchRCRMCompanyCandidates(ui.company_name),
+        jrvFetchZICompanyCandidates(ui.company_name, ui.company_city || ''),
+      ])
+        .then(([rcrmCandidates, ziCandidates]) => {
+          const merged = [...rcrmCandidates, ...ziCandidates];
+          if (!merged.length) {
             contactsEl.value = '';
             contactsEl.disabled = false;
-            contactsEl.placeholder = 'ZoomInfo did not find a company match for "' + (ui.company_name || '') + '". Paste contacts manually: Name | email | title (one per line).';
+            contactsEl.placeholder = 'No RCRM or ZoomInfo match for "' + (ui.company_name || '') + '". Paste contacts manually: Name | email | title.';
             return;
           }
-          // Exactly one match AND it's a close textual match to what Travis said
-          // → auto-confirm and jump straight to contacts (no extra click).
-          const qLower = (ui.company_name || '').toLowerCase();
-          const auto = (candidates.length === 1 && qLower && (candidates[0].name || '').toLowerCase().includes(qLower.split(' ')[0]));
-          if (auto) {
-            contactsEl.value = 'Auto-confirmed: ' + candidates[0].name + (candidates[0].city ? ' (' + candidates[0].city + ')' : '') + '. Fetching contacts…';
-            // Update company field to the canonical ZI name
+          // Auto-confirm shortcut: exactly ONE RCRM match — that's almost
+          // always the right call (it's already in our CRM, no ambiguity).
+          // Skip the picker, pull contacts directly.
+          if (rcrmCandidates.length === 1 && ziCandidates.length === 0) {
+            const c = rcrmCandidates[0];
             const companyEl2 = document.getElementById('jrvManualCompany');
-            if (companyEl2) companyEl2.value = candidates[0].name;
-            jrvKickContactsFetch(candidates[0].name, candidates[0].city || ui.company_city || '', ui.target_personas);
+            if (companyEl2) companyEl2.value = c.name;
+            const cityEl2 = document.getElementById('jrvManualCity');
+            if (cityEl2 && c.city) cityEl2.value = c.city;
+            contactsEl.value = 'Pulling contacts from RCRM (already in our CRM)…';
+            jrvFetchRCRMCompanyContacts(c.slug, ui.target_personas)
+              .then(contacts => {
+                contactsEl.disabled = false;
+                if (!contacts.length) {
+                  contactsEl.value = '';
+                  contactsEl.placeholder = 'Company is in RCRM but no matching contacts. Paste manually: Name | email | title.';
+                  return;
+                }
+                const lines = contacts.map(x => `${x.name} | ${x.email} | ${x.title}`);
+                contactsEl.value = lines.join('\n');
+              })
+              .catch(() => {
+                contactsEl.disabled = false;
+                contactsEl.value = '';
+                contactsEl.placeholder = 'RCRM contact fetch failed. Paste manually.';
+              });
             return;
           }
-          // 2+ candidates OR loose match → show picker, pause contacts lookup
+          // Otherwise show the picker — Travis picks which match is the right one
           contactsEl.value = '';
           contactsEl.disabled = false;
           contactsEl.placeholder = 'Pick a company match above, or paste contacts manually here.';
-          jrvRenderCompanyCandidates(candidates, ui.company_name || '', ui);
+          jrvRenderCompanyCandidates(merged, ui.company_name || '', ui);
         })
         .catch(() => {
           contactsEl.disabled = false;
           contactsEl.value = '';
-          contactsEl.placeholder = 'ZoomInfo company lookup failed. Paste contacts manually: Name | email | title (one per line).';
+          contactsEl.placeholder = 'Lookup failed. Paste contacts manually: Name | email | title.';
         });
     }
     // Focus the personal context field so Travis can quickly type the relationship
     // history that JARVIS wouldn't know from the voice command alone.
     if (personalEl) personalEl.focus();
   }, 100);
+}
+
+// RCRM Company Candidates — search RecruitCRM first so we don't burn ZoomInfo
+// credits when the company is already in our CRM. Returns array tagged with
+// source='rcrm'. Empty array on miss or error (caller falls through to ZI).
+async function jrvFetchRCRMCompanyCandidates(query) {
+  if (!query || !JRV_CONFIG.RCRM_COMPANY_CANDIDATES_URL) return [];
+  try {
+    const res = await fetch(JRV_CONFIG.RCRM_COMPANY_CANDIDATES_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_name: query }),
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const raw = Array.isArray(json.data) ? json.data : [];
+    // Normalize to the shape the candidate picker expects, marked source=rcrm
+    return raw.filter(c => c && c.slug && c.company_name).map(c => ({
+      source: 'rcrm',
+      id: c.slug,
+      slug: c.slug,
+      name: c.company_name,
+      city: c.city || '',
+      state: '',
+      country: '',
+      industry: '',
+      employees: '',
+      website: c.website || '',
+    }));
+  } catch (e) {
+    console.warn('[RCRM company candidates] failed:', e);
+    return [];
+  }
+}
+
+// RCRM Contacts at a company — POST {company_slug:X} returns the contacts list
+// already in RCRM. Used when Travis picks an RCRM candidate; we use these
+// directly with their existing slug + resource_url (no ZI lookup needed).
+async function jrvFetchRCRMCompanyContacts(companySlug, targetPersonas) {
+  if (!companySlug || !JRV_CONFIG.RCRM_COMPANY_CONTACTS_URL) return [];
+  try {
+    const res = await fetch(JRV_CONFIG.RCRM_COMPANY_CONTACTS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_slug: companySlug }),
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const raw = Array.isArray(json.data) ? json.data : [];
+    // Map RCRM contact shape into the same { name, email, title } shape the
+    // submit handler expects. Filter to ones with an email.
+    let contacts = raw.filter(c => c && c.email).map(c => ({
+      name: (((c.first_name || '') + ' ' + (c.last_name || '')).trim()) || c.email,
+      email: c.email,
+      title: c.designation || '',
+      city: c.city || '',
+      rcrm_contact_id: c.slug || '',
+      rcrm_company_slug: c.company_slug || companySlug,
+      resource_url: 'https://app.recruitcrm.io/contact/' + (c.slug || ''),
+    }));
+    // If target personas were given, prefer contacts whose title matches any
+    // persona substring (case-insensitive). If no matches, return ALL — better
+    // to surface every existing contact than to come back empty.
+    if (Array.isArray(targetPersonas) && targetPersonas.length) {
+      const personasLower = targetPersonas.map(p => p.toLowerCase());
+      const matched = contacts.filter(c => {
+        const titleLower = (c.title || '').toLowerCase();
+        return personasLower.some(p => titleLower.includes(p) || p.includes(titleLower));
+      });
+      if (matched.length) contacts = matched;
+    }
+    return contacts;
+  } catch (e) {
+    console.warn('[RCRM company contacts] failed:', e);
+    return [];
+  }
 }
 
 // ZI Company Candidates — search ZoomInfo for company variants of what Travis said.
@@ -5097,14 +5204,26 @@ async function jrvFetchZICompanyCandidates(query, cityHint) {
   return candidates;
 }
 
-// Render the candidate picker inside the popup. Travis clicks a card to confirm
-// which ZoomInfo company is the right one; the chosen name flows into the contact
-// lookup. Includes a "None of these" escape hatch that just hides the picker.
+// Render the candidate picker inside the popup. Candidates can come from RCRM
+// (tagged so Travis sees "Already in our CRM") or ZoomInfo. RCRM-tagged
+// candidates are shown FIRST since picking one saves a ZI credit. Travis
+// clicks a card to confirm; selection routes to either RCRM contacts (cheap)
+// or ZI contacts (paid).
 function jrvRenderCompanyCandidates(candidates, originalQuery, ui) {
   const container = document.getElementById('jrvManualCandidates');
   if (!container) return;
   container.style.display = 'block';
-  const cardsHtml = candidates.map((c, idx) => {
+  // Sort: RCRM matches first, then ZI matches. Within each, original order preserved.
+  const sorted = candidates.slice().sort((a, b) => {
+    const aRcrm = a.source === 'rcrm' ? 0 : 1;
+    const bRcrm = b.source === 'rcrm' ? 0 : 1;
+    return aRcrm - bRcrm;
+  });
+  const cardsHtml = sorted.map((c, idx) => {
+    const isRcrm = c.source === 'rcrm';
+    const tag = isRcrm
+      ? `<span class="jrv-cand-tag jrv-cand-tag-rcrm" title="Already in your RCRM — no ZoomInfo credit needed">✓ In RCRM</span>`
+      : `<span class="jrv-cand-tag jrv-cand-tag-zi" title="From ZoomInfo — picking this uses ZI credits">ZoomInfo</span>`;
     const loc = [c.city, c.state, c.country].filter(Boolean).join(', ');
     const detail = [
       loc,
@@ -5112,15 +5231,25 @@ function jrvRenderCompanyCandidates(candidates, originalQuery, ui) {
       c.employees ? c.employees + ' employees' : '',
       c.website,
     ].filter(Boolean).join(' · ');
+    // The data-idx points into the SORTED array; jrvSelectCompanyCandidate
+    // reads from the same sorted array kept in state.
     return `
-      <button type="button" class="jrv-candidate-card" data-idx="${idx}" onclick="jrvSelectCompanyCandidate(${idx})">
-        <div class="jrv-candidate-name">${escapeHtml(c.name || 'Unknown')}</div>
+      <button type="button" class="jrv-candidate-card ${isRcrm ? 'jrv-candidate-rcrm' : ''}" data-idx="${idx}" onclick="jrvSelectCompanyCandidate(${idx})">
+        <div class="jrv-candidate-row1">
+          <span class="jrv-candidate-name">${escapeHtml(c.name || 'Unknown')}</span>
+          ${tag}
+        </div>
         ${detail ? `<div class="jrv-candidate-detail">${escapeHtml(detail)}</div>` : ''}
       </button>
     `;
   }).join('');
+  const rcrmCount = sorted.filter(c => c.source === 'rcrm').length;
+  const ziCount = sorted.length - rcrmCount;
+  const hint = (rcrmCount && ziCount)
+    ? `${rcrmCount} in RCRM (free) + ${ziCount} ZoomInfo match${ziCount === 1 ? '' : 'es'}`
+    : (rcrmCount ? `${rcrmCount} match${rcrmCount === 1 ? '' : 'es'} already in RCRM (no ZI credits)` : `${ziCount} ZoomInfo match${ziCount === 1 ? '' : 'es'}`);
   container.innerHTML = `
-    <div style="font-size:11px;color:var(--gold);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.6px;">ZoomInfo found ${candidates.length} match${candidates.length === 1 ? '' : 'es'} for "${escapeHtml(originalQuery)}" — pick the right one</div>
+    <div style="font-size:11px;color:var(--gold);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.6px;">Found ${sorted.length} match${sorted.length === 1 ? '' : 'es'} for "${escapeHtml(originalQuery)}" — ${hint}</div>
     <div class="jrv-candidate-list">
       ${cardsHtml}
       <button type="button" class="jrv-candidate-card jrv-candidate-none" onclick="jrvSelectCompanyCandidate(-1)">
@@ -5129,8 +5258,8 @@ function jrvRenderCompanyCandidates(candidates, originalQuery, ui) {
       </button>
     </div>
   `;
-  // Stash candidates + the UI directive so jrvSelectCompanyCandidate can access them
-  jrvManualLeadState = { candidates, ui };
+  // Stash the SORTED candidates so jrvSelectCompanyCandidate uses the same indices
+  jrvManualLeadState = { candidates: sorted, ui };
 }
 
 // In-memory state for the candidate picker. Set by jrvRenderCompanyCandidates,
@@ -5158,15 +5287,45 @@ function jrvSelectCompanyCandidate(idx) {
     return;
   }
   const chosen = candidates[idx];
-  // Update company name in the form to the exact ZoomInfo name (so submission
-  // creates the queue records with the canonical name)
+  // Update company name in the form to the canonical name (so submission
+  // creates the queue records with the right name)
   const companyEl = document.getElementById('jrvManualCompany');
   if (companyEl) companyEl.value = chosen.name || '';
-  // City: prefer ZI's city for this branch, fall back to what Travis said
   const cityEl = document.getElementById('jrvManualCity');
   if (cityEl && chosen.city) cityEl.value = chosen.city;
-  // Now fetch contacts at the chosen company
-  jrvKickContactsFetch(chosen.name, chosen.city || (ui && ui.company_city) || '', (ui && ui.target_personas) || []);
+  const personas = (ui && ui.target_personas) || [];
+  // RCRM path: pull contacts from RCRM directly. No ZoomInfo credit.
+  if (chosen.source === 'rcrm') {
+    const contactsEl = document.getElementById('jrvManualContacts');
+    if (contactsEl) {
+      contactsEl.value = 'Pulling contacts from RCRM…';
+      contactsEl.disabled = true;
+    }
+    jrvFetchRCRMCompanyContacts(chosen.slug, personas)
+      .then(contacts => {
+        if (contactsEl) contactsEl.disabled = false;
+        if (!contacts.length) {
+          // RCRM company exists but no contacts match — fall through to ZI for this company
+          if (contactsEl) contactsEl.value = '';
+          jrvKickContactsFetch(chosen.name, chosen.city || '', personas);
+          return;
+        }
+        if (contactsEl) {
+          const lines = contacts.map(c => `${c.name} | ${c.email} | ${c.title}`);
+          contactsEl.value = lines.join('\n');
+        }
+      })
+      .catch(() => {
+        if (contactsEl) {
+          contactsEl.disabled = false;
+          contactsEl.value = '';
+          contactsEl.placeholder = 'RCRM contact fetch failed. Paste manually or try the form.';
+        }
+      });
+    return;
+  }
+  // ZoomInfo path: existing flow
+  jrvKickContactsFetch(chosen.name, chosen.city || (ui && ui.company_city) || '', personas);
 }
 
 // Run the contacts lookup against the confirmed company name and stream results
