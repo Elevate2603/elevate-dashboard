@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-X-ACCORDION-PICKER -->
+<!-- ELEVATE-2026-0611-Y-ROLE-IN-CONTEXT -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -5081,13 +5081,13 @@ function jrvShowManualLeadPrefill(ui) {
     const contactsEl = document.getElementById('jrvManualContacts');
     if (companyEl) companyEl.value = ui.company_name || '';
     if (cityEl) cityEl.value = ui.company_city || '';
-    // Target role drives fit-vs-misfit analysis in the drafter prompt.
-    // Fallback: if the brain didn't emit role_being_hired, scrape it from
-    // the context blob using common "hiring X" / "X position" / "X role" /
-    // "post up for X" patterns. Better an imperfect pre-fill than empty.
-    const targetRoleEl = document.getElementById('jrvManualTargetRole');
+    // Business context drives EVERYTHING downstream: drafter tone, fit
+    // analysis, manual-lead memory. Travis wants the role-being-hired baked
+    // into THIS blob (no separate field) so it travels with the rest of the
+    // story. We lead with "Hiring X." so the drafter sees it on line 1.
     let resolvedRole = (ui.role_being_hired || '').trim();
     if (!resolvedRole && ui.context) {
+      // Safety net: scrape role from spoken context if brain didn't emit it
       const ctx = ui.context.toString();
       const patterns = [
         /\bhiring\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
@@ -5101,12 +5101,13 @@ function jrvShowManualLeadPrefill(ui) {
         if (m && m[1]) { resolvedRole = m[1].trim(); break; }
       }
     }
-    if (targetRoleEl) targetRoleEl.value = resolvedRole;
-    // Business context (role being hired, urgency, market signals)
+    // Stash on ui so the picker can use it for fit scoring even though the
+    // field is gone — jrvManualLeadState carries ui through to jrvRenderInlineContacts.
+    ui.role_being_hired = resolvedRole;
     let businessBlob = (ui.context || '').toString().trim();
-    if (ui.role_being_hired) {
-      const rolePrefix = `Hiring ${ui.role_being_hired}.`;
-      if (businessBlob && !businessBlob.toLowerCase().includes(ui.role_being_hired.toLowerCase())) {
+    if (resolvedRole) {
+      const rolePrefix = `Hiring ${resolvedRole}.`;
+      if (businessBlob && !businessBlob.toLowerCase().includes(resolvedRole.toLowerCase())) {
         businessBlob = rolePrefix + ' ' + businessBlob;
       } else if (!businessBlob) {
         businessBlob = rolePrefix;
@@ -5223,34 +5224,10 @@ async function jrvFetchRCRMCompanyContacts(companySlug, targetPersonas) {
       rcrm_company_slug: c.company_slug || companySlug,
       resource_url: 'https://app.recruitcrm.io/contact/' + (c.slug || ''),
     }));
-    // Three-tier matching (Travis's spec): prefer titles that match the target
-    // personas exactly; if no direct match, fall back to decision-maker-adjacent
-    // titles (GM, Plant Mgr, Ops, HR, COO, President) since they have say and
-    // can either entertain the pitch or refer Travis to the right person; if
-    // still nothing matches, return the first 3 contacts no matter what.
-    if (Array.isArray(targetPersonas) && targetPersonas.length) {
-      const personasLower = targetPersonas.map(p => p.toLowerCase());
-      const matched = contacts.filter(c => {
-        const titleLower = (c.title || '').toLowerCase();
-        return personasLower.some(p => titleLower.includes(p) || p.includes(titleLower));
-      });
-      if (matched.length) {
-        contacts = matched;
-      } else {
-        // Tier 2: decision-maker-adjacent. These always have a say or can refer.
-        const decisionMakerKeywords = ['general manager', 'plant manager', 'operations manager', 'operations director', 'director of operations', 'vp operations', 'hr manager', 'human resources', 'talent', 'people operations', 'coo', 'president', 'owner', 'founder', 'managing director', 'gm'];
-        const adjacent = contacts.filter(c => {
-          const titleLower = (c.title || '').toLowerCase();
-          return decisionMakerKeywords.some(k => titleLower.includes(k));
-        });
-        if (adjacent.length) {
-          contacts = adjacent.slice(0, 3);
-        } else {
-          // Tier 3: any 3 contacts. Better than empty.
-          contacts = contacts.slice(0, 3);
-        }
-      }
-    }
+    // Return ALL contacts at the company — no persona filtering. The picker
+    // surfaces ★ TARGET MATCH and Decision-maker tags for ranking/sorting,
+    // and pre-checks matches, but Travis sees every contact so he can pick
+    // and choose. Better to show too many than hide the right one.
     return contacts;
   } catch (e) {
     console.warn('[RCRM company contacts] failed:', e);
@@ -6412,7 +6389,7 @@ function jrvOpenAddManualLead() {
   const modal = document.getElementById('jrvAddManualModal');
   if (!modal) return;
   // Clear fields each open
-  ['jrvManualCompany','jrvManualCity','jrvManualTargetRole','jrvManualContext','jrvManualPersonal','jrvManualContacts'].forEach(id => {
+  ['jrvManualCompany','jrvManualCity','jrvManualContext','jrvManualPersonal','jrvManualContacts'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -6442,8 +6419,13 @@ function jrvCloseAddManualLead() {
 async function jrvSubmitManualLead() {
   const company = (document.getElementById('jrvManualCompany').value || '').trim();
   const city = (document.getElementById('jrvManualCity').value || '').trim();
-  const targetRole = (document.getElementById('jrvManualTargetRole').value || '').trim();
   const businessContext = (document.getElementById('jrvManualContext').value || '').trim();
+  // Role lives inside businessContext now ("Hiring X." prefix). Scrape it back
+  // out so the Manual Lead Add webhook still gets a clean target_role field for
+  // datastore/RCRM custom-field writes.
+  let targetRole = '';
+  const roleMatch = businessContext.match(/\bhiring\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i);
+  if (roleMatch && roleMatch[1]) targetRole = roleMatch[1].trim();
   const personalContext = (document.getElementById('jrvManualPersonal').value || '').trim();
   const contactsRaw = (document.getElementById('jrvManualContacts').value || '').trim();
   if (!company) { alert('Company name is required.'); return; }
@@ -7415,7 +7397,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <div id="jrvZIUsageInline" class="jrv-zi-usage-inline" style="display:none;"></div>
     <div class="jrv-modal-body" style="padding:18px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
         <div>
           <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Company</label>
           <input type="text" id="jrvManualCompany" placeholder="e.g. Multimatic" class="jrv-manual-input">
@@ -7423,10 +7405,6 @@ document.addEventListener('DOMContentLoaded', function() {
         <div>
           <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Company city</label>
           <input type="text" id="jrvManualCity" placeholder="e.g. Markham" class="jrv-manual-input">
-        </div>
-        <div>
-          <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Hiring for</label>
-          <input type="text" id="jrvManualTargetRole" placeholder="e.g. Production Manager" class="jrv-manual-input" title="The role they're hiring — used by the drafter to know if a contact is fit or wrong-fit. JARVIS pre-fills this from your voice.">
         </div>
       </div>
       <div style="margin-bottom:12px;">
