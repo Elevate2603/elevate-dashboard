@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-P-DICTATE-MIC -->
+<!-- ELEVATE-2026-0611-Q-COMPANY-CANDIDATES -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -737,6 +737,14 @@
   .jrv-mic-btn:hover { background: rgba(200,130,10,0.18); border-color: var(--gold); color: var(--gold); }
   .jrv-mic-btn.jrv-mic-recording { background: rgba(239,68,68,0.22); border-color:#ef4444; color:#ef4444; animation: jrv-mic-pulse 1.2s ease-in-out infinite; }
   @keyframes jrv-mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.45); } 50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); } }
+  /* ZoomInfo company-candidate picker */
+  .jrv-candidate-list { display:flex; flex-direction:column; gap:6px; }
+  .jrv-candidate-card { background: rgba(200,130,10,0.08); border:1px solid rgba(200,130,10,0.35); color: var(--text); cursor:pointer; padding:10px 12px; border-radius:6px; text-align:left; font-family:inherit; transition: background 0.12s, border-color 0.12s; }
+  .jrv-candidate-card:hover { background: rgba(200,130,10,0.2); border-color: var(--gold); }
+  .jrv-candidate-name { font-size:13px; font-weight:600; color: var(--gold); margin-bottom:2px; }
+  .jrv-candidate-detail { font-size:11px; color: var(--text-muted); }
+  .jrv-candidate-none { background: rgba(255,255,255,0.03); border:1px dashed rgba(255,255,255,0.15); }
+  .jrv-candidate-none .jrv-candidate-name { color: var(--text-muted); }
 
   /* Reach-out count + reply + bounce badges */
   .jrv-inseq-reach { font-family:'Consolas', monospace; font-size:10px; padding:3px 7px; background: rgba(255,255,255,0.05); color: var(--text-muted); border-radius:8px; letter-spacing:0.04em; white-space:nowrap; }
@@ -2939,6 +2947,12 @@ const JRV_CONFIG = {
   // contacts at the company filtered to the city. Frontend post-filters by
   // city since ZI sometimes returns other-branch contacts.
   ZI_CONTACTS_LOOKUP_URL: 'https://hook.us2.make.com/ikyvfqr6bgnqn7rjj0eooorrw8gsdux8',
+  // ZI Company Candidates (5360870) — fires BEFORE contacts lookup. Searches
+  // ZoomInfo for company variants of what Travis said ("SMI Automation Canada"
+  // → "SMI Automation" → returns Ontario-based match). Frontend shows
+  // candidates for Travis to confirm, then uses the chosen company's exact
+  // name for the contacts search.
+  ZI_COMPANY_CANDIDATES_URL: 'https://hook.us2.make.com/4p2mdjyb14srofx2dfkv3bkgjcpst64q',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -5009,31 +5023,180 @@ function jrvShowManualLeadPrefill(ui) {
     // Personal context — only set if the brain heard something relational in
     // Travis's voice. Otherwise the field stays empty so Travis can add it.
     if (personalEl) personalEl.value = (ui.personal_context || '').toString().trim();
-    // ZoomInfo lookup fires in parallel; populates contacts when it returns
-    if (contactsEl && Array.isArray(ui.target_personas) && ui.target_personas.length && ui.company_name && JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL) {
-      contactsEl.value = 'Fetching contacts from ZoomInfo…';
+    // First step: ask ZoomInfo for company candidates so Travis can confirm
+    // which variant ("SMI Automation" vs "SMI Automation Canada") is the
+    // right one. The candidates panel shows each match with city/employees/
+    // industry so the choice is obvious. Selection then kicks off the
+    // contacts lookup using the confirmed canonical name.
+    if (contactsEl && ui.company_name && Array.isArray(ui.target_personas) && ui.target_personas.length && JRV_CONFIG.ZI_COMPANY_CANDIDATES_URL) {
+      contactsEl.value = 'Confirming company match in ZoomInfo…';
       contactsEl.disabled = true;
-      jrvFetchZIContacts(ui.company_name, ui.company_city || '', ui.target_personas)
-        .then(contacts => {
-          contactsEl.disabled = false;
-          if (!contacts.length) {
+      jrvFetchZICompanyCandidates(ui.company_name, ui.company_city || '')
+        .then(candidates => {
+          if (!candidates.length) {
+            // No matches even after the retry — let Travis paste contacts manually
             contactsEl.value = '';
-            contactsEl.placeholder = 'ZoomInfo returned no matching contacts at this location. Paste manually: Name | email | title (one per line).';
+            contactsEl.disabled = false;
+            contactsEl.placeholder = 'ZoomInfo did not find a company match for "' + (ui.company_name || '') + '". Paste contacts manually: Name | email | title (one per line).';
             return;
           }
-          const lines = contacts.map(c => `${c.name} | ${c.email} | ${c.title}`);
-          contactsEl.value = lines.join('\n');
+          // Exactly one match AND it's a close textual match to what Travis said
+          // → auto-confirm and jump straight to contacts (no extra click).
+          const qLower = (ui.company_name || '').toLowerCase();
+          const auto = (candidates.length === 1 && qLower && (candidates[0].name || '').toLowerCase().includes(qLower.split(' ')[0]));
+          if (auto) {
+            contactsEl.value = 'Auto-confirmed: ' + candidates[0].name + (candidates[0].city ? ' (' + candidates[0].city + ')' : '') + '. Fetching contacts…';
+            // Update company field to the canonical ZI name
+            const companyEl2 = document.getElementById('jrvManualCompany');
+            if (companyEl2) companyEl2.value = candidates[0].name;
+            jrvKickContactsFetch(candidates[0].name, candidates[0].city || ui.company_city || '', ui.target_personas);
+            return;
+          }
+          // 2+ candidates OR loose match → show picker, pause contacts lookup
+          contactsEl.value = '';
+          contactsEl.disabled = false;
+          contactsEl.placeholder = 'Pick a company match above, or paste contacts manually here.';
+          jrvRenderCompanyCandidates(candidates, ui.company_name || '', ui);
         })
         .catch(() => {
           contactsEl.disabled = false;
           contactsEl.value = '';
-          contactsEl.placeholder = 'ZoomInfo lookup failed. Paste contacts manually: Name | email | title (one per line).';
+          contactsEl.placeholder = 'ZoomInfo company lookup failed. Paste contacts manually: Name | email | title (one per line).';
         });
     }
     // Focus the personal context field so Travis can quickly type the relationship
     // history that JARVIS wouldn't know from the voice command alone.
     if (personalEl) personalEl.focus();
   }, 100);
+}
+
+// ZI Company Candidates — search ZoomInfo for company variants of what Travis said.
+// Retries with a shortened name (drops trailing "Canada", "Inc.", "Ltd.", etc.) when
+// the verbatim query returns nothing. Returns array of candidate companies.
+async function jrvFetchZICompanyCandidates(query, cityHint) {
+  if (!query || !JRV_CONFIG.ZI_COMPANY_CANDIDATES_URL) return [];
+  const tryQuery = async (q) => {
+    const res = await fetch(JRV_CONFIG.ZI_COMPANY_CANDIDATES_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_name: q, company_city: cityHint || '' }),
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const raw = Array.isArray(json.candidates) ? json.candidates : [];
+    return raw.map(r => (r && r.aggregate) ? r.aggregate : r).filter(c => c && c.id && c.name);
+  };
+  // First try: verbatim
+  let candidates = await tryQuery(query);
+  if (candidates.length) return candidates;
+  // Retry with trailing geographic / corporate-suffix words stripped
+  const stripped = query.replace(/\b(canada|usa|america|inc\.?|ltd\.?|llc|llp|corp\.?|corporation|company|co\.?|the|group|holdings|enterprises?)\b/gi, '').replace(/\s+/g, ' ').trim();
+  if (stripped && stripped.toLowerCase() !== query.toLowerCase()) {
+    candidates = await tryQuery(stripped);
+  }
+  return candidates;
+}
+
+// Render the candidate picker inside the popup. Travis clicks a card to confirm
+// which ZoomInfo company is the right one; the chosen name flows into the contact
+// lookup. Includes a "None of these" escape hatch that just hides the picker.
+function jrvRenderCompanyCandidates(candidates, originalQuery, ui) {
+  const container = document.getElementById('jrvManualCandidates');
+  if (!container) return;
+  container.style.display = 'block';
+  const cardsHtml = candidates.map((c, idx) => {
+    const loc = [c.city, c.state, c.country].filter(Boolean).join(', ');
+    const detail = [
+      loc,
+      c.industry,
+      c.employees ? c.employees + ' employees' : '',
+      c.website,
+    ].filter(Boolean).join(' · ');
+    return `
+      <button type="button" class="jrv-candidate-card" data-idx="${idx}" onclick="jrvSelectCompanyCandidate(${idx})">
+        <div class="jrv-candidate-name">${escapeHtml(c.name || 'Unknown')}</div>
+        ${detail ? `<div class="jrv-candidate-detail">${escapeHtml(detail)}</div>` : ''}
+      </button>
+    `;
+  }).join('');
+  container.innerHTML = `
+    <div style="font-size:11px;color:var(--gold);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.6px;">ZoomInfo found ${candidates.length} match${candidates.length === 1 ? '' : 'es'} for "${escapeHtml(originalQuery)}" — pick the right one</div>
+    <div class="jrv-candidate-list">
+      ${cardsHtml}
+      <button type="button" class="jrv-candidate-card jrv-candidate-none" onclick="jrvSelectCompanyCandidate(-1)">
+        <div class="jrv-candidate-name">None of these</div>
+        <div class="jrv-candidate-detail">I'll type the contacts manually</div>
+      </button>
+    </div>
+  `;
+  // Stash candidates + the UI directive so jrvSelectCompanyCandidate can access them
+  jrvManualLeadState = { candidates, ui };
+}
+
+// In-memory state for the candidate picker. Set by jrvRenderCompanyCandidates,
+// consumed by jrvSelectCompanyCandidate when Travis clicks a card.
+let jrvManualLeadState = null;
+
+// Travis clicked one of the company candidate cards (or "None of these").
+// Use the chosen company's exact ZoomInfo name to fetch contacts; the rest of
+// the popup flow continues as normal.
+function jrvSelectCompanyCandidate(idx) {
+  const container = document.getElementById('jrvManualCandidates');
+  if (container) container.style.display = 'none';
+  if (!jrvManualLeadState) return;
+  const { candidates, ui } = jrvManualLeadState;
+  jrvManualLeadState = null;
+  if (idx < 0 || idx >= candidates.length) {
+    // "None of these" — clear contacts and let Travis type manually
+    const contactsEl = document.getElementById('jrvManualContacts');
+    if (contactsEl) {
+      contactsEl.value = '';
+      contactsEl.placeholder = 'Paste contacts manually: Name | email | title (one per line).';
+      contactsEl.disabled = false;
+      contactsEl.focus();
+    }
+    return;
+  }
+  const chosen = candidates[idx];
+  // Update company name in the form to the exact ZoomInfo name (so submission
+  // creates the queue records with the canonical name)
+  const companyEl = document.getElementById('jrvManualCompany');
+  if (companyEl) companyEl.value = chosen.name || '';
+  // City: prefer ZI's city for this branch, fall back to what Travis said
+  const cityEl = document.getElementById('jrvManualCity');
+  if (cityEl && chosen.city) cityEl.value = chosen.city;
+  // Now fetch contacts at the chosen company
+  jrvKickContactsFetch(chosen.name, chosen.city || (ui && ui.company_city) || '', (ui && ui.target_personas) || []);
+}
+
+// Run the contacts lookup against the confirmed company name and stream results
+// into the contacts textarea. Factored out so both the candidate-picker path
+// and the no-candidates fallback can reuse it.
+function jrvKickContactsFetch(companyName, cityForFilter, personas) {
+  const contactsEl = document.getElementById('jrvManualContacts');
+  if (!contactsEl) return;
+  if (!companyName || !personas.length || !JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL) {
+    contactsEl.disabled = false;
+    return;
+  }
+  contactsEl.value = 'Fetching contacts from ZoomInfo…';
+  contactsEl.disabled = true;
+  jrvFetchZIContacts(companyName, cityForFilter || '', personas)
+    .then(contacts => {
+      contactsEl.disabled = false;
+      if (!contacts.length) {
+        contactsEl.value = '';
+        contactsEl.placeholder = 'ZoomInfo returned no matching contacts at this location. Paste manually: Name | email | title (one per line).';
+        return;
+      }
+      const lines = contacts.map(c => `${c.name} | ${c.email} | ${c.title}`);
+      contactsEl.value = lines.join('\n');
+    })
+    .catch(() => {
+      contactsEl.disabled = false;
+      contactsEl.value = '';
+      contactsEl.placeholder = 'ZoomInfo lookup failed. Paste contacts manually: Name | email | title (one per line).';
+    });
 }
 
 // Call the ZoomInfo Contacts Lookup webhook with company + city + titles. Unwrap
@@ -5840,6 +6003,10 @@ function jrvCloseAddManualLead() {
   }
   const modal = document.getElementById('jrvAddManualModal');
   if (modal) modal.style.display = 'none';
+  // Hide and clear the candidate picker so it doesn't show stale results next open
+  const candEl = document.getElementById('jrvManualCandidates');
+  if (candEl) { candEl.style.display = 'none'; candEl.innerHTML = ''; }
+  jrvManualLeadState = null;
   const btn = document.getElementById('jrvManualAddBtn');
   if (btn) { btn.disabled = false; btn.textContent = 'Add to Manual Lead'; }
 }
@@ -6831,6 +6998,7 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
         <textarea id="jrvManualPersonal" placeholder="e.g. I've known Craig 25 years, we played hockey together at York Mills, still play every Tuesday. — or — Met John briefly at the SME conference in March, talked about EV battery hiring. — or — His son works with my brother." class="jrv-manual-input" style="height:80px;resize:vertical;"></textarea>
       </div>
+      <div id="jrvManualCandidates" style="margin-bottom:12px; display:none;"></div>
       <div style="margin-bottom:14px;">
         <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Contacts (one per line: Name | email | title)</label>
         <textarea id="jrvManualContacts" placeholder="e.g.&#10;Peter Krug | pkrug@multimatic.com | General Manager&#10;Jane Doe | jdoe@multimatic.com | HR Manager" class="jrv-manual-input" style="height:120px;resize:vertical;font-family:ui-monospace,monospace;font-size:12px;"></textarea>
