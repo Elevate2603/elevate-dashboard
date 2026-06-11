@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-H-CLASSIFY-DAILY-CRON -->
+<!-- ELEVATE-2026-0611-I-JARVIS-MANUAL-LEAD -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -4944,6 +4944,44 @@ function jrvShowUI(ui) {
   if (!ui || !ui.type) return;
   if (ui.type === 'stats_modal') jrvShowStatsModal(ui);
   else if (ui.type === 'daily_report') jrvShowDailyReport(ui);
+  else if (ui.type === 'manual_lead_prefill') jrvShowManualLeadPrefill(ui);
+}
+
+// Voice-driven Manual Lead intake — JARVIS parses the spoken intent into structured
+// fields and emits this directive. We open the Add Manual Lead form pre-filled so
+// Travis only has to paste the actual contacts (ZoomInfo auto-fetch is the next phase).
+function jrvShowManualLeadPrefill(ui) {
+  // Make sure the In Sequence modal is open underneath so the Manual Lead section
+  // shows up immediately after the form is submitted.
+  jrvOpenInSeqModal('in_sequence');
+  // Then open the Add Manual Lead form with pre-filled fields.
+  jrvOpenAddManualLead();
+  // Pre-fill values from the directive (allow a small delay for the modal to mount)
+  setTimeout(() => {
+    const companyEl = document.getElementById('jrvManualCompany');
+    const cityEl = document.getElementById('jrvManualCity');
+    const contextEl = document.getElementById('jrvManualContext');
+    const contactsEl = document.getElementById('jrvManualContacts');
+    if (companyEl) companyEl.value = ui.company_name || '';
+    if (cityEl) cityEl.value = ui.company_city || '';
+    // Build a clean context blob: the verbal context + a "Suggested targets" hint
+    // so Travis sees the personas JARVIS derived from the role he mentioned.
+    let contextBlob = (ui.context || '').toString().trim();
+    if (ui.role_being_hired) {
+      const rolePrefix = `Hiring ${ui.role_being_hired}.`;
+      if (contextBlob && !contextBlob.toLowerCase().includes(ui.role_being_hired.toLowerCase())) {
+        contextBlob = rolePrefix + ' ' + contextBlob;
+      } else if (!contextBlob) {
+        contextBlob = rolePrefix;
+      }
+    }
+    if (Array.isArray(ui.target_personas) && ui.target_personas.length) {
+      contextBlob += '\n\nSuggested targets (from JARVIS): ' + ui.target_personas.join(', ');
+    }
+    if (contextEl) contextEl.value = contextBlob.trim();
+    // Focus the contacts textarea since that's the only field Travis still needs to fill
+    if (contactsEl) contactsEl.focus();
+  }, 100);
 }
 
 function jrvShowDailyReport(ui) {
