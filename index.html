@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-U-CONTACT-PREVIEW-PICKER -->
+<!-- ELEVATE-2026-0611-V-ZI-USAGE-BUTTON -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -765,6 +765,21 @@
   .jrv-contact-pick-pull:disabled { opacity:0.6; cursor:wait; }
   .jrv-cand-tag-match { background:#facc15; color:#0d0d0d; }
   .jrv-cand-tag-adjacent { background: rgba(96,165,250,0.22); color:#60a5fa; border:1px solid rgba(96,165,250,0.45); }
+  /* ZoomInfo usage check inline panel */
+  .jrv-zi-usage-btn { background: rgba(255,255,255,0.06); border:1px solid var(--border); color: var(--text); cursor:pointer; padding:5px 10px; border-radius:5px; font-size:11px; font-family:inherit; letter-spacing:0.3px; }
+  .jrv-zi-usage-btn:hover { background: rgba(200,130,10,0.18); border-color: var(--gold); color: var(--gold); }
+  .jrv-zi-usage-inline { padding:12px 18px; border-bottom:1px solid var(--border); background: rgba(0,0,0,0.25); }
+  .jrv-zi-usage-head { font-size:11px; color: var(--gold); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px; }
+  .jrv-zi-tile { background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:8px 12px; margin-bottom:6px; }
+  .jrv-zi-tile.highlight { border-color: rgba(200,130,10,0.45); background: rgba(200,130,10,0.06); }
+  .jrv-zi-tile-label { font-size:10.5px; color: var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; }
+  .jrv-zi-tile-num { font-size:16px; color: var(--text); font-weight:700; margin:3px 0; font-variant-numeric: tabular-nums; }
+  .jrv-zi-tile-bar { height:4px; background: rgba(255,255,255,0.08); border-radius:2px; overflow:hidden; }
+  .jrv-zi-tile-bar-fill { height:100%; border-radius:2px; transition: width 0.3s; }
+  .jrv-zi-tile-sub { font-size:10.5px; color: var(--text-muted); margin-top:4px; }
+  .jrv-zi-usage-foot { font-size:10.5px; color: var(--text-muted); font-style:italic; margin-top:6px; }
+  .jrv-zi-usage-loading { font-size:11px; color: var(--text-muted); font-style:italic; }
+  .jrv-zi-usage-err { font-size:11px; color:#ef4444; }
 
   /* Reach-out count + reply + bounce badges */
   .jrv-inseq-reach { font-family:'Consolas', monospace; font-size:10px; padding:3px 7px; background: rgba(255,255,255,0.05); color: var(--text-muted); border-radius:8px; letter-spacing:0.04em; white-space:nowrap; }
@@ -2972,6 +2987,12 @@ const JRV_CONFIG = {
   // Enrich is the credit-burning call. Splitting lets Travis preview names
   // before committing — only the IDs he ticks get enriched.
   ZI_CONTACTS_ENRICH_URL: 'https://hook.us2.make.com/xawaaxke18fkuw7byc8hdk3v8om89f31',
+  // ZI Usage Check (5361991) — calls zoominfo:getUsage and returns the three
+  // billing buckets. Costs nothing. Travis hits this before/after a test pull
+  // to confirm which bucket got debited. uniqueIdLimit is the constrained one
+  // (monthly contact redemptions); recordLimit + requestLimit are virtually
+  // unlimited on his plan.
+  ZI_USAGE_CHECK_URL: 'https://hook.us2.make.com/79vura6wcydzj3kpgfeq1lal3rhdz2ya',
   // ZI Company Candidates (5360870) — fires BEFORE contacts lookup. Searches
   // ZoomInfo for company variants of what Travis said ("SMI Automation Canada"
   // → "SMI Automation" → returns Ontario-based match). Frontend shows
@@ -5576,6 +5597,46 @@ async function jrvSearchZIContacts(companyName, companyCity, targetPersonas) {
   return contacts;
 }
 
+// Free ZoomInfo usage check — pings zoominfo:getUsage and renders the three
+// credit buckets inline in the Manual Lead popup. Cost: 0 credits. Useful
+// to verify before/after a pull which bucket got debited.
+async function jrvCheckZIUsage() {
+  const panel = document.getElementById('jrvZIUsageInline');
+  if (!panel || !JRV_CONFIG.ZI_USAGE_CHECK_URL) return;
+  panel.style.display = 'block';
+  panel.innerHTML = '<div class="jrv-zi-usage-loading">Checking ZoomInfo usage…</div>';
+  try {
+    const res = await fetch(JRV_CONFIG.ZI_USAGE_CHECK_URL, { method: 'GET' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const d = await res.json();
+    const tile = (label, b, highlight) => {
+      const used = Number(b.currentUsage || 0);
+      const total = Number(b.totalLimit || 0);
+      const remaining = Number(b.usageRemaining || 0);
+      const pct = total ? Math.min(100, Math.round((used / total) * 100)) : 0;
+      const barColor = pct >= 85 ? '#ef4444' : (pct >= 60 ? '#facc15' : '#4ade80');
+      return `
+        <div class="jrv-zi-tile ${highlight ? 'highlight' : ''}">
+          <div class="jrv-zi-tile-label">${label}</div>
+          <div class="jrv-zi-tile-num">${used.toLocaleString()} <span style="opacity:0.55;font-weight:normal;">/ ${total.toLocaleString()}</span></div>
+          <div class="jrv-zi-tile-bar"><div class="jrv-zi-tile-bar-fill" style="width:${pct}%;background:${barColor};"></div></div>
+          <div class="jrv-zi-tile-sub">${remaining.toLocaleString()} remaining · ${b.description || ''}</div>
+        </div>
+      `;
+    };
+    const checkedAt = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    panel.innerHTML = `
+      <div class="jrv-zi-usage-head">ZoomInfo usage (${checkedAt})</div>
+      ${tile('Unique IDs (monthly views)', d.uniqueIdLimit || {}, true)}
+      ${tile('Records returned', d.recordLimit || {}, false)}
+      ${tile('API requests', d.requestLimit || {}, false)}
+      <div class="jrv-zi-usage-foot">Tip: the monthly bucket dedupes by contact — re-pulling someone you already redeemed this month is free.</div>
+    `;
+  } catch (e) {
+    panel.innerHTML = '<div class="jrv-zi-usage-err">Could not fetch ZI usage: ' + escapeHtml(e.message || '') + '</div>';
+  }
+}
+
 // ZI Contacts ENRICH by IDs — burns one credit per contact returned. Called
 // only AFTER Travis ticks the ones he wants in the preview picker. Returns
 // the same shape the textarea expects: { name, email, title, city }.
@@ -6382,6 +6443,10 @@ function jrvCloseAddManualLead() {
   const candEl = document.getElementById('jrvManualCandidates');
   if (candEl) { candEl.style.display = 'none'; candEl.innerHTML = ''; }
   jrvManualLeadState = null;
+  jrvContactPickerState = null;
+  // Hide the ZI usage inline panel too
+  const usageEl = document.getElementById('jrvZIUsageInline');
+  if (usageEl) { usageEl.style.display = 'none'; usageEl.innerHTML = ''; }
   const btn = document.getElementById('jrvManualAddBtn');
   if (btn) { btn.disabled = false; btn.textContent = 'Add to Manual Lead'; }
 }
@@ -7355,8 +7420,12 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="jrv-modal" style="max-width:720px;">
     <div class="jrv-modal-head">
       <div class="jrv-modal-title">Add Manual Lead</div>
-      <button class="jrv-modal-close" onclick="jrvCloseAddManualLead()" aria-label="Close">×</button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button type="button" class="jrv-zi-usage-btn" onclick="jrvCheckZIUsage()" title="Check current ZoomInfo credit usage — free, no credit cost">📊 ZI Usage</button>
+        <button class="jrv-modal-close" onclick="jrvCloseAddManualLead()" aria-label="Close">×</button>
+      </div>
     </div>
+    <div id="jrvZIUsageInline" class="jrv-zi-usage-inline" style="display:none;"></div>
     <div class="jrv-modal-body" style="padding:18px;">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
         <div>
