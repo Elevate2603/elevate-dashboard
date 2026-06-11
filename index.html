@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-S-FIT-AWARE-DRAFTER -->
+<!-- ELEVATE-2026-0611-T-ZI-FALLBACK-AND-CITY -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -5076,7 +5076,7 @@ function jrvShowManualLeadPrefill(ui) {
                   contactsEl.placeholder = 'Company is in RCRM but no matching contacts. Paste manually: Name | email | title.';
                   return;
                 }
-                const lines = contacts.map(x => `${x.name} | ${x.email} | ${x.title}`);
+                const lines = contacts.map(x => `${x.name} | ${x.email} | ${x.title}${x.city ? ' | ' + x.city : ''}`);
                 contactsEl.value = lines.join('\n');
               })
               .catch(() => {
@@ -5331,7 +5331,7 @@ function jrvSelectCompanyCandidate(idx) {
           return;
         }
         if (contactsEl) {
-          const lines = contacts.map(c => `${c.name} | ${c.email} | ${c.title}`);
+          const lines = contacts.map(c => `${c.name} | ${c.email} | ${c.title}${c.city ? ' | ' + c.city : ''}`);
           contactsEl.value = lines.join('\n');
         }
       })
@@ -5368,7 +5368,7 @@ function jrvKickContactsFetch(companyName, cityForFilter, personas) {
         contactsEl.placeholder = 'ZoomInfo returned no matching contacts at this location. Paste manually: Name | email | title (one per line).';
         return;
       }
-      const lines = contacts.map(c => `${c.name} | ${c.email} | ${c.title}`);
+      const lines = contacts.map(c => `${c.name} | ${c.email} | ${c.title}${c.city ? ' | ' + c.city : ''}`);
       contactsEl.value = lines.join('\n');
     })
     .catch(() => {
@@ -5381,32 +5381,51 @@ function jrvKickContactsFetch(companyName, cityForFilter, personas) {
 // Call the ZoomInfo Contacts Lookup webhook with company + city + titles. Unwrap
 // the BasicAggregator response shape ({group, aggregate: {...}}) into clean
 // objects, and filter to contacts whose ZoomInfo office city matches the
-// requested city (case-insensitive substring). Returns array of {name, email, title}.
+// requested city (case-insensitive substring). Returns array of
+// {name, email, title, city}.
+//
+// Three-tier match (mirrors the RCRM logic so behavior is consistent):
+//  - Tier 1: search ZI with the target personas Travis derived
+//  - Tier 2: if zero hits, retry with decision-maker fallback titles
+//            (GM, President, VP, Director, Owner) — they have say or can refer
+//  - Tier 3: still nothing → return whatever the second pass returned, even
+//            if titles look off. Better any contact than empty.
 async function jrvFetchZIContacts(companyName, companyCity, targetPersonas) {
-  const titlesCsv = targetPersonas.join(',');
   const url = JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ company_name: companyName, company_city: companyCity, titles_csv: titlesCsv }),
-  });
-  if (!res.ok) throw new Error('ZI lookup HTTP ' + res.status);
-  const json = await res.json();
-  const raw = Array.isArray(json.contacts) ? json.contacts : [];
+  if (!url) return [];
   const cityFilter = (companyCity || '').toString().trim().toLowerCase();
-  // Unwrap BasicAggregator shape, drop entries without email (can't outreach), city-filter
-  return raw.map(r => (r && r.aggregate) ? r.aggregate : r)
-            .filter(c => c && c.email && c.name)
-            .filter(c => {
-              if (!cityFilter) return true;
-              const ciCity = (c.city || '').toLowerCase();
-              return ciCity.includes(cityFilter) || cityFilter.includes(ciCity);
-            })
-            .map(c => ({
-              name: (c.name || '').trim(),
-              email: (c.email || '').trim(),
-              title: (c.title || '').trim(),
-            }));
+  const normalize = (raw) => raw.map(r => (r && r.aggregate) ? r.aggregate : r)
+                                .filter(c => c && c.email && c.name)
+                                .filter(c => {
+                                  if (!cityFilter) return true;
+                                  const ciCity = (c.city || '').toLowerCase();
+                                  return ciCity.includes(cityFilter) || cityFilter.includes(ciCity);
+                                })
+                                .map(c => ({
+                                  name: (c.name || '').trim(),
+                                  email: (c.email || '').trim(),
+                                  title: (c.title || '').trim(),
+                                  city: (c.city || '').trim(),
+                                }));
+  const callZI = async (titlesCsv) => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_name: companyName, company_city: companyCity, titles_csv: titlesCsv }),
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return normalize(Array.isArray(json.contacts) ? json.contacts : []);
+  };
+  // Tier 1
+  const titlesCsv = (targetPersonas || []).join(',');
+  let contacts = await callZI(titlesCsv);
+  if (contacts.length) return contacts;
+  // Tier 2: decision-maker-adjacent titles always worth reaching (they have say
+  // or can refer Travis to the right person)
+  const fallbackTitles = 'General Manager,President,VP Operations,Director of Operations,Operations Manager,HR Manager,Owner';
+  contacts = await callZI(fallbackTitles);
+  return contacts;
 }
 
 function jrvShowDailyReport(ui) {
@@ -6202,7 +6221,15 @@ async function jrvSubmitManualLead() {
   const contacts = contactsRaw.split('\n').map(line => {
     const parts = line.split('|').map(p => p.trim());
     if (!parts[0]) return null;
-    return { name: parts[0], email: parts[1] || '', title: parts[2] || '', linkedin: parts[3] || '', phone: parts[4] || '' };
+    // Format: Name | email | title | city (LinkedIn + phone optional, after city)
+    return {
+      name: parts[0],
+      email: parts[1] || '',
+      title: parts[2] || '',
+      city: parts[3] || '',
+      linkedin: parts[4] || '',
+      phone: parts[5] || '',
+    };
   }).filter(Boolean);
   if (!contacts.length) { alert('Could not parse any contacts. Format: Name | email | title (one per line).'); return; }
   // Compose the context blob with explicit section markers so the Email Drafter
@@ -7184,8 +7211,8 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
       <div id="jrvManualCandidates" style="margin-bottom:12px; display:none;"></div>
       <div style="margin-bottom:14px;">
-        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Contacts (one per line: Name | email | title)</label>
-        <textarea id="jrvManualContacts" placeholder="e.g.&#10;Peter Krug | pkrug@multimatic.com | General Manager&#10;Jane Doe | jdoe@multimatic.com | HR Manager" class="jrv-manual-input" style="height:120px;resize:vertical;font-family:ui-monospace,monospace;font-size:12px;"></textarea>
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Contacts (one per line: Name | email | title | city)</label>
+        <textarea id="jrvManualContacts" placeholder="e.g.&#10;Peter Krug | pkrug@multimatic.com | General Manager | Markham&#10;Jane Doe | jdoe@multimatic.com | HR Manager | Markham" class="jrv-manual-input" style="height:120px;resize:vertical;font-family:ui-monospace,monospace;font-size:12px;"></textarea>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Tip: voice-add through JARVIS pulls these automatically from ZoomInfo filtered to the company's city. Use this form when you have the contacts in hand.</div>
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
