@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-I-JARVIS-MANUAL-LEAD -->
+<!-- ELEVATE-2026-0611-J-ZI-AUTOFETCH -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2929,6 +2929,11 @@ const JRV_CONFIG = {
   // against their latest last_communication_subject so the warm/cold/auto_reply
   // tag stays current with where the thread actually is, even if Travis replied
   // outside the dashboard.
+  // ZoomInfo Contacts Lookup (5360362) — fired from jrvShowManualLeadPrefill
+  // in parallel with form-open. Takes company + city + titles_csv, returns
+  // contacts at the company filtered to the city. Frontend post-filters by
+  // city since ZI sometimes returns other-branch contacts.
+  ZI_CONTACTS_LOOKUP_URL: 'https://hook.us2.make.com/ikyvfqr6bgnqn7rjj0eooorrw8gsdux8',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -4979,9 +4984,66 @@ function jrvShowManualLeadPrefill(ui) {
       contextBlob += '\n\nSuggested targets (from JARVIS): ' + ui.target_personas.join(', ');
     }
     if (contextEl) contextEl.value = contextBlob.trim();
-    // Focus the contacts textarea since that's the only field Travis still needs to fill
-    if (contactsEl) contactsEl.focus();
+    // Fire ZoomInfo lookup in parallel so contacts auto-populate. If it fails or
+    // returns empty, Travis still has a pre-filled form ready for manual paste.
+    if (contactsEl && Array.isArray(ui.target_personas) && ui.target_personas.length && ui.company_name && JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL) {
+      contactsEl.value = 'Fetching contacts from ZoomInfo…';
+      contactsEl.disabled = true;
+      jrvFetchZIContacts(ui.company_name, ui.company_city || '', ui.target_personas)
+        .then(contacts => {
+          contactsEl.disabled = false;
+          if (!contacts.length) {
+            contactsEl.value = '';
+            contactsEl.placeholder = 'ZoomInfo returned no matching contacts at this location. Paste manually: Name | email | title (one per line).';
+            contactsEl.focus();
+            return;
+          }
+          // Format as "Name | email | title" — matches the form's parser
+          const lines = contacts.map(c => `${c.name} | ${c.email} | ${c.title}`);
+          contactsEl.value = lines.join('\n');
+          contactsEl.focus();
+        })
+        .catch(() => {
+          contactsEl.disabled = false;
+          contactsEl.value = '';
+          contactsEl.placeholder = 'ZoomInfo lookup failed. Paste contacts manually: Name | email | title (one per line).';
+          contactsEl.focus();
+        });
+    } else if (contactsEl) {
+      contactsEl.focus();
+    }
   }, 100);
+}
+
+// Call the ZoomInfo Contacts Lookup webhook with company + city + titles. Unwrap
+// the BasicAggregator response shape ({group, aggregate: {...}}) into clean
+// objects, and filter to contacts whose ZoomInfo office city matches the
+// requested city (case-insensitive substring). Returns array of {name, email, title}.
+async function jrvFetchZIContacts(companyName, companyCity, targetPersonas) {
+  const titlesCsv = targetPersonas.join(',');
+  const url = JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ company_name: companyName, company_city: companyCity, titles_csv: titlesCsv }),
+  });
+  if (!res.ok) throw new Error('ZI lookup HTTP ' + res.status);
+  const json = await res.json();
+  const raw = Array.isArray(json.contacts) ? json.contacts : [];
+  const cityFilter = (companyCity || '').toString().trim().toLowerCase();
+  // Unwrap BasicAggregator shape, drop entries without email (can't outreach), city-filter
+  return raw.map(r => (r && r.aggregate) ? r.aggregate : r)
+            .filter(c => c && c.email && c.name)
+            .filter(c => {
+              if (!cityFilter) return true;
+              const ciCity = (c.city || '').toLowerCase();
+              return ciCity.includes(cityFilter) || cityFilter.includes(ciCity);
+            })
+            .map(c => ({
+              name: (c.name || '').trim(),
+              email: (c.email || '').trim(),
+              title: (c.title || '').trim(),
+            }));
 }
 
 function jrvShowDailyReport(ui) {
