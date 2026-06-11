@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-M-LOCATION-AND-VIEW-DRAFT -->
+<!-- ELEVATE-2026-0611-N-SILENCE-AND-SILENT-LEAD -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -4590,6 +4590,17 @@ function jrvStartAlwaysOn() {
       const wakeHint = followUp ? '<span style="opacity:0.5">[follow-up window]</span>' : '<span style="opacity:0.5">listening…</span>';
       txEl.innerHTML = wakeHint + ' <span class="jrv-transcript-you" style="opacity:0.7;font-style:italic;">' + escapeHtml(interimText.trim()) + '</span>';
     }
+    // Travis is still speaking — push the 3s silence timer out so the buffer
+    // doesn't fire mid-thought. Reset on any interim activity, not just finals.
+    if (interimText && jrvState.captureTimer) {
+      clearTimeout(jrvState.captureTimer);
+      jrvState.captureTimer = setTimeout(() => {
+        const bundled = (jrvState.bufferFinals || '').replace(/\s+/g, ' ').trim();
+        jrvState.bufferFinals = '';
+        jrvState.captureTimer = null;
+        if (bundled) jrvProcessCommand(bundled);
+      }, JRV_SILENCE_MS);
+    }
 
     // ── FAST INTERRUPT — fire on INTERIM transcripts ──
     // Chrome waits 1-2s before marking transcripts "final", which feels laggy when
@@ -4637,11 +4648,13 @@ function jrvStartAlwaysOn() {
     if (wakeMatch && wasSpeaking) {
       jrvInterruptSpeech();
       jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
-      // Strip the wake word — if Travis bundled a command with the interrupt, handle it
+      // Strip the wake word — if Travis bundled a command with the interrupt, buffer it
       const cmdAfter = finalText.replace(JRV_WAKE_RE, '').replace(/^[\s,.!?]+/, '').trim();
       if (cmdAfter) {
         if (jrvIsResumePhrase(cmdAfter)) { jrvResumeLastSpeech(); return; }
-        jrvProcessCommand(cmdAfter);
+        // Interrupt clears any prior pending buffer so the new utterance starts clean
+        jrvCancelPendingCommand();
+        jrvCommitCommand(cmdAfter);
       }
       return;
     }
@@ -4675,7 +4688,10 @@ function jrvStartAlwaysOn() {
       // Nothing to resume — fall through and let the brain handle the phrase
     }
 
-    jrvProcessCommand(command);
+    // Buffer the command instead of firing immediately. Chrome may split a single
+    // sentence into multiple finals when Travis pauses mid-thought — bundling them
+    // via the 3-second silence timer lets him think out loud without JARVIS cutting in.
+    jrvCommitCommand(command);
   };
 
   rec.onerror = (e) => {
@@ -4950,67 +4966,72 @@ function jrvShowUI(ui) {
   else if (ui.type === 'manual_lead_prefill') jrvShowManualLeadPrefill(ui);
 }
 
-// Voice-driven Manual Lead intake — JARVIS parses the spoken intent into structured
-// fields and emits this directive. We open the Add Manual Lead form pre-filled so
-// Travis only has to paste the actual contacts (ZoomInfo auto-fetch is the next phase).
-function jrvShowManualLeadPrefill(ui) {
-  // Make sure the In Sequence modal is open underneath so the Manual Lead section
-  // shows up immediately after the form is submitted.
-  jrvOpenInSeqModal('in_sequence');
-  // Then open the Add Manual Lead form with pre-filled fields.
-  jrvOpenAddManualLead();
-  // Pre-fill values from the directive (allow a small delay for the modal to mount)
-  setTimeout(() => {
-    const companyEl = document.getElementById('jrvManualCompany');
-    const cityEl = document.getElementById('jrvManualCity');
-    const contextEl = document.getElementById('jrvManualContext');
-    const contactsEl = document.getElementById('jrvManualContacts');
-    if (companyEl) companyEl.value = ui.company_name || '';
-    if (cityEl) cityEl.value = ui.company_city || '';
-    // Build a clean context blob: the verbal context + a "Suggested targets" hint
-    // so Travis sees the personas JARVIS derived from the role he mentioned.
-    let contextBlob = (ui.context || '').toString().trim();
-    if (ui.role_being_hired) {
-      const rolePrefix = `Hiring ${ui.role_being_hired}.`;
-      if (contextBlob && !contextBlob.toLowerCase().includes(ui.role_being_hired.toLowerCase())) {
-        contextBlob = rolePrefix + ' ' + contextBlob;
-      } else if (!contextBlob) {
-        contextBlob = rolePrefix;
-      }
+// Voice-driven Manual Lead intake — runs SILENTLY. Brain parses the spoken intent
+// into structured fields and emits this directive. We do NOT open a form. We fetch
+// ZoomInfo contacts in the background, POST them straight to the Manual Lead Add
+// webhook, then refresh the In Sequence panel so the new Manual Lead section
+// surfaces with the contacts already populated. JARVIS speaks a tiny confirm only.
+async function jrvShowManualLeadPrefill(ui) {
+  const company = (ui.company_name || '').trim();
+  const city = (ui.company_city || '').trim();
+  const personas = Array.isArray(ui.target_personas) ? ui.target_personas : [];
+  if (!company || !personas.length) {
+    jrvSpeakOut("I need the company name and a role to target. Try that again.");
+    return;
+  }
+  // Build a clean context blob so it gets stored on each contact's queue record
+  let contextBlob = (ui.context || '').toString().trim();
+  if (ui.role_being_hired) {
+    const rolePrefix = `Hiring ${ui.role_being_hired}.`;
+    if (contextBlob && !contextBlob.toLowerCase().includes(ui.role_being_hired.toLowerCase())) {
+      contextBlob = rolePrefix + ' ' + contextBlob;
+    } else if (!contextBlob) {
+      contextBlob = rolePrefix;
     }
-    if (Array.isArray(ui.target_personas) && ui.target_personas.length) {
-      contextBlob += '\n\nSuggested targets (from JARVIS): ' + ui.target_personas.join(', ');
-    }
-    if (contextEl) contextEl.value = contextBlob.trim();
-    // Fire ZoomInfo lookup in parallel so contacts auto-populate. If it fails or
-    // returns empty, Travis still has a pre-filled form ready for manual paste.
-    if (contactsEl && Array.isArray(ui.target_personas) && ui.target_personas.length && ui.company_name && JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL) {
-      contactsEl.value = 'Fetching contacts from ZoomInfo…';
-      contactsEl.disabled = true;
-      jrvFetchZIContacts(ui.company_name, ui.company_city || '', ui.target_personas)
-        .then(contacts => {
-          contactsEl.disabled = false;
-          if (!contacts.length) {
-            contactsEl.value = '';
-            contactsEl.placeholder = 'ZoomInfo returned no matching contacts at this location. Paste manually: Name | email | title (one per line).';
-            contactsEl.focus();
-            return;
-          }
-          // Format as "Name | email | title" — matches the form's parser
-          const lines = contacts.map(c => `${c.name} | ${c.email} | ${c.title}`);
-          contactsEl.value = lines.join('\n');
-          contactsEl.focus();
-        })
-        .catch(() => {
-          contactsEl.disabled = false;
-          contactsEl.value = '';
-          contactsEl.placeholder = 'ZoomInfo lookup failed. Paste contacts manually: Name | email | title (one per line).';
-          contactsEl.focus();
-        });
-    } else if (contactsEl) {
-      contactsEl.focus();
-    }
-  }, 100);
+  }
+  if (personas.length) {
+    contextBlob += ` Targets: ${personas.join(', ')}.`;
+  }
+  contextBlob = contextBlob.trim();
+  // 1) Hit ZoomInfo in the background
+  let contacts = [];
+  try {
+    contacts = await jrvFetchZIContacts(company, city, personas);
+  } catch (e) {
+    console.error('[Manual lead voice] ZI lookup failed:', e);
+  }
+  if (!contacts.length) {
+    jrvSpeakOut(`Couldn't find ${company} contacts in ${city || 'that area'}. Try adding them through the form.`);
+    return;
+  }
+  // 2) POST the contacts straight to the Manual Lead Add webhook
+  try {
+    const res = await fetch(JRV_CONFIG.MANUAL_LEAD_ADD_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company_name: company,
+        company_city: city,
+        context: contextBlob,
+        contacts,
+      }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+  } catch (e) {
+    console.error('[Manual lead voice] add failed:', e);
+    jrvSpeakOut("Couldn't add the lead. Try again.");
+    return;
+  }
+  // 3) Refresh the In Sequence panel if it's open so the Manual Lead section
+  //    shows the new contacts immediately. Otherwise the next time Travis opens
+  //    the panel they'll be there.
+  const seqModal = document.getElementById('jrvInSeqModal');
+  if (seqModal && seqModal.style.display !== 'none') {
+    jrvFetchInSeq();
+  }
+  // 4) Brief spoken confirmation — Travis explicitly asked for short replies
+  const noun = contacts.length === 1 ? 'contact' : 'contacts';
+  jrvSpeakOut(`Done. ${contacts.length} ${noun} added to Manual Lead for ${company}.`);
 }
 
 // Call the ZoomInfo Contacts Lookup webhook with company + city + titles. Unwrap
@@ -5347,8 +5368,37 @@ const jrvState = {
   coreTargetOpacity: 0.60, // resting glow baseline — bright pass
   coreThrob: 0,
   currentScatter: 1.0,
-  recentInterrupt: false // gate: prevents bare-wake ack from double-firing after interim interrupt
+  recentInterrupt: false, // gate: prevents bare-wake ack from double-firing after interim interrupt
+  // Silence-based end-of-utterance buffer. Lets Travis pause mid-thought without
+  // JARVIS jumping in. Each new transcript resets a 3-second silence timer; when
+  // the timer fires, the buffered text gets sent to the brain as one command.
+  bufferFinals: '',
+  captureTimer: null
 };
+const JRV_SILENCE_MS = 3000;
+
+// Append a chunk of speech to the running buffer and reset the silence timer.
+// When 3 seconds pass without any new speech, the buffered command fires once.
+function jrvCommitCommand(textChunk) {
+  if (!textChunk) return;
+  jrvState.bufferFinals = (jrvState.bufferFinals || '') + ' ' + textChunk;
+  if (jrvState.captureTimer) clearTimeout(jrvState.captureTimer);
+  jrvState.captureTimer = setTimeout(() => {
+    const bundled = (jrvState.bufferFinals || '').replace(/\s+/g, ' ').trim();
+    jrvState.bufferFinals = '';
+    jrvState.captureTimer = null;
+    if (!bundled) return;
+    jrvProcessCommand(bundled);
+  }, JRV_SILENCE_MS);
+}
+
+// Cancel any pending buffered command. Called when JARVIS gets interrupted so a
+// new utterance starts from a clean slate.
+function jrvCancelPendingCommand() {
+  if (jrvState.captureTimer) clearTimeout(jrvState.captureTimer);
+  jrvState.captureTimer = null;
+  jrvState.bufferFinals = '';
+}
 
 // ── Time-of-day awareness + 5-hour-gap rule ─────────────────────────────
 // Persist the timestamp of every interaction so JARVIS knows when it's been
