@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-K-NO-AUTO-BRIEF -->
+<!-- ELEVATE-2026-0611-L-DEDUPE-SENT-TODAY -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -5991,7 +5991,6 @@ function jrvRenderInSeq() {
             <div class="jrv-inseq-name" onclick="jrvToggleThread('${escapeAttr(email)}','${threadId}', this)" title="Click to see recent emails">${escapeHtml(name)}</div>
             ${meta ? `<div class="jrv-inseq-meta">${escapeHtml(meta)}</div>` : ''}
             <div class="jrv-inseq-badges">
-              ${sentToday ? `<span class="jrv-inseq-sent-today" title="You sent an email to this contact today. The badge clears at midnight.">✉ Sent today</span>` : ''}
               ${extraBadgeHtml || ''}
               <span class="jrv-inseq-reach${reachCls}" title="Outbound emails to this contact (Outlook sent items + Emailed notes)">${reachLabel}</span>
               ${hasReplied ? `<span class="jrv-inseq-reply" title="Genuine human reply detected (auto-replies excluded)">Replied</span>` : ''}
