@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-L-DEDUPE-SENT-TODAY -->
+<!-- ELEVATE-2026-0611-M-LOCATION-AND-VIEW-DRAFT -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -5964,7 +5964,11 @@ function jrvRenderInSeq() {
     const title = (r.contact_title || '').trim();
     const company = (r.company_name || '').trim();
     const email = (r.contact_email || '').trim();
-    const meta = [title, company].filter(Boolean).join(', ');
+    // Prefer the contact's own city/state; fall back to the company's office city/state
+    const locCity = (r.contact_city || r.company_city || '').trim();
+    const locState = (r.contact_state || r.company_state || '').trim();
+    const location = [locCity, locState].filter(Boolean).join(', ');
+    const meta = [title, company, location].filter(Boolean).join(' · ');
     const qk = r.key || '';
     const rcrmId = r.rcrm_contact_id || '';
     const threadId = 'jrvThread_' + qk.replace(/[^a-z0-9_-]/gi, '_');
@@ -5981,7 +5985,7 @@ function jrvRenderInSeq() {
     const rowSentCls = sentToday ? ' jrv-inseq-row-sent-today' : '';
     const draftBtnHtml = sentToday
       ? `<button class="jrv-inseq-draft-btn jrv-inseq-draft-btn-sent" disabled title="An email was already sent to this contact today. Wait until tomorrow before sending another.">✓ Sent today</button>`
-      : `<button class="jrv-inseq-draft-btn" onclick="jrvDraftPreview('${escapeAttr(qk)}', this)" title="Generate a follow-up draft for this contact (popup preview, then Send via Outlook)">📧 Display Follow-up Email</button>`;
+      : `<button class="jrv-inseq-draft-btn" onclick="jrvDraftPreview('${escapeAttr(qk)}', this)" title="Generate a follow-up draft for this contact (popup preview, then Send via Outlook)">📧 View Draft Email</button>`;
     return `
       <div class="jrv-inseq-row-wrap">
         <div class="jrv-inseq-row${rowSentCls}" data-key="${escapeAttr(qk)}">
@@ -6154,7 +6158,7 @@ async function jrvDraftPreview(queueKey, btn) {
     console.error('[Draft preview] failed:', e);
     alert('Draft failed: ' + (e.message || ''));
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '📧 Display Follow-up Email'; }
+    if (btn) { btn.disabled = false; btn.textContent = '📧 View Draft Email'; }
   }
 }
 
