@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-J-ZI-AUTOFETCH -->
+<!-- ELEVATE-2026-0611-K-NO-AUTO-BRIEF -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -4850,12 +4850,10 @@ function jrvProcessGreeting(period, originalText) {
   jrvSphereTargetScale = 1.25;
   setTimeout(() => { jrvSphereTargetScale = 1.05; }, 1200);
   jrvSpeakOut(reply);
-  // Morning brief — once per calendar day, queued right after the greeting reply
-  if (period === 'morning' && jrvBriefData && jrvBriefData.narration_text && !jrvBriefSpokenToday()) {
-    jrvQueueSpeak("Here is today's brief.");
-    jrvQueueSpeak(jrvBriefData.narration_text);
-    jrvMarkBriefSpoken();
-  }
+  // Morning brief auto-narration removed 2026-06-11 — Travis explicitly disabled
+  // unsolicited brief playback. The brief card still renders in the right rail
+  // for visual reference, and asking "give me the morning brief" via voice still
+  // routes through the brain which delivers the daily_report on demand.
   jrvState.followUpUntil = Date.now() + JRV_FOLLOWUP_MS;
 }
 
