@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-Z-OVERSIGHT-TAXONOMY -->
+<!-- ELEVATE-2026-0611-AA-ZI-WIDER-NET -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -5603,25 +5603,38 @@ async function jrvSearchZIContacts(companyName, companyCity, targetPersonas, tar
     const json = await res.json();
     return normalize(Array.isArray(json.contacts) ? json.contacts : []);
   };
-  const titlesCsv = (targetPersonas || []).join(',');
-  let contacts = await callZI(titlesCsv);
-  if (contacts.length) {
-    // Score + cap to top 5 so a wide ZI result doesn't flood the picker
-    const family = jrvClassifyRoleFamily(targetRole);
-    contacts.forEach(c => { c._score = jrvScoreContactForRole(c, targetRole, family); });
-    contacts.sort((a, b) => (b._score - a._score) || (a.title || '').length - (b.title || '').length);
-    return contacts.slice(0, 5).map(c => { const { _score, ...rest } = c; return rest; });
-  }
-  // Fallback: search ZI using the role-family's oversight titles instead of
-  // the hardcoded ops/HR list. Skilled trades gets Maintenance Mgr/Supervisor,
-  // logistics gets Dispatch/Transportation, etc.
+  // Mirror the RCRM blueprint exactly: start broad, score, cap top 5.
+  // ZI's server-side titles_csv filter is a HINT, not a hard restriction —
+  // sending the oversight family from the get-go (not just narrow personas)
+  // widens what comes back so an 8-person shop doesn't return 1 row.
   const family = jrvClassifyRoleFamily(targetRole);
-  const oversight = (JRV_OVERSIGHT_MAP[family] || JRV_OVERSIGHT_MAP.production)
-    .map(t => t.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' '));
-  contacts = await callZI(oversight.join(','));
-  contacts.forEach(c => { c._score = jrvScoreContactForRole(c, targetRole, family); });
-  contacts.sort((a, b) => (b._score - a._score) || (a.title || '').length - (b.title || '').length);
-  return contacts.slice(0, 5).map(c => { const { _score, ...rest } = c; return rest; });
+  const oversight = JRV_OVERSIGHT_MAP[family] || JRV_OVERSIGHT_MAP.production;
+  // Union of brain-suggested personas + oversight family titles, title-cased
+  const titleSet = new Set();
+  (targetPersonas || []).forEach(p => p && titleSet.add(p.trim()));
+  oversight.forEach(o => titleSet.add(o.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')));
+  let merged = await callZI(Array.from(titleSet).join(','));
+  // Dedupe by id helper
+  const seen = new Set();
+  const addUnique = (list) => list.forEach(c => {
+    if (c && c.id && !seen.has(c.id)) { seen.add(c.id); merged.push(c); }
+  });
+  // Initialize seen with whatever the first call returned
+  merged = merged.filter(c => c && c.id);
+  merged.forEach(c => seen.add(c.id));
+  // If still under 5, widen with a generic leadership net so small companies
+  // still return supervisors/leads. ZI's server-side title filter accepts
+  // a broad CSV — this catches Maintenance Lead, Shift Supervisor, etc.,
+  // that the family-specific list might miss.
+  if (merged.length < 5) {
+    const widerNet = 'Manager,Supervisor,Director,President,Owner,VP,Vice President,Lead,Coordinator,Foreman,Superintendent,Chief';
+    const extras = await callZI(widerNet);
+    addUnique(extras);
+  }
+  // Score + sort + cap to top 5 (same as RCRM)
+  merged.forEach(c => { c._score = jrvScoreContactForRole(c, targetRole, family); });
+  merged.sort((a, b) => (b._score - a._score) || (a.title || '').length - (b.title || '').length);
+  return merged.slice(0, 5).map(c => { const { _score, ...rest } = c; return rest; });
 }
 
 // Free ZoomInfo usage check — pings zoominfo:getUsage and renders the three
