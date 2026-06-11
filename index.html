@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-C-SENT-TODAY -->
+<!-- ELEVATE-2026-0611-D-SEND-BTN-RESET -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -5868,14 +5868,20 @@ function jrvOpenDraftModal(subject, body) {
   if (!modal) return;
   const subjEl = document.getElementById('jrvDraftModalSubject');
   const bodyEl = document.getElementById('jrvDraftModalBody');
+  const sendBtn = document.getElementById('jrvDraftModalSendBtn');
   if (subjEl) subjEl.value = subject;
   if (bodyEl) bodyEl.value = body;
+  // Always reset the Send button so a stuck "Sending…" state from a prior
+  // send doesn't carry over into a new draft preview.
+  if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send via Outlook'; }
   modal.style.display = 'flex';
 }
 
 function jrvCloseDraftModal() {
   const modal = document.getElementById('jrvDraftModal');
   if (modal) modal.style.display = 'none';
+  const sendBtn = document.getElementById('jrvDraftModalSendBtn');
+  if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send via Outlook'; }
   jrvDraftState.currentKey = null;
   jrvDraftState.currentSubject = '';
   jrvDraftState.currentBody = '';
