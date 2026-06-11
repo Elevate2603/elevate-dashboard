@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-R-RCRM-FIRST -->
+<!-- ELEVATE-2026-0611-S-FIT-AWARE-DRAFTER -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2937,7 +2937,7 @@ const JRV_CONFIG = {
   // the queue draft and fires the email + RCRM upsert + Emailed note.
   INSEQ_MIX_FETCH_URL: 'https://hook.us2.make.com/qhr1uy1dyh94ictkdtcccta18a4vsfwu',
   PIPELINE_STAGE_MOVE_URL: 'https://hook.us2.make.com/63tnoage1a8w37ehmt7k78hbhv74qtnn',
-  DRAFT_PREVIEW_URL: 'https://hook.us2.make.com/4r2s43f77i2f0nglpgbah1zzmdbv6sg7',
+  DRAFT_PREVIEW_URL: 'https://hook.us2.make.com/0knlp2y8kmgu6q49wkri4yn6hyjd8eo7',
   OUTLOOK_SEND_URL: 'https://hook.us2.make.com/o22gxt6hnvuhey3e2e321uj0p1ny4nod',
   // Manual Lead — voice-driven or form-driven entry into In Sequence with
   // pipeline_stage=manual_lead. Auto-graduates to regular In Sequence after
@@ -5019,6 +5019,9 @@ function jrvShowManualLeadPrefill(ui) {
     const contactsEl = document.getElementById('jrvManualContacts');
     if (companyEl) companyEl.value = ui.company_name || '';
     if (cityEl) cityEl.value = ui.company_city || '';
+    // Target role drives fit-vs-misfit analysis in the drafter prompt
+    const targetRoleEl = document.getElementById('jrvManualTargetRole');
+    if (targetRoleEl) targetRoleEl.value = ui.role_being_hired || '';
     // Business context (role being hired, urgency, market signals)
     let businessBlob = (ui.context || '').toString().trim();
     if (ui.role_being_hired) {
@@ -5159,16 +5162,33 @@ async function jrvFetchRCRMCompanyContacts(companySlug, targetPersonas) {
       rcrm_company_slug: c.company_slug || companySlug,
       resource_url: 'https://app.recruitcrm.io/contact/' + (c.slug || ''),
     }));
-    // If target personas were given, prefer contacts whose title matches any
-    // persona substring (case-insensitive). If no matches, return ALL — better
-    // to surface every existing contact than to come back empty.
+    // Three-tier matching (Travis's spec): prefer titles that match the target
+    // personas exactly; if no direct match, fall back to decision-maker-adjacent
+    // titles (GM, Plant Mgr, Ops, HR, COO, President) since they have say and
+    // can either entertain the pitch or refer Travis to the right person; if
+    // still nothing matches, return the first 3 contacts no matter what.
     if (Array.isArray(targetPersonas) && targetPersonas.length) {
       const personasLower = targetPersonas.map(p => p.toLowerCase());
       const matched = contacts.filter(c => {
         const titleLower = (c.title || '').toLowerCase();
         return personasLower.some(p => titleLower.includes(p) || p.includes(titleLower));
       });
-      if (matched.length) contacts = matched;
+      if (matched.length) {
+        contacts = matched;
+      } else {
+        // Tier 2: decision-maker-adjacent. These always have a say or can refer.
+        const decisionMakerKeywords = ['general manager', 'plant manager', 'operations manager', 'operations director', 'director of operations', 'vp operations', 'hr manager', 'human resources', 'talent', 'people operations', 'coo', 'president', 'owner', 'founder', 'managing director', 'gm'];
+        const adjacent = contacts.filter(c => {
+          const titleLower = (c.title || '').toLowerCase();
+          return decisionMakerKeywords.some(k => titleLower.includes(k));
+        });
+        if (adjacent.length) {
+          contacts = adjacent.slice(0, 3);
+        } else {
+          // Tier 3: any 3 contacts. Better than empty.
+          contacts = contacts.slice(0, 3);
+        }
+      }
     }
     return contacts;
   } catch (e) {
@@ -6147,7 +6167,7 @@ function jrvOpenAddManualLead() {
   const modal = document.getElementById('jrvAddManualModal');
   if (!modal) return;
   // Clear fields each open
-  ['jrvManualCompany','jrvManualCity','jrvManualContext','jrvManualPersonal','jrvManualContacts'].forEach(id => {
+  ['jrvManualCompany','jrvManualCity','jrvManualTargetRole','jrvManualContext','jrvManualPersonal','jrvManualContacts'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -6173,6 +6193,7 @@ function jrvCloseAddManualLead() {
 async function jrvSubmitManualLead() {
   const company = (document.getElementById('jrvManualCompany').value || '').trim();
   const city = (document.getElementById('jrvManualCity').value || '').trim();
+  const targetRole = (document.getElementById('jrvManualTargetRole').value || '').trim();
   const businessContext = (document.getElementById('jrvManualContext').value || '').trim();
   const personalContext = (document.getElementById('jrvManualPersonal').value || '').trim();
   const contactsRaw = (document.getElementById('jrvManualContacts').value || '').trim();
@@ -6196,7 +6217,7 @@ async function jrvSubmitManualLead() {
     const res = await fetch(JRV_CONFIG.MANUAL_LEAD_ADD_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company_name: company, company_city: city, context, contacts }),
+      body: JSON.stringify({ company_name: company, company_city: city, target_role: targetRole, context, contacts }),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     jrvCloseAddManualLead();
@@ -7133,7 +7154,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <button class="jrv-modal-close" onclick="jrvCloseAddManualLead()" aria-label="Close">×</button>
     </div>
     <div class="jrv-modal-body" style="padding:18px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
         <div>
           <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Company</label>
           <input type="text" id="jrvManualCompany" placeholder="e.g. Multimatic" class="jrv-manual-input">
@@ -7141,6 +7162,10 @@ document.addEventListener('DOMContentLoaded', function() {
         <div>
           <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Company city</label>
           <input type="text" id="jrvManualCity" placeholder="e.g. Markham" class="jrv-manual-input">
+        </div>
+        <div>
+          <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Hiring for</label>
+          <input type="text" id="jrvManualTargetRole" placeholder="e.g. Production Manager" class="jrv-manual-input" title="The role they're hiring — used by the drafter to know if a contact is fit or wrong-fit. JARVIS pre-fills this from your voice.">
         </div>
       </div>
       <div style="margin-bottom:12px;">
