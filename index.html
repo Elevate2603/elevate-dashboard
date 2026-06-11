@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-Y-ROLE-IN-CONTEXT -->
+<!-- ELEVATE-2026-0611-Z-OVERSIGHT-TAXONOMY -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -5199,10 +5199,60 @@ async function jrvFetchRCRMCompanyCandidates(query) {
   }
 }
 
+// Role-family → oversight title patterns. Used to score RCRM contacts so the
+// picker shows the people who actually own/oversee that department, not just
+// anyone with "manager" in their title. Supervisors are valid targets in
+// trades/production/quality/logistics — they hire and refer.
+const JRV_OVERSIGHT_MAP = {
+  skilled_trades:  ['maintenance manager','maintenance supervisor','production manager','production supervisor','plant manager','operations manager','general manager','gm','hr manager','human resources'],
+  production:      ['production manager','production supervisor','plant manager','warehouse manager','operations manager','general manager','gm','hr manager','human resources'],
+  logistics:       ['logistics manager','dispatch supervisor','dispatch manager','transportation manager','operations manager','general manager','gm','hr manager','human resources'],
+  quality:         ['quality manager','quality supervisor','qa manager','qc manager','operations manager','plant manager','general manager','gm','hr manager','human resources'],
+  engineering:     ['engineering manager','engineering director','design manager','vp engineering','director of engineering','general manager','gm','hr manager','human resources'],
+  finance:         ['cfo','controller','vp finance','director of finance','finance manager','hr manager','human resources'],
+  sales:           ['sales manager','sales director','vp sales','customer service manager','csr manager','operations manager','general manager','gm','hr manager','human resources'],
+  hr:              ['hr manager','hr director','vp hr','chro','people operations','talent manager','coo'],
+  c_suite:         ['ceo','coo','president','owner','vp operations','general manager','gm','hr manager','human resources'],
+};
+
+// Classify a free-text role into one of the families above. Substring matches
+// against high-signal keywords. Falls back to production (the most common
+// staffing target) when nothing matches.
+function jrvClassifyRoleFamily(role) {
+  const r = (role || '').toLowerCase();
+  if (!r) return 'production';
+  if (/\b(machine builder|assembler|welder|cnc|machinist|millwright|tool ?(?:builder|maker)|trades?|electrician|hvac|mechanic)\b/.test(r)) return 'skilled_trades';
+  if (/\b(production|labour|labor|line worker|fabricator|warehouse|forklift|picker|packer)\b/.test(r)) return 'production';
+  if (/\b(az driver|dz driver|driver|logistics|dispatch|trucking|transportation)\b/.test(r)) return 'logistics';
+  if (/\b(quality|qa|qc|inspector|auditor)\b/.test(r)) return 'quality';
+  if (/\b(engineer|engineering|designer|cad|drafter|r&d|research)\b/.test(r)) return 'engineering';
+  if (/\b(finance|controller|accountant|cfo|bookkeep|payroll)\b/.test(r)) return 'finance';
+  if (/\b(sales|csr|customer service|account manager|business develop|bd|inside sales)\b/.test(r)) return 'sales';
+  if (/\b(hr|human resources|talent|recruiter|recruiting|people ops)\b/.test(r)) return 'hr';
+  if (/\b(ceo|coo|president|owner|founder|chief|gm$|^gm\b|general manager)\b/.test(r)) return 'c_suite';
+  return 'production';
+}
+
+// Score a contact's title against the role family. Higher = more important.
+// 5 = exact target-role title hit. 3 = oversight title for that family.
+// 2 = generic decision-maker (covers cross-functional execs).
+// 1 = anyone else with a title at this company.
+function jrvScoreContactForRole(contact, targetRole, family) {
+  const titleLower = (contact.title || '').toLowerCase().trim();
+  if (!titleLower) return 1;
+  const targetLower = (targetRole || '').toLowerCase().trim();
+  if (targetLower && (titleLower.includes(targetLower) || targetLower.includes(titleLower))) return 5;
+  const oversightList = JRV_OVERSIGHT_MAP[family] || [];
+  if (oversightList.some(k => titleLower.includes(k))) return 3;
+  if (/\b(general manager|gm|president|owner|founder|coo|ceo|chief)\b/.test(titleLower)) return 2;
+  return 1;
+}
+
 // RCRM Contacts at a company — POST {company_slug:X} returns the contacts list
-// already in RCRM. Used when Travis picks an RCRM candidate; we use these
-// directly with their existing slug + resource_url (no ZI lookup needed).
-async function jrvFetchRCRMCompanyContacts(companySlug, targetPersonas) {
+// already in RCRM. Filters to contacts with email, scores each by role-family
+// oversight + target-role exact match, returns top 5 (Travis's cap so the
+// picker stays compact).
+async function jrvFetchRCRMCompanyContacts(companySlug, targetPersonas, targetRole) {
   if (!companySlug || !JRV_CONFIG.RCRM_COMPANY_CONTACTS_URL) return [];
   try {
     const res = await fetch(JRV_CONFIG.RCRM_COMPANY_CONTACTS_URL, {
@@ -5213,8 +5263,6 @@ async function jrvFetchRCRMCompanyContacts(companySlug, targetPersonas) {
     if (!res.ok) return [];
     const json = await res.json();
     const raw = Array.isArray(json.data) ? json.data : [];
-    // Map RCRM contact shape into the same { name, email, title } shape the
-    // submit handler expects. Filter to ones with an email.
     let contacts = raw.filter(c => c && c.email).map(c => ({
       name: (((c.first_name || '') + ' ' + (c.last_name || '')).trim()) || c.email,
       email: c.email,
@@ -5224,11 +5272,11 @@ async function jrvFetchRCRMCompanyContacts(companySlug, targetPersonas) {
       rcrm_company_slug: c.company_slug || companySlug,
       resource_url: 'https://app.recruitcrm.io/contact/' + (c.slug || ''),
     }));
-    // Return ALL contacts at the company — no persona filtering. The picker
-    // surfaces ★ TARGET MATCH and Decision-maker tags for ranking/sorting,
-    // and pre-checks matches, but Travis sees every contact so he can pick
-    // and choose. Better to show too many than hide the right one.
-    return contacts;
+    // Score + sort + cap to top 5
+    const family = jrvClassifyRoleFamily(targetRole);
+    contacts.forEach(c => { c._score = jrvScoreContactForRole(c, targetRole, family); });
+    contacts.sort((a, b) => (b._score - a._score) || (a.title || '').length - (b.title || '').length);
+    return contacts.slice(0, 5).map(c => { const { _score, ...rest } = c; return rest; });
   } catch (e) {
     console.warn('[RCRM company contacts] failed:', e);
     return [];
@@ -5361,10 +5409,10 @@ async function jrvToggleCompanyExpand(idx) {
   try {
     let contacts = [];
     if (chosen.source === 'rcrm') {
-      const raw = await jrvFetchRCRMCompanyContacts(chosen.slug, personas);
+      const raw = await jrvFetchRCRMCompanyContacts(chosen.slug, personas, ui && ui.role_being_hired);
       contacts = (raw || []).map(c => ({ ...c, source: 'rcrm' }));
     } else if (JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL) {
-      const raw = await jrvSearchZIContacts(chosen.name, chosen.city || (ui && ui.company_city) || '', personas);
+      const raw = await jrvSearchZIContacts(chosen.name, chosen.city || (ui && ui.company_city) || '', personas, ui && ui.role_being_hired);
       contacts = (raw || []).map(c => ({ ...c, source: 'zi' }));
     }
     jrvCompanyContactsCache[idx] = contacts;
@@ -5384,15 +5432,16 @@ function jrvRenderInlineContacts(coIdx, contacts, ui) {
     contactsEl.innerHTML = '<div class="jrv-co-empty">No contacts found at this company for the target role. Try another variant or paste manually.</div>';
     return;
   }
-  const targetRole = (ui && ui.role_being_hired || '').toLowerCase();
-  const personas = (ui && Array.isArray(ui.target_personas)) ? ui.target_personas.map(p => p.toLowerCase()) : [];
-  const decisionMakerRe = /general manager|plant manager|operations|president|owner|chief operating|coo|human resources|hr manager|talent/i;
-  const rowsHtml = contacts.map((c, cIdx) => {
-    const titleLower = (c.title || '').toLowerCase();
-    let fit = 'other';
-    if (personas.some(p => p && (titleLower.includes(p) || p.includes(titleLower)))) fit = 'match';
-    else if (targetRole && (titleLower.includes(targetRole) || targetRole.includes(titleLower))) fit = 'match';
-    else if (decisionMakerRe.test(c.title || '')) fit = 'adjacent';
+  const targetRole = (ui && ui.role_being_hired || '').toString();
+  const family = jrvClassifyRoleFamily(targetRole);
+  // Pre-rank using the shared scorer so the inline picker, the contact-list
+  // cap, and the pre-tick logic all agree on who's important.
+  const ranked = contacts.map((c, cIdx) => {
+    const score = jrvScoreContactForRole(c, targetRole, family);
+    return { c, cIdx, score };
+  }).sort((a, b) => b.score - a.score);
+  const rowsHtml = ranked.map(({ c, cIdx, score }) => {
+    const fit = score >= 5 ? 'match' : (score >= 3 ? 'adjacent' : 'other');
     const isRcrm = c.source === 'rcrm';
     const srcTag = isRcrm
       ? '<span class="jrv-cand-tag jrv-cand-tag-rcrm">✓ In RCRM</span>'
@@ -5525,7 +5574,7 @@ async function jrvPullSelectedContacts() {
 //
 // Three-tier match same as before: target personas → decision-maker fallback
 // → empty.
-async function jrvSearchZIContacts(companyName, companyCity, targetPersonas) {
+async function jrvSearchZIContacts(companyName, companyCity, targetPersonas, targetRole) {
   const url = JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL;
   if (!url) return [];
   const cityFilter = (companyCity || '').toString().trim().toLowerCase();
@@ -5556,10 +5605,23 @@ async function jrvSearchZIContacts(companyName, companyCity, targetPersonas) {
   };
   const titlesCsv = (targetPersonas || []).join(',');
   let contacts = await callZI(titlesCsv);
-  if (contacts.length) return contacts;
-  const fallbackTitles = 'General Manager,President,VP Operations,Director of Operations,Operations Manager,HR Manager,Owner';
-  contacts = await callZI(fallbackTitles);
-  return contacts;
+  if (contacts.length) {
+    // Score + cap to top 5 so a wide ZI result doesn't flood the picker
+    const family = jrvClassifyRoleFamily(targetRole);
+    contacts.forEach(c => { c._score = jrvScoreContactForRole(c, targetRole, family); });
+    contacts.sort((a, b) => (b._score - a._score) || (a.title || '').length - (b.title || '').length);
+    return contacts.slice(0, 5).map(c => { const { _score, ...rest } = c; return rest; });
+  }
+  // Fallback: search ZI using the role-family's oversight titles instead of
+  // the hardcoded ops/HR list. Skilled trades gets Maintenance Mgr/Supervisor,
+  // logistics gets Dispatch/Transportation, etc.
+  const family = jrvClassifyRoleFamily(targetRole);
+  const oversight = (JRV_OVERSIGHT_MAP[family] || JRV_OVERSIGHT_MAP.production)
+    .map(t => t.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' '));
+  contacts = await callZI(oversight.join(','));
+  contacts.forEach(c => { c._score = jrvScoreContactForRole(c, targetRole, family); });
+  contacts.sort((a, b) => (b._score - a._score) || (a.title || '').length - (b.title || '').length);
+  return contacts.slice(0, 5).map(c => { const { _score, ...rest } = c; return rest; });
 }
 
 // Free ZoomInfo usage check — pings zoominfo:getUsage and renders the three
