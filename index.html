@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-D-SEND-BTN-RESET -->
+<!-- ELEVATE-2026-0611-E-EDITABLE-RCRM-LOG -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2903,7 +2903,7 @@ const JRV_CONFIG = {
   INSEQ_MIX_FETCH_URL: 'https://hook.us2.make.com/qhr1uy1dyh94ictkdtcccta18a4vsfwu',
   PIPELINE_STAGE_MOVE_URL: 'https://hook.us2.make.com/63tnoage1a8w37ehmt7k78hbhv74qtnn',
   DRAFT_PREVIEW_URL: 'https://hook.us2.make.com/4r2s43f77i2f0nglpgbah1zzmdbv6sg7',
-  OUTLOOK_SEND_URL: 'https://hook.us2.make.com/gxwjwb3suti31c9ujqh84wx7597nfttt',
+  OUTLOOK_SEND_URL: 'https://hook.us2.make.com/o22gxt6hnvuhey3e2e321uj0p1ny4nod',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -5891,13 +5891,27 @@ async function jrvSendDraftViaOutlook() {
   const qk = jrvDraftState.currentKey;
   if (!qk) return;
   const sendBtn = document.getElementById('jrvDraftModalSendBtn');
+  const subjEl = document.getElementById('jrvDraftModalSubject');
+  const bodyEl = document.getElementById('jrvDraftModalBody');
+  // Read the CURRENT textarea values so any edits the user made get sent + logged.
+  const subject = subjEl ? (subjEl.value || '').trim() : '';
+  const body = bodyEl ? (bodyEl.value || '').trim() : '';
+  if (!subject || !body) {
+    alert('Subject and body are both required before sending.');
+    return;
+  }
   if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
   try {
-    const url = `${JRV_CONFIG.OUTLOOK_SEND_URL}?queue_key=${encodeURIComponent(qk)}`;
-    const res = await fetch(url, { method: 'GET' });
+    // POST so long bodies don't hit URL-length limits. Make webhook is configured
+    // to parse JSON bodies (stringify:false), so 1.subject / 1.body land cleanly.
+    const res = await fetch(JRV_CONFIG.OUTLOOK_SEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queue_key: qk, subject, body }),
+    });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     jrvCloseDraftModal();
-    // Refresh modal so the new send shows up in reach-out count + recency
+    // Refresh modal so the new send shows up in reach-out count + recency + sent-today badge
     jrvFetchInSeq();
   } catch (e) {
     console.error('[Outlook send] failed:', e);
@@ -5929,11 +5943,16 @@ async function jrvBulkDraftAndSend() {
   let done = 0, failed = 0;
   await Promise.all(keys.map(async qk => {
     try {
-      // Draft (writes draft fields to queue)
+      // Draft (writes draft fields to queue) — drafter v6 reads queue + writes back
       const draftRes = await fetch(`${JRV_CONFIG.DRAFT_PREVIEW_URL}?queue_key=${encodeURIComponent(qk)}`);
       if (!draftRes.ok) throw new Error('draft HTTP ' + draftRes.status);
-      // Send (reads draft from queue, sends + RCRM upsert + Emailed note)
-      const sendRes = await fetch(`${JRV_CONFIG.OUTLOOK_SEND_URL}?queue_key=${encodeURIComponent(qk)}`);
+      // Send — Outlook Send v2 reads the just-saved draft from queue, sends, logs RCRM
+      // note on contact + company. Empty subject/body in POST means "use queue values".
+      const sendRes = await fetch(JRV_CONFIG.OUTLOOK_SEND_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ queue_key: qk, subject: '', body: '' }),
+      });
       if (!sendRes.ok) throw new Error('send HTTP ' + sendRes.status);
       done++;
     } catch (e) {
@@ -6340,11 +6359,11 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="jrv-modal-body" style="padding:18px;">
       <div style="margin-bottom:10px;">
         <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Subject</label>
-        <input type="text" id="jrvDraftModalSubject" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:inherit;" readonly>
+        <input type="text" id="jrvDraftModalSubject" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:inherit;" placeholder="Subject" spellcheck="true">
       </div>
       <div style="margin-bottom:14px;">
         <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Body</label>
-        <textarea id="jrvDraftModalBody" style="width:100%;height:240px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);color:var(--text);border-radius:6px;padding:10px 12px;font-size:13px;font-family:inherit;line-height:1.5;resize:vertical;" readonly></textarea>
+        <textarea id="jrvDraftModalBody" style="width:100%;height:240px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);color:var(--text);border-radius:6px;padding:10px 12px;font-size:13px;font-family:inherit;line-height:1.5;resize:vertical;" placeholder="Email body" spellcheck="true"></textarea>
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button onclick="jrvCloseDraftModal()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:var(--text);border-radius:6px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px;">Cancel</button>
