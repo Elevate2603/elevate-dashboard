@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-O-PERSONAL-CONTEXT -->
+<!-- ELEVATE-2026-0611-P-DICTATE-MIC -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -732,6 +732,11 @@
   /* Manual lead form inputs */
   .jrv-manual-input { width:100%; background: rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); color: var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; }
   .jrv-manual-input:focus { outline:none; border-color: var(--gold); }
+  /* Click-to-dictate mic button beside each context label */
+  .jrv-mic-btn { background: rgba(255,255,255,0.06); border:1px solid var(--border); color: var(--text); cursor:pointer; padding:4px 10px; border-radius:5px; font-size:11px; font-family:inherit; letter-spacing:0.3px; }
+  .jrv-mic-btn:hover { background: rgba(200,130,10,0.18); border-color: var(--gold); color: var(--gold); }
+  .jrv-mic-btn.jrv-mic-recording { background: rgba(239,68,68,0.22); border-color:#ef4444; color:#ef4444; animation: jrv-mic-pulse 1.2s ease-in-out infinite; }
+  @keyframes jrv-mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.45); } 50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); } }
 
   /* Reach-out count + reply + bounce badges */
   .jrv-inseq-reach { font-family:'Consolas', monospace; font-size:10px; padding:3px 7px; background: rgba(255,255,255,0.05); color: var(--text-muted); border-radius:8px; letter-spacing:0.04em; white-space:nowrap; }
@@ -4708,6 +4713,9 @@ function jrvStartAlwaysOn() {
     // Skip auto-restart while the wake-up song is playing — jrvOnSongEnded will
     // bring the recognition back online when the song stops.
     if (jrvState.songPlaying) return;
+    // Skip auto-restart while click-to-dictate is using the mic. Dictation
+    // resumes the always-on listener itself when it finishes.
+    if (jrvState._dictating) return;
     if (jrvState.alwaysOn) {
       try { rec.start(); } catch (_) { /* already running on some browsers */ }
     }
@@ -5394,6 +5402,88 @@ function jrvCancelPendingCommand() {
   jrvState.bufferFinals = '';
 }
 
+// Click-to-dictate into a specific textarea (e.g. the Personal Context field).
+// Pauses the always-on listener so the two recognizers don't fight for the mic,
+// streams transcript into the field as Travis speaks, and finalizes on a second
+// click or after 3 seconds of silence. Always-on resumes automatically.
+function jrvDictateTo(targetId, btnId) {
+  const targetEl = document.getElementById(targetId);
+  const btnEl = document.getElementById(btnId);
+  if (!targetEl) return;
+  // Second click on the same button stops the running session
+  if (jrvState._dictateRec) {
+    try { jrvState._dictateRec.stop(); } catch (_) {}
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    alert('Dictation only works in Chrome or Edge.');
+    return;
+  }
+  // Pause always-on so the two recognizers don't compete for the microphone
+  jrvState._dictating = true;
+  if (jrvState.recognition) {
+    try { jrvState.recognition.stop(); } catch (_) {}
+  }
+  const rec = new SR();
+  rec.lang = 'en-US';
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  let silenceTimer = null;
+  const finalize = () => {
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+    try { rec.stop(); } catch (_) {}
+  };
+  rec.onresult = (evt) => {
+    let finalText = '';
+    for (let i = evt.resultIndex; i < evt.results.length; i++) {
+      const r = evt.results[i];
+      if (r.isFinal) finalText += r[0].transcript + ' ';
+    }
+    if (finalText.trim()) {
+      const existing = targetEl.value || '';
+      const sep = (existing && !/\s$/.test(existing)) ? ' ' : '';
+      targetEl.value = existing + sep + finalText.trim();
+    }
+    // Reset 3s silence timer on any speech activity
+    if (silenceTimer) clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(finalize, 3000);
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'no-speech' || e.error === 'audio-capture') return;
+    console.warn('[Dictation error]', e.error);
+  };
+  rec.onend = () => {
+    jrvState._dictateRec = null;
+    jrvState._dictating = false;
+    if (btnEl) {
+      btnEl.classList.remove('jrv-mic-recording');
+      btnEl.textContent = '🎤 Dictate';
+    }
+    // Resume always-on if it was on before
+    if (jrvState.alwaysOn && jrvState.recognition) {
+      try { jrvState.recognition.start(); } catch (_) {}
+    }
+  };
+  try {
+    rec.start();
+    jrvState._dictateRec = rec;
+    if (btnEl) {
+      btnEl.classList.add('jrv-mic-recording');
+      btnEl.textContent = '◉ Listening — click to stop';
+    }
+    silenceTimer = setTimeout(finalize, 3000);
+    targetEl.focus();
+  } catch (e) {
+    console.warn('[Dictation start failed]', e);
+    jrvState._dictating = false;
+    if (jrvState.alwaysOn && jrvState.recognition) {
+      try { jrvState.recognition.start(); } catch (_) {}
+    }
+  }
+}
+
 // ── Time-of-day awareness + 5-hour-gap rule ─────────────────────────────
 // Persist the timestamp of every interaction so JARVIS knows when it's been
 // a while since Travis last talked to him. After 5+ hours, the next reply
@@ -5744,6 +5834,10 @@ function jrvOpenAddManualLead() {
 }
 
 function jrvCloseAddManualLead() {
+  // Stop any in-progress dictation so the mic is released cleanly
+  if (jrvState._dictateRec) {
+    try { jrvState._dictateRec.stop(); } catch (_) {}
+  }
   const modal = document.getElementById('jrvAddManualModal');
   if (modal) modal.style.display = 'none';
   const btn = document.getElementById('jrvManualAddBtn');
@@ -6724,11 +6818,17 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
       </div>
       <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Why this lead (business context)</label>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;">Why this lead (business context)</label>
+          <button type="button" id="jrvManualContextMic" class="jrv-mic-btn" onclick="jrvDictateTo('jrvManualContext','jrvManualContextMic')" title="Click to dictate — speak naturally, JARVIS will write it down. Click again or stop talking to finish.">🎤 Dictate</button>
+        </div>
         <textarea id="jrvManualContext" placeholder="e.g. Hiring a production manager. Role has been open ~6 weeks. Posted 3 times. ZoomInfo shows growing 12 percent year over year." class="jrv-manual-input" style="height:80px;resize:vertical;"></textarea>
       </div>
       <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:11px;color:var(--gold);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Personal context / Relationship <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal;">— optional, but the drafter uses this to warm the tone</span></label>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <label style="font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:0.6px;">Personal context / Relationship <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal;">— optional, warms the tone</span></label>
+          <button type="button" id="jrvManualPersonalMic" class="jrv-mic-btn" onclick="jrvDictateTo('jrvManualPersonal','jrvManualPersonalMic')" title="Click to dictate the relationship history — JARVIS will write it down so you don't have to type.">🎤 Dictate</button>
+        </div>
         <textarea id="jrvManualPersonal" placeholder="e.g. I've known Craig 25 years, we played hockey together at York Mills, still play every Tuesday. — or — Met John briefly at the SME conference in March, talked about EV battery hiring. — or — His son works with my brother." class="jrv-manual-input" style="height:80px;resize:vertical;"></textarea>
       </div>
       <div style="margin-bottom:14px;">
