@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-V-ZI-USAGE-BUTTON -->
+<!-- ELEVATE-2026-0611-W-MERGED-CONTACT-PICKER -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -5090,6 +5090,9 @@ function jrvShowManualLeadPrefill(ui) {
         jrvFetchZICompanyCandidates(ui.company_name, ui.company_city || ''),
       ])
         .then(([rcrmCandidates, ziCandidates]) => {
+          // Stash full RCRM candidate list so the contact-fetch stage can
+          // pull from every matching RCRM company variant later
+          jrvLastRcrmCompanyCandidates = rcrmCandidates || [];
           const merged = [...rcrmCandidates, ...ziCandidates];
           if (!merged.length) {
             contactsEl.value = '';
@@ -5106,25 +5109,10 @@ function jrvShowManualLeadPrefill(ui) {
             if (companyEl2) companyEl2.value = c.name;
             const cityEl2 = document.getElementById('jrvManualCity');
             if (cityEl2 && c.city) cityEl2.value = c.city;
-            contactsEl.value = 'Pulling contacts from RCRM (already in our CRM)…';
-            jrvFetchRCRMCompanyContacts(c.slug, ui.target_personas)
-              .then(contacts => {
-                contactsEl.disabled = false;
-                contactsEl.value = '';
-                if (!contacts.length) {
-                  // RCRM has the company but no contacts at this slug — try ZI
-                  jrvKickContactsFetch(c.name, c.city || '', ui.target_personas, ui);
-                  return;
-                }
-                const tagged = contacts.map(x => ({ ...x, source: 'rcrm' }));
-                jrvRenderContactPicker(tagged, ui);
-                contactsEl.placeholder = 'Pick contacts above and click Pull to populate this list.';
-              })
-              .catch(() => {
-                contactsEl.disabled = false;
-                contactsEl.value = '';
-                contactsEl.placeholder = 'RCRM contact fetch failed. Paste manually.';
-              });
+            // Route through the merged fetch (RCRM + ZI). Even with 1 RCRM
+            // match auto-confirmed, ZI search runs in parallel as a free
+            // safety net so target-title hits at ZI still surface.
+            jrvKickContactsFetch(c.name, c.city || ui.company_city || '', ui.target_personas || [], ui);
             return;
           }
           // Otherwise show the picker — Travis picks which match is the right one
@@ -5326,6 +5314,11 @@ function jrvRenderCompanyCandidates(candidates, originalQuery, ui) {
 // In-memory state for the candidate picker. Set by jrvRenderCompanyCandidates,
 // consumed by jrvSelectCompanyCandidate when Travis clicks a card.
 let jrvManualLeadState = null;
+// Stash ALL RCRM company candidates from the initial lookup so the contact-fetch
+// stage can pull contacts from every matching RCRM company variant — not just
+// the one Travis happened to click. Surfaces in-CRM contacts that would
+// otherwise be invisible if Travis picked a ZI card.
+let jrvLastRcrmCompanyCandidates = [];
 
 // Travis clicked one of the company candidate cards (or "None of these").
 // Use the chosen company's exact ZoomInfo name to fetch contacts; the rest of
@@ -5355,75 +5348,72 @@ function jrvSelectCompanyCandidate(idx) {
   const cityEl = document.getElementById('jrvManualCity');
   if (cityEl && chosen.city) cityEl.value = chosen.city;
   const personas = (ui && ui.target_personas) || [];
-  // RCRM path: pull contacts from RCRM and show the picker with source=rcrm.
-  // RCRM contacts arrive with emails already (free) so they get pre-checked.
-  if (chosen.source === 'rcrm') {
-    const contactsEl = document.getElementById('jrvManualContacts');
-    if (contactsEl) {
-      contactsEl.value = 'Pulling contacts from RCRM…';
-      contactsEl.disabled = true;
-    }
-    jrvFetchRCRMCompanyContacts(chosen.slug, personas)
-      .then(contacts => {
-        if (contactsEl) contactsEl.disabled = false;
-        if (!contacts.length) {
-          // RCRM company exists but no contacts here — fall through to ZI search
-          jrvKickContactsFetch(chosen.name, chosen.city || '', personas, ui);
-          return;
-        }
-        // Tag as RCRM source and render picker (pre-checked, free pulls)
-        const tagged = contacts.map(c => ({ ...c, source: 'rcrm' }));
-        jrvRenderContactPicker(tagged, ui || {});
-        if (contactsEl) {
-          contactsEl.value = '';
-          contactsEl.placeholder = 'Pick contacts above and click Pull to populate this list.';
-        }
-      })
-      .catch(() => {
-        if (contactsEl) {
-          contactsEl.disabled = false;
-          contactsEl.value = '';
-          contactsEl.placeholder = 'RCRM contact fetch failed. Paste manually or try the form.';
-        }
-      });
-    return;
-  }
-  // ZoomInfo path: search-only flow that renders the same picker (ZI rows
-  // are unchecked since enriching them burns credits)
+  // Both RCRM and ZI paths route through jrvKickContactsFetch, which now
+  // pulls from ALL stashed RCRM slugs in parallel with ZI search. That way
+  // whichever card Travis clicked, he still sees RCRM contacts from EVERY
+  // matching company variant — Melody at SMI Automation Oldcastle doesn't
+  // get hidden just because he picked a ZI card.
   jrvKickContactsFetch(chosen.name, chosen.city || (ui && ui.company_city) || '', personas, ui);
 }
 
-// After a company is chosen, fetch ZI contacts (search-only, free) and show
-// them in the preview picker. Travis ticks who to pull → only those IDs get
-// enriched → emails populate the textarea. Saves credits when he only wants
-// some of the matches.
+// After a company is chosen, pull contacts from BOTH sources in parallel:
+//  - RCRM: every matching RCRM company variant (free, returns emails)
+//  - ZoomInfo: search-only (free, returns name + title, no email yet)
+// Merge, dedupe by email, tag source, render picker. Travis ticks who to pull;
+// only ZI ticks burn a credit on enrich.
 async function jrvKickContactsFetch(companyName, cityForFilter, personas, ui) {
   const contactsEl = document.getElementById('jrvManualContacts');
   if (!contactsEl) return;
-  if (!companyName || !personas.length || !JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL) {
+  if (!companyName) {
     contactsEl.disabled = false;
     return;
   }
-  contactsEl.value = 'Searching ZoomInfo for contacts (no credit yet)…';
+  contactsEl.value = 'Pulling RCRM contacts (free) + searching ZoomInfo (no credit yet)…';
   contactsEl.disabled = true;
-  try {
-    const ziCandidates = await jrvSearchZIContacts(companyName, cityForFilter || '', personas);
-    contactsEl.disabled = false;
-    if (!ziCandidates.length) {
-      contactsEl.value = '';
-      contactsEl.placeholder = 'No contacts found in ZoomInfo for this company/location. Paste manually: Name | email | title.';
-      return;
-    }
-    // Tag each as source=zi (no email yet — emails come on enrich)
-    const tagged = ziCandidates.map(c => ({ ...c, source: 'zi' }));
-    jrvRenderContactPicker(tagged, ui || {});
-    contactsEl.value = '';
-    contactsEl.placeholder = 'Pick contacts above and click Pull to populate this list.';
-  } catch (e) {
-    contactsEl.disabled = false;
-    contactsEl.value = '';
-    contactsEl.placeholder = 'ZoomInfo search failed. Paste contacts manually.';
+  // Build the list of RCRM company slugs to query. If we stashed candidates
+  // from the initial lookup, use ALL of them so dupe variants surface their
+  // contacts too. Otherwise look up by name now.
+  let rcrmSlugs = (jrvLastRcrmCompanyCandidates || []).map(c => c.slug).filter(Boolean);
+  if (!rcrmSlugs.length) {
+    try {
+      const fresh = await jrvFetchRCRMCompanyCandidates(companyName);
+      rcrmSlugs = fresh.map(c => c.slug);
+    } catch (_) {}
   }
+  // Fan out: contacts from every RCRM slug + ZI search
+  const rcrmCalls = rcrmSlugs.map(slug => jrvFetchRCRMCompanyContacts(slug, personas).catch(() => []));
+  const ziCall = personas.length && JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL
+    ? jrvSearchZIContacts(companyName, cityForFilter || '', personas).catch(() => [])
+    : Promise.resolve([]);
+  const results = await Promise.all([...rcrmCalls, ziCall]);
+  const ziResults = results.pop() || [];
+  // Flatten RCRM contacts from all slugs, tag source, dedupe by email
+  const seenEmails = new Set();
+  const rcrmContacts = [];
+  results.forEach(list => {
+    (list || []).forEach(c => {
+      const emailKey = (c.email || '').toLowerCase();
+      if (emailKey && seenEmails.has(emailKey)) return;
+      if (emailKey) seenEmails.add(emailKey);
+      rcrmContacts.push({ ...c, source: 'rcrm' });
+    });
+  });
+  // ZI search results — skip any whose names dupe an RCRM contact (RCRM wins
+  // because it already has the email)
+  const seenNames = new Set(rcrmContacts.map(c => (c.name || '').toLowerCase().trim()));
+  const ziContacts = (ziResults || [])
+    .filter(c => !seenNames.has((c.name || '').toLowerCase().trim()))
+    .map(c => ({ ...c, source: 'zi' }));
+  const combined = [...rcrmContacts, ...ziContacts];
+  contactsEl.disabled = false;
+  if (!combined.length) {
+    contactsEl.value = '';
+    contactsEl.placeholder = 'No RCRM or ZoomInfo contacts found for this company. Paste manually: Name | email | title.';
+    return;
+  }
+  jrvRenderContactPicker(combined, ui || {});
+  contactsEl.value = '';
+  contactsEl.placeholder = 'Pick contacts above and click Pull to populate this list.';
 }
 
 // Contact preview picker — shows all candidate contacts with checkboxes.
