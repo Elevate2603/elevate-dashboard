@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-AC-TASKS-TRAFFIC-LIGHT -->
+<!-- ELEVATE-2026-0611-AD-TASKS-EXPANDED-MODAL -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -546,6 +546,20 @@
   .jrv-task-due-badge.due-yellow { background:rgba(250,204,21,0.18); color:#facc15; border:1px solid rgba(250,204,21,0.4); }
   .jrv-task-due-badge.due-red    { background:rgba(239,68,68,0.18); color:#ef4444; border:1px solid rgba(239,68,68,0.5); }
   .jrv-task-due-badge.due-none   { display:none; }
+  /* Expanded row in the Open Tasks modal — every field visible. */
+  .jrv-task-row-expanded { background: var(--dark3); border:1px solid var(--border); border-left:3px solid var(--gold); border-radius:6px; padding:12px 14px; margin-bottom:8px; transition: opacity .25s, transform .25s; }
+  .jrv-task-row-expanded.due-green  { border-left-color:#4ade80; }
+  .jrv-task-row-expanded.due-yellow { border-left-color:#facc15; }
+  .jrv-task-row-expanded.due-red    { border-left-color:#ef4444; box-shadow: 0 0 0 1px rgba(239,68,68,0.22) inset; }
+  .jrv-task-row-expanded.completing { opacity:0; transform: translateX(40px); }
+  .jrv-tme-head { display:flex; align-items:flex-start; gap:10px; margin-bottom:10px; }
+  .jrv-tme-text { font-size:14px; line-height:1.45; color:var(--text); font-weight:500; flex:1; }
+  .jrv-tme-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:6px 18px; margin-left:24px; }
+  .jrv-tme-line { display:flex; align-items:center; gap:6px; font-size:11.5px; line-height:1.55; flex-wrap:wrap; }
+  .jrv-tme-label { font-size:9.5px; color: var(--text-muted); text-transform:uppercase; letter-spacing:0.07em; min-width:46px; font-weight:600; }
+  .jrv-tme-sub { color: var(--text); }
+  .jrv-tme-notes { margin-left:24px; margin-top:10px; padding:8px 10px; background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:5px; }
+  .jrv-tme-notes-body { font-size:12px; color: var(--text); line-height:1.55; white-space:pre-wrap; word-break:break-word; }
   .jrv-tasks-expand { background:none; border:1px dashed rgba(200,130,10,0.4); color:var(--gold); font-size:10px; letter-spacing:0.14em; padding:6px 8px; border-radius:4px; cursor:pointer; font-family:'Consolas', monospace; margin-top:4px; }
   .jrv-tasks-expand:hover { background:rgba(200,130,10,0.08); border-style:solid; }
 
@@ -1152,9 +1166,12 @@
 
       <!-- LEFT RAIL: TASKS PANEL + NEWS (under Tasks). Both capped so they don't push past Top 5 Hot Spots. -->
       <aside class="jrv-rail">
-        <div class="jrv-rail-title" style="display:flex;align-items:center;justify-content:space-between;">
-          <span>&#9673; Open Tasks &middot; <span id="jrvTasksCount">&mdash;</span></span>
-          <button onclick="jrvOpenAddTask()" title="Add a task manually" style="background:rgba(200,130,10,0.18);border:1px solid rgba(200,130,10,0.45);color:var(--gold);cursor:pointer;padding:2px 8px;border-radius:4px;font-size:11px;font-family:inherit;letter-spacing:0.3px;">+ Add</button>
+        <div class="jrv-rail-title" style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+          <span style="cursor:pointer;" onclick="jrvOpenTasksModal()" title="Open the full task list with all details">&#9673; Open Tasks &middot; <span id="jrvTasksCount">&mdash;</span></span>
+          <div style="display:flex;gap:4px;">
+            <button onclick="jrvOpenTasksModal()" title="Open the full task list — every task with notes, due time, source, and the rest" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);color:var(--text);cursor:pointer;padding:2px 8px;border-radius:4px;font-size:11px;font-family:inherit;letter-spacing:0.3px;">Open all</button>
+            <button onclick="jrvOpenAddTask()" title="Add a task manually" style="background:rgba(200,130,10,0.18);border:1px solid rgba(200,130,10,0.45);color:var(--gold);cursor:pointer;padding:2px 8px;border-radius:4px;font-size:11px;font-family:inherit;letter-spacing:0.3px;">+ Add</button>
+          </div>
         </div>
         <div class="jrv-tasks-list" id="jrvTasksList">
           <div class="jrv-tasks-loading">Loading tasks&hellip;</div>
@@ -3923,7 +3940,52 @@ function jrvRenderTaskModal() {
     list.innerHTML = '<div class="jrv-tasks-empty">No open tasks.</div>';
     return;
   }
-  list.innerHTML = jrvTasks.map(t => jrvRenderTaskRow(t, true)).join('');
+  // Modal sort: red (overdue/urgent) → yellow (today) → green (later) → gray (no due)
+  // Within tier, earliest due first; within gray, newest created first.
+  const tierOrder = { 'due-red': 0, 'due-yellow': 1, 'due-green': 2, 'due-none': 3 };
+  const sorted = jrvTasks.slice().sort((a, b) => {
+    const ta = tierOrder[jrvTaskDueClass(a.due_at)] ?? 3;
+    const tb = tierOrder[jrvTaskDueClass(b.due_at)] ?? 3;
+    if (ta !== tb) return ta - tb;
+    if (a.due_at && b.due_at) return new Date(a.due_at) - new Date(b.due_at);
+    if (a.created_at && b.created_at) return new Date(b.created_at) - new Date(a.created_at);
+    return 0;
+  });
+  list.innerHTML = sorted.map(t => jrvRenderTaskRowExpanded(t)).join('');
+}
+
+// Rich task row for the expanded modal — every relevant field with the
+// traffic light up top. The inline left-rail uses jrvRenderTaskRow (compact).
+function jrvRenderTaskRowExpanded(t) {
+  const id = escapeAttr(t.task_id || '');
+  const dueClass = jrvTaskDueClass(t.due_at);
+  const dueLabel = jrvFormatDueLabel(t.due_at);
+  const dueAbs = t.due_at ? new Date(t.due_at).toLocaleString([], { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
+  const createdRel = jrvRelTime(t.created_at);
+  const createdAbs = t.created_at ? new Date(t.created_at).toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
+  const sender = [t.sender_name, t.sender_email].filter(Boolean).join(' · ');
+  const notes = (t.notes || t.followup_notes || '').toString().trim();
+  const hint = (t.due_hint || '').toString().trim();
+  const source = (t.source || (t.source_email_id ? 'email' : 'voice')).toString();
+  const followups = Number(t.related_email_count) || 0;
+  const dueRow = (dueLabel || dueAbs)
+    ? '<div class="jrv-tme-line"><span class="jrv-tme-label">Due</span><span class="jrv-task-due-badge ' + dueClass + '">' + escapeHtml(dueLabel || 'scheduled') + '</span>' + (dueAbs ? '<span class="jrv-tme-sub">' + escapeHtml(dueAbs) + '</span>' : '') + '</div>'
+    : '<div class="jrv-tme-line"><span class="jrv-tme-label">Due</span><span class="jrv-tme-sub">No due time set</span></div>';
+  return ''
+    + '<div class="jrv-task-row-expanded ' + dueClass + '" data-task-id="' + id + '">'
+    +   '<div class="jrv-tme-head">'
+    +     '<input type="checkbox" class="jrv-task-check" onclick="jrvMarkTaskComplete(\'' + id + '\', this)" title="Mark complete">'
+    +     '<div class="jrv-tme-text">' + escapeHtml(t.task_text || '') + '</div>'
+    +   '</div>'
+    +   '<div class="jrv-tme-grid">'
+    +     dueRow
+    +     (hint ? '<div class="jrv-tme-line"><span class="jrv-tme-label">Hint</span><span class="jrv-tme-sub">' + escapeHtml(hint) + '</span></div>' : '')
+    +     '<div class="jrv-tme-line"><span class="jrv-tme-label">Source</span><span class="jrv-tme-sub">' + escapeHtml(source) + (followups > 1 ? ' &middot; ' + followups + ' related emails' : '') + '</span></div>'
+    +     (sender ? '<div class="jrv-tme-line"><span class="jrv-tme-label">From</span><span class="jrv-tme-sub">' + escapeHtml(sender) + '</span></div>' : '')
+    +     (createdAbs ? '<div class="jrv-tme-line"><span class="jrv-tme-label">Added</span><span class="jrv-tme-sub">' + escapeHtml(createdAbs) + (createdRel ? ' &middot; ' + createdRel : '') + '</span></div>' : '')
+    +   '</div>'
+    +   (notes ? '<div class="jrv-tme-notes"><div class="jrv-tme-label" style="margin-bottom:4px;">Notes</div><div class="jrv-tme-notes-body">' + escapeHtml(notes) + '</div></div>' : '')
+    + '</div>';
 }
 
 // ── Voice command — "Jarvis mark X complete" / "Jarvis remove X" ───────────
