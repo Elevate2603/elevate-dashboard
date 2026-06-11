@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-W-MERGED-CONTACT-PICKER -->
+<!-- ELEVATE-2026-0611-X-ACCORDION-PICKER -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -765,6 +765,29 @@
   .jrv-contact-pick-pull:disabled { opacity:0.6; cursor:wait; }
   .jrv-cand-tag-match { background:#facc15; color:#0d0d0d; }
   .jrv-cand-tag-adjacent { background: rgba(96,165,250,0.22); color:#60a5fa; border:1px solid rgba(96,165,250,0.45); }
+  /* Accordion-style company picker — click a card to expand its contacts inline beneath it. */
+  .jrv-co-block { border:1px solid rgba(200,130,10,0.35); border-radius:6px; margin-bottom:6px; overflow:hidden; background: rgba(200,130,10,0.08); }
+  .jrv-co-block.is-rcrm { background: rgba(74,222,128,0.08); border-color: rgba(74,222,128,0.45); }
+  .jrv-co-block.is-expanded { background: rgba(200,130,10,0.18); border-color: var(--gold); }
+  .jrv-co-block.is-rcrm.is-expanded { background: rgba(74,222,128,0.18); border-color:#4ade80; }
+  .jrv-co-head { width:100%; background:transparent; border:0; color: var(--text); cursor:pointer; padding:10px 12px; text-align:left; font-family:inherit; display:flex; align-items:center; gap:10px; }
+  .jrv-co-head:hover { background: rgba(255,255,255,0.04); }
+  .jrv-co-chev { font-size:10px; color: var(--text-muted); transition: transform 0.18s; }
+  .jrv-co-block.is-expanded .jrv-co-chev { transform: rotate(180deg); color: var(--gold); }
+  .jrv-co-meta { flex:1; }
+  .jrv-co-name { font-size:13px; font-weight:600; color: var(--gold); }
+  .jrv-co-block.is-rcrm .jrv-co-name { color:#4ade80; }
+  .jrv-co-detail { font-size:11px; color: var(--text-muted); margin-top:2px; }
+  .jrv-co-contacts { padding:6px 12px 10px 12px; border-top:1px dashed rgba(255,255,255,0.10); display:none; }
+  .jrv-co-block.is-expanded .jrv-co-contacts { display:block; }
+  .jrv-co-loading { font-size:11px; color: var(--text-muted); padding:8px 0; font-style:italic; }
+  .jrv-co-empty { font-size:11px; color: var(--text-muted); padding:8px 0; }
+  .jrv-bulk-bar { display:flex; gap:10px; align-items:center; justify-content:space-between; margin-top:10px; padding:8px 10px; border:1px solid rgba(200,130,10,0.4); border-radius:6px; background: rgba(0,0,0,0.25); }
+  .jrv-bulk-count { font-size:11.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .jrv-bulk-count.has-sel { color: var(--gold); font-weight:600; }
+  .jrv-bulk-actions-row { display:flex; gap:8px; }
+  .jrv-bulk-btn-secondary { background: rgba(255,255,255,0.06); border:1px solid var(--border); color: var(--text); cursor:pointer; padding:7px 12px; border-radius:5px; font-size:11.5px; font-family:inherit; }
+  .jrv-bulk-btn-secondary:hover { background: rgba(255,255,255,0.10); }
   /* ZoomInfo usage check inline panel */
   .jrv-zi-usage-btn { background: rgba(255,255,255,0.06); border:1px solid var(--border); color: var(--text); cursor:pointer; padding:5px 10px; border-radius:5px; font-size:11px; font-family:inherit; letter-spacing:0.3px; }
   .jrv-zi-usage-btn:hover { background: rgba(200,130,10,0.18); border-color: var(--gold); color: var(--gold); }
@@ -5058,9 +5081,27 @@ function jrvShowManualLeadPrefill(ui) {
     const contactsEl = document.getElementById('jrvManualContacts');
     if (companyEl) companyEl.value = ui.company_name || '';
     if (cityEl) cityEl.value = ui.company_city || '';
-    // Target role drives fit-vs-misfit analysis in the drafter prompt
+    // Target role drives fit-vs-misfit analysis in the drafter prompt.
+    // Fallback: if the brain didn't emit role_being_hired, scrape it from
+    // the context blob using common "hiring X" / "X position" / "X role" /
+    // "post up for X" patterns. Better an imperfect pre-fill than empty.
     const targetRoleEl = document.getElementById('jrvManualTargetRole');
-    if (targetRoleEl) targetRoleEl.value = ui.role_being_hired || '';
+    let resolvedRole = (ui.role_being_hired || '').trim();
+    if (!resolvedRole && ui.context) {
+      const ctx = ui.context.toString();
+      const patterns = [
+        /\bhiring\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
+        /\bpost(?:ed|ing|s)?\s+(?:up\s+)?(?:for|a)\s+(?:an?\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
+        /\b(?:looking|searching|recruiting)\s+for\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
+        /\bopen(?:ing)?\s+for\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
+        /\b(?:position|role|job)\s+(?:for|of|is)\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
+      ];
+      for (const re of patterns) {
+        const m = ctx.match(re);
+        if (m && m[1]) { resolvedRole = m[1].trim(); break; }
+      }
+    }
+    if (targetRoleEl) targetRoleEl.value = resolvedRole;
     // Business context (role being hired, urgency, market signals)
     let businessBlob = (ui.context || '').toString().trim();
     if (ui.role_being_hired) {
@@ -5100,26 +5141,17 @@ function jrvShowManualLeadPrefill(ui) {
             contactsEl.placeholder = 'No RCRM or ZoomInfo match for "' + (ui.company_name || '') + '". Paste contacts manually: Name | email | title.';
             return;
           }
-          // Auto-confirm shortcut: exactly ONE RCRM match — that's almost
-          // always the right call (it's already in our CRM, no ambiguity).
-          // Skip the picker, pull contacts directly.
-          if (rcrmCandidates.length === 1 && ziCandidates.length === 0) {
-            const c = rcrmCandidates[0];
-            const companyEl2 = document.getElementById('jrvManualCompany');
-            if (companyEl2) companyEl2.value = c.name;
-            const cityEl2 = document.getElementById('jrvManualCity');
-            if (cityEl2 && c.city) cityEl2.value = c.city;
-            // Route through the merged fetch (RCRM + ZI). Even with 1 RCRM
-            // match auto-confirmed, ZI search runs in parallel as a free
-            // safety net so target-title hits at ZI still surface.
-            jrvKickContactsFetch(c.name, c.city || ui.company_city || '', ui.target_personas || [], ui);
-            return;
-          }
-          // Otherwise show the picker — Travis picks which match is the right one
+          // Always show the picker — Travis picks which company match is right.
+          // If there's only ONE candidate, auto-expand it so he sees contacts
+          // immediately without an extra click.
           contactsEl.value = '';
           contactsEl.disabled = false;
-          contactsEl.placeholder = 'Pick a company match above, or paste contacts manually here.';
+          contactsEl.placeholder = 'Tick contacts above and click Pull selected.';
           jrvRenderCompanyCandidates(merged, ui.company_name || '', ui);
+          if (merged.length === 1) {
+            // Defer to next tick so the DOM is mounted
+            setTimeout(() => jrvToggleCompanyExpand(0), 50);
+          }
         })
         .catch(() => {
           contactsEl.disabled = false;
@@ -5253,43 +5285,39 @@ async function jrvFetchZICompanyCandidates(query, cityHint) {
   return candidates;
 }
 
-// Render the candidate picker inside the popup. Candidates can come from RCRM
-// (tagged so Travis sees "Already in our CRM") or ZoomInfo. RCRM-tagged
-// candidates are shown FIRST since picking one saves a ZI credit. Travis
-// clicks a card to confirm; selection routes to either RCRM contacts (cheap)
-// or ZI contacts (paid).
+// Render the company picker as an accordion. Travis clicks a company card
+// to EXPAND its contacts inline beneath that same card. He can expand
+// multiple cards (RCRM + ZI variants) simultaneously and tick contacts
+// across all of them. A single "Pull selected" button at the bottom collects
+// all checked rows from every expanded card.
 function jrvRenderCompanyCandidates(candidates, originalQuery, ui) {
   const container = document.getElementById('jrvManualCandidates');
   if (!container) return;
   container.style.display = 'block';
-  // Sort: RCRM matches first, then ZI matches. Within each, original order preserved.
+  // Sort: RCRM matches first (free), then ZI matches. Preserves original order within each tier.
   const sorted = candidates.slice().sort((a, b) => {
     const aRcrm = a.source === 'rcrm' ? 0 : 1;
     const bRcrm = b.source === 'rcrm' ? 0 : 1;
     return aRcrm - bRcrm;
   });
-  const cardsHtml = sorted.map((c, idx) => {
+  const blocksHtml = sorted.map((c, idx) => {
     const isRcrm = c.source === 'rcrm';
     const tag = isRcrm
-      ? `<span class="jrv-cand-tag jrv-cand-tag-rcrm" title="Already in your RCRM — no ZoomInfo credit needed">✓ In RCRM</span>`
-      : `<span class="jrv-cand-tag jrv-cand-tag-zi" title="From ZoomInfo — picking this uses ZI credits">ZoomInfo</span>`;
+      ? `<span class="jrv-cand-tag jrv-cand-tag-rcrm" title="Already in your RCRM — contacts here are free">✓ In RCRM</span>`
+      : `<span class="jrv-cand-tag jrv-cand-tag-zi" title="From ZoomInfo — pulling contacts uses credits">ZoomInfo</span>`;
     const loc = [c.city, c.state, c.country].filter(Boolean).join(', ');
-    const detail = [
-      loc,
-      c.industry,
-      c.employees ? c.employees + ' employees' : '',
-      c.website,
-    ].filter(Boolean).join(' · ');
-    // The data-idx points into the SORTED array; jrvSelectCompanyCandidate
-    // reads from the same sorted array kept in state.
+    const detail = [loc, c.industry, c.employees ? c.employees + ' employees' : '', c.website].filter(Boolean).join(' · ');
     return `
-      <button type="button" class="jrv-candidate-card ${isRcrm ? 'jrv-candidate-rcrm' : ''}" data-idx="${idx}" onclick="jrvSelectCompanyCandidate(${idx})">
-        <div class="jrv-candidate-row1">
-          <span class="jrv-candidate-name">${escapeHtml(c.name || 'Unknown')}</span>
-          ${tag}
-        </div>
-        ${detail ? `<div class="jrv-candidate-detail">${escapeHtml(detail)}</div>` : ''}
-      </button>
+      <div class="jrv-co-block ${isRcrm ? 'is-rcrm' : ''}" id="jrvCoBlock${idx}" data-idx="${idx}">
+        <button type="button" class="jrv-co-head" onclick="jrvToggleCompanyExpand(${idx})">
+          <div class="jrv-co-meta">
+            <div class="jrv-co-name">${escapeHtml(c.name || 'Unknown')} ${tag}</div>
+            ${detail ? `<div class="jrv-co-detail">${escapeHtml(detail)}</div>` : ''}
+          </div>
+          <span class="jrv-co-chev">▼</span>
+        </button>
+        <div class="jrv-co-contacts" id="jrvCoContacts${idx}"></div>
+      </div>
     `;
   }).join('');
   const rcrmCount = sorted.filter(c => c.source === 'rcrm').length;
@@ -5299,222 +5327,179 @@ function jrvRenderCompanyCandidates(candidates, originalQuery, ui) {
     : (rcrmCount ? `${rcrmCount} match${rcrmCount === 1 ? '' : 'es'} already in RCRM (no ZI credits)` : `${ziCount} ZoomInfo match${ziCount === 1 ? '' : 'es'}`);
   container.innerHTML = `
     <div style="font-size:11px;color:var(--gold);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.6px;">Found ${sorted.length} match${sorted.length === 1 ? '' : 'es'} for "${escapeHtml(originalQuery)}" — ${hint}</div>
-    <div class="jrv-candidate-list">
-      ${cardsHtml}
-      <button type="button" class="jrv-candidate-card jrv-candidate-none" onclick="jrvSelectCompanyCandidate(-1)">
-        <div class="jrv-candidate-name">None of these</div>
-        <div class="jrv-candidate-detail">I'll type the contacts manually</div>
-      </button>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Click a company to see its contacts. Tick whichever ones you want from any card, then Pull selected.</div>
+    <div class="jrv-candidate-list">${blocksHtml}</div>
+    <div class="jrv-bulk-bar">
+      <span id="jrvBulkCount" class="jrv-bulk-count">Nothing selected yet — click a company above.</span>
+      <div class="jrv-bulk-actions-row">
+        <button type="button" class="jrv-bulk-btn-secondary" onclick="jrvSkipCompanyPicker()">None of these / type manually</button>
+        <button type="button" class="jrv-contact-pick-pull" onclick="jrvPullSelectedContacts()">Pull selected →</button>
+      </div>
     </div>
   `;
-  // Stash the SORTED candidates so jrvSelectCompanyCandidate uses the same indices
+  // Reset per-popup contact cache and selection map
+  jrvCompanyContactsCache = {};
   jrvManualLeadState = { candidates: sorted, ui };
+  jrvUpdateBulkCount();
 }
 
 // In-memory state for the candidate picker. Set by jrvRenderCompanyCandidates,
-// consumed by jrvSelectCompanyCandidate when Travis clicks a card.
+// consumed by jrvToggleCompanyExpand when Travis clicks a card.
 let jrvManualLeadState = null;
 // Stash ALL RCRM company candidates from the initial lookup so the contact-fetch
 // stage can pull contacts from every matching RCRM company variant — not just
 // the one Travis happened to click. Surfaces in-CRM contacts that would
 // otherwise be invisible if Travis picked a ZI card.
 let jrvLastRcrmCompanyCandidates = [];
+// Per-popup cache: { companyIdx → contacts[] } so re-expanding a card doesn't refetch.
+let jrvCompanyContactsCache = {};
 
-// Travis clicked one of the company candidate cards (or "None of these").
-// Use the chosen company's exact ZoomInfo name to fetch contacts; the rest of
-// the popup flow continues as normal.
-function jrvSelectCompanyCandidate(idx) {
-  const container = document.getElementById('jrvManualCandidates');
-  if (container) container.style.display = 'none';
+// Travis clicked a company card header. Toggle its expanded state. On first
+// expand, lazy-load that company's contacts (RCRM contacts free, ZI search
+// also free — no credit until Pull). Other expanded cards stay open.
+async function jrvToggleCompanyExpand(idx) {
   if (!jrvManualLeadState) return;
   const { candidates, ui } = jrvManualLeadState;
-  jrvManualLeadState = null;
-  if (idx < 0 || idx >= candidates.length) {
-    // "None of these" — clear contacts and let Travis type manually
-    const contactsEl = document.getElementById('jrvManualContacts');
-    if (contactsEl) {
-      contactsEl.value = '';
-      contactsEl.placeholder = 'Paste contacts manually: Name | email | title (one per line).';
-      contactsEl.disabled = false;
-      contactsEl.focus();
-    }
+  if (idx < 0 || idx >= candidates.length) return;
+  const block = document.getElementById('jrvCoBlock' + idx);
+  const contactsEl = document.getElementById('jrvCoContacts' + idx);
+  if (!block || !contactsEl) return;
+  // Toggle collapsed/expanded. Collapsing keeps any ticks intact in the cache
+  // so re-expanding restores selections.
+  const wasExpanded = block.classList.contains('is-expanded');
+  if (wasExpanded) {
+    block.classList.remove('is-expanded');
     return;
   }
+  block.classList.add('is-expanded');
+  // If already fetched, render straight from cache (re-tick from previous selection)
+  if (jrvCompanyContactsCache[idx]) {
+    jrvRenderInlineContacts(idx, jrvCompanyContactsCache[idx], ui);
+    return;
+  }
+  // Show loading placeholder
+  contactsEl.innerHTML = '<div class="jrv-co-loading">Loading contacts…</div>';
   const chosen = candidates[idx];
-  // Update company name in the form to the canonical name (so submission
-  // creates the queue records with the right name)
-  const companyEl = document.getElementById('jrvManualCompany');
-  if (companyEl) companyEl.value = chosen.name || '';
-  const cityEl = document.getElementById('jrvManualCity');
-  if (cityEl && chosen.city) cityEl.value = chosen.city;
   const personas = (ui && ui.target_personas) || [];
-  // Both RCRM and ZI paths route through jrvKickContactsFetch, which now
-  // pulls from ALL stashed RCRM slugs in parallel with ZI search. That way
-  // whichever card Travis clicked, he still sees RCRM contacts from EVERY
-  // matching company variant — Melody at SMI Automation Oldcastle doesn't
-  // get hidden just because he picked a ZI card.
-  jrvKickContactsFetch(chosen.name, chosen.city || (ui && ui.company_city) || '', personas, ui);
+  try {
+    let contacts = [];
+    if (chosen.source === 'rcrm') {
+      const raw = await jrvFetchRCRMCompanyContacts(chosen.slug, personas);
+      contacts = (raw || []).map(c => ({ ...c, source: 'rcrm' }));
+    } else if (JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL) {
+      const raw = await jrvSearchZIContacts(chosen.name, chosen.city || (ui && ui.company_city) || '', personas);
+      contacts = (raw || []).map(c => ({ ...c, source: 'zi' }));
+    }
+    jrvCompanyContactsCache[idx] = contacts;
+    jrvRenderInlineContacts(idx, contacts, ui);
+  } catch (e) {
+    contactsEl.innerHTML = '<div class="jrv-co-empty">Couldn’t load contacts — try again or use Paste manually.</div>';
+  }
 }
 
-// After a company is chosen, pull contacts from BOTH sources in parallel:
-//  - RCRM: every matching RCRM company variant (free, returns emails)
-//  - ZoomInfo: search-only (free, returns name + title, no email yet)
-// Merge, dedupe by email, tag source, render picker. Travis ticks who to pull;
-// only ZI ticks burn a credit on enrich.
-async function jrvKickContactsFetch(companyName, cityForFilter, personas, ui) {
-  const contactsEl = document.getElementById('jrvManualContacts');
+// Render the checkbox list of contacts inline under a single expanded company.
+// Each checkbox carries data-co-idx and data-c-idx so the bulk Pull handler
+// can scan every expanded card at once.
+function jrvRenderInlineContacts(coIdx, contacts, ui) {
+  const contactsEl = document.getElementById('jrvCoContacts' + coIdx);
   if (!contactsEl) return;
-  if (!companyName) {
-    contactsEl.disabled = false;
+  if (!contacts.length) {
+    contactsEl.innerHTML = '<div class="jrv-co-empty">No contacts found at this company for the target role. Try another variant or paste manually.</div>';
     return;
   }
-  contactsEl.value = 'Pulling RCRM contacts (free) + searching ZoomInfo (no credit yet)…';
-  contactsEl.disabled = true;
-  // Build the list of RCRM company slugs to query. If we stashed candidates
-  // from the initial lookup, use ALL of them so dupe variants surface their
-  // contacts too. Otherwise look up by name now.
-  let rcrmSlugs = (jrvLastRcrmCompanyCandidates || []).map(c => c.slug).filter(Boolean);
-  if (!rcrmSlugs.length) {
-    try {
-      const fresh = await jrvFetchRCRMCompanyCandidates(companyName);
-      rcrmSlugs = fresh.map(c => c.slug);
-    } catch (_) {}
-  }
-  // Fan out: contacts from every RCRM slug + ZI search
-  const rcrmCalls = rcrmSlugs.map(slug => jrvFetchRCRMCompanyContacts(slug, personas).catch(() => []));
-  const ziCall = personas.length && JRV_CONFIG.ZI_CONTACTS_LOOKUP_URL
-    ? jrvSearchZIContacts(companyName, cityForFilter || '', personas).catch(() => [])
-    : Promise.resolve([]);
-  const results = await Promise.all([...rcrmCalls, ziCall]);
-  const ziResults = results.pop() || [];
-  // Flatten RCRM contacts from all slugs, tag source, dedupe by email
-  const seenEmails = new Set();
-  const rcrmContacts = [];
-  results.forEach(list => {
-    (list || []).forEach(c => {
-      const emailKey = (c.email || '').toLowerCase();
-      if (emailKey && seenEmails.has(emailKey)) return;
-      if (emailKey) seenEmails.add(emailKey);
-      rcrmContacts.push({ ...c, source: 'rcrm' });
-    });
-  });
-  // ZI search results — skip any whose names dupe an RCRM contact (RCRM wins
-  // because it already has the email)
-  const seenNames = new Set(rcrmContacts.map(c => (c.name || '').toLowerCase().trim()));
-  const ziContacts = (ziResults || [])
-    .filter(c => !seenNames.has((c.name || '').toLowerCase().trim()))
-    .map(c => ({ ...c, source: 'zi' }));
-  const combined = [...rcrmContacts, ...ziContacts];
-  contactsEl.disabled = false;
-  if (!combined.length) {
-    contactsEl.value = '';
-    contactsEl.placeholder = 'No RCRM or ZoomInfo contacts found for this company. Paste manually: Name | email | title.';
-    return;
-  }
-  jrvRenderContactPicker(combined, ui || {});
-  contactsEl.value = '';
-  contactsEl.placeholder = 'Pick contacts above and click Pull to populate this list.';
-}
-
-// Contact preview picker — shows all candidate contacts with checkboxes.
-// RCRM ones come with emails already (free); ZI ones are name+title only
-// until enriched (1 credit each). Pre-checks: RCRM contacts and exact
-// target-title matches.
-let jrvContactPickerState = null;
-function jrvRenderContactPicker(contacts, ui) {
-  const container = document.getElementById('jrvManualCandidates');
-  if (!container) return;
   const targetRole = (ui && ui.role_being_hired || '').toLowerCase();
   const personas = (ui && Array.isArray(ui.target_personas)) ? ui.target_personas.map(p => p.toLowerCase()) : [];
-  // Score each contact: 'match' if title fits target, 'adjacent' if decision-maker, else 'other'
   const decisionMakerRe = /general manager|plant manager|operations|president|owner|chief operating|coo|human resources|hr manager|talent/i;
-  const tagged = contacts.map(c => {
+  const rowsHtml = contacts.map((c, cIdx) => {
     const titleLower = (c.title || '').toLowerCase();
     let fit = 'other';
-    if (personas.some(p => p && (titleLower.includes(p) || p.includes(titleLower)))) {
-      fit = 'match';
-    } else if (targetRole && (titleLower.includes(targetRole) || targetRole.includes(titleLower))) {
-      fit = 'match';
-    } else if (decisionMakerRe.test(c.title || '')) {
-      fit = 'adjacent';
-    }
-    return { ...c, fit };
-  });
-  // Sort: match first, then adjacent, then other; within tier RCRM before ZI
-  tagged.sort((a, b) => {
-    const fitRank = { match: 0, adjacent: 1, other: 2 };
-    const r = (fitRank[a.fit] ?? 2) - (fitRank[b.fit] ?? 2);
-    if (r !== 0) return r;
-    return (a.source === 'rcrm' ? 0 : 1) - (b.source === 'rcrm' ? 0 : 1);
-  });
-  const rowsHtml = tagged.map((c, idx) => {
+    if (personas.some(p => p && (titleLower.includes(p) || p.includes(titleLower)))) fit = 'match';
+    else if (targetRole && (titleLower.includes(targetRole) || targetRole.includes(titleLower))) fit = 'match';
+    else if (decisionMakerRe.test(c.title || '')) fit = 'adjacent';
     const isRcrm = c.source === 'rcrm';
-    const sourceTag = isRcrm
+    const srcTag = isRcrm
       ? '<span class="jrv-cand-tag jrv-cand-tag-rcrm">✓ In RCRM</span>'
       : '<span class="jrv-cand-tag jrv-cand-tag-zi">ZI · 1 credit</span>';
-    const fitTag = c.fit === 'match'
+    const fitTag = fit === 'match'
       ? ' <span class="jrv-cand-tag jrv-cand-tag-match">★ TARGET MATCH</span>'
-      : (c.fit === 'adjacent' ? ' <span class="jrv-cand-tag jrv-cand-tag-adjacent">Decision-maker</span>' : '');
-    // Pre-check RCRM (free) + target-match ZI (worth the credit)
-    const preCheck = (isRcrm || c.fit === 'match') ? 'checked' : '';
+      : (fit === 'adjacent' ? ' <span class="jrv-cand-tag jrv-cand-tag-adjacent">Decision-maker</span>' : '');
+    const preCheck = (isRcrm || fit === 'match') ? 'checked' : '';
     const detail = [c.title || '(no title)', c.city].filter(Boolean).join(' · ');
     return `
-      <label class="jrv-contact-pick-row" data-idx="${idx}">
-        <input type="checkbox" class="jrv-contact-pick-cb" data-idx="${idx}" ${preCheck} onchange="jrvUpdateContactPickCount()">
+      <label class="jrv-contact-pick-row">
+        <input type="checkbox" class="jrv-contact-pick-cb" data-co-idx="${coIdx}" data-c-idx="${cIdx}" ${preCheck} onchange="jrvUpdateBulkCount()">
         <div class="jrv-contact-pick-info">
-          <div class="jrv-contact-pick-name">${escapeHtml(c.name)} ${sourceTag}${fitTag}</div>
+          <div class="jrv-contact-pick-name">${escapeHtml(c.name)} ${srcTag}${fitTag}</div>
           <div class="jrv-contact-pick-detail">${escapeHtml(detail)}</div>
         </div>
       </label>
     `;
   }).join('');
-  const rcrmCount = tagged.filter(c => c.source === 'rcrm').length;
-  const ziCount = tagged.length - rcrmCount;
-  const hint = `Found ${tagged.length} · ${rcrmCount} from RCRM (free) · ${ziCount} from ZoomInfo (1 credit per pull)`;
-  container.style.display = 'block';
-  container.innerHTML = `
-    <div style="font-size:11px;color:var(--gold);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.6px;">${escapeHtml(hint)} — tick the ones you want, then pull</div>
-    <div class="jrv-contact-pick-list">${rowsHtml}</div>
-    <div style="display:flex;gap:10px;margin-top:10px;align-items:center;justify-content:space-between;">
-      <span id="jrvContactPickCount" style="font-size:11px;color:var(--text-muted);"></span>
-      <button type="button" class="jrv-contact-pick-pull" onclick="jrvPullSelectedContacts()">Pull selected →</button>
-    </div>
-  `;
-  jrvContactPickerState = { contacts: tagged, ui };
-  jrvUpdateContactPickCount();
+  contactsEl.innerHTML = `<div class="jrv-contact-pick-list">${rowsHtml}</div>`;
+  jrvUpdateBulkCount();
 }
 
-function jrvUpdateContactPickCount() {
-  const el = document.getElementById('jrvContactPickCount');
-  if (!el || !jrvContactPickerState) return;
-  const tagged = jrvContactPickerState.contacts;
+// "None of these" — collapse picker and let Travis type contacts manually.
+function jrvSkipCompanyPicker() {
+  const container = document.getElementById('jrvManualCandidates');
+  if (container) { container.style.display = 'none'; container.innerHTML = ''; }
+  jrvManualLeadState = null;
+  jrvCompanyContactsCache = {};
+  const contactsEl = document.getElementById('jrvManualContacts');
+  if (contactsEl) {
+    contactsEl.value = '';
+    contactsEl.placeholder = 'Paste contacts manually: Name | email | title (one per line).';
+    contactsEl.disabled = false;
+    contactsEl.focus();
+  }
+}
+
+// Bulk count + summary — scans every expanded company card's checked boxes.
+// Updates the bottom bar so Travis sees a running total + ZI-credit cost.
+function jrvUpdateBulkCount() {
+  const el = document.getElementById('jrvBulkCount');
+  if (!el) return;
+  if (!jrvManualLeadState) { el.textContent = ''; return; }
+  const { candidates } = jrvManualLeadState;
   const cbs = document.querySelectorAll('.jrv-contact-pick-cb');
   let rcrm = 0, zi = 0;
-  cbs.forEach((cb, idx) => {
+  cbs.forEach(cb => {
     if (!cb.checked) return;
-    const c = tagged[idx];
-    if (!c) return;
-    if (c.source === 'rcrm') rcrm++;
+    const coIdx = parseInt(cb.dataset.coIdx, 10);
+    const cIdx = parseInt(cb.dataset.cIdx, 10);
+    const contact = jrvCompanyContactsCache[coIdx] && jrvCompanyContactsCache[coIdx][cIdx];
+    if (!contact) return;
+    if (contact.source === 'rcrm') rcrm++;
     else zi++;
   });
   const parts = [];
   if (rcrm) parts.push(`${rcrm} from RCRM (free)`);
   if (zi) parts.push(`${zi} from ZI (${zi} credit${zi === 1 ? '' : 's'})`);
-  el.textContent = parts.length ? `Selected: ${parts.join(' + ')}` : 'Nothing selected.';
+  if (parts.length) {
+    el.textContent = `Selected: ${parts.join(' + ')}`;
+    el.classList.add('has-sel');
+  } else {
+    el.textContent = 'Nothing selected — expand a company above and tick contacts.';
+    el.classList.remove('has-sel');
+  }
 }
 
+// Pull selected — collects ticked contacts across ALL expanded company cards,
+// enriches the ZI ones (single API call), writes the merged list into the
+// textarea, and collapses the picker so the form is ready to submit.
 async function jrvPullSelectedContacts() {
-  if (!jrvContactPickerState) return;
-  const tagged = jrvContactPickerState.contacts;
+  if (!jrvManualLeadState) return;
   const cbs = document.querySelectorAll('.jrv-contact-pick-cb');
   const selectedRcrm = [];
   const selectedZiIds = [];
-  cbs.forEach((cb, idx) => {
+  cbs.forEach(cb => {
     if (!cb.checked) return;
-    const c = tagged[idx];
-    if (!c) return;
-    if (c.source === 'rcrm') selectedRcrm.push(c);
-    else selectedZiIds.push(c.id);
+    const coIdx = parseInt(cb.dataset.coIdx, 10);
+    const cIdx = parseInt(cb.dataset.cIdx, 10);
+    const contact = jrvCompanyContactsCache[coIdx] && jrvCompanyContactsCache[coIdx][cIdx];
+    if (!contact) return;
+    if (contact.source === 'rcrm') selectedRcrm.push(contact);
+    else if (contact.id) selectedZiIds.push(contact.id);
   });
   if (!selectedRcrm.length && !selectedZiIds.length) {
     alert('Tick at least one contact to pull.');
@@ -5524,22 +5509,35 @@ async function jrvPullSelectedContacts() {
   if (pullBtn) { pullBtn.disabled = true; pullBtn.textContent = 'Pulling…'; }
   let enrichedZi = [];
   if (selectedZiIds.length) {
-    enrichedZi = await jrvEnrichZIContacts(selectedZiIds);
+    try { enrichedZi = await jrvEnrichZIContacts(selectedZiIds); }
+    catch (_) { enrichedZi = []; }
   }
-  const final = [
-    ...selectedRcrm.map(c => ({ name: c.name, email: c.email, title: c.title, city: c.city })),
-    ...enrichedZi,
-  ];
+  // Dedupe by email — same person sometimes shows up in both RCRM and ZI
+  const seenEmails = new Set();
+  const final = [];
+  selectedRcrm.forEach(c => {
+    const key = (c.email || '').toLowerCase();
+    if (key && seenEmails.has(key)) return;
+    if (key) seenEmails.add(key);
+    final.push({ name: c.name, email: c.email, title: c.title, city: c.city });
+  });
+  enrichedZi.forEach(c => {
+    const key = (c.email || '').toLowerCase();
+    if (key && seenEmails.has(key)) return;
+    if (key) seenEmails.add(key);
+    final.push(c);
+  });
   const contactsEl = document.getElementById('jrvManualContacts');
   if (contactsEl) {
     const lines = final.map(c => `${c.name} | ${c.email} | ${c.title}${c.city ? ' | ' + c.city : ''}`);
     contactsEl.value = lines.join('\n');
     contactsEl.disabled = false;
   }
-  // Hide the picker so the textarea is the focus for review/edit
+  // Collapse the picker — Travis can re-open by speaking again or by ZI fallback
   const container = document.getElementById('jrvManualCandidates');
   if (container) { container.style.display = 'none'; container.innerHTML = ''; }
-  jrvContactPickerState = null;
+  jrvManualLeadState = null;
+  jrvCompanyContactsCache = {};
 }
 
 // ZI Contacts SEARCH-ONLY (free, no enrich). Returns array of
@@ -6433,7 +6431,7 @@ function jrvCloseAddManualLead() {
   const candEl = document.getElementById('jrvManualCandidates');
   if (candEl) { candEl.style.display = 'none'; candEl.innerHTML = ''; }
   jrvManualLeadState = null;
-  jrvContactPickerState = null;
+  jrvCompanyContactsCache = {};
   // Hide the ZI usage inline panel too
   const usageEl = document.getElementById('jrvZIUsageInline');
   if (usageEl) { usageEl.style.display = 'none'; usageEl.innerHTML = ''; }

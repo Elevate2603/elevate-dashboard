@@ -311,13 +311,13 @@ When Travis says any of these (verbatim or close to it), it's a manual lead inta
 PARSE the following from his sentence(s):
 - company_name (required — the brand/business name)
 - company_city (the office location — Markham, Windsor, Brampton, Mississauga, etc. Default empty if not said.)
-- role_being_hired (the role they're hiring, e.g. "Production Manager", "Engineering Manager". Default empty if not said.)
+- role_being_hired (the role they're hiring — ALWAYS extract this verbatim if Travis named one, professional OR labour. Examples: "Production Manager", "Engineering Manager", "Machine Builder", "Machine Builder/Assembler", "Assembler", "AZ Driver", "Welder", "CNC Operator", "Warehouse Associate", "General Labourer", "CSR". Keep the original phrasing — if he said "Machine Builder/Assembler" use that exact string, do not split it. Default empty ONLY if he didn't name a role.)
 - context (BUSINESS reasons — how long the role has been open, ZoomInfo growth signals, posting frequency, pain points, the buying signal. Compose into a clean paragraph. Do NOT include personal/relational stuff here, that goes in personal_context.)
 - personal_context (RELATIONAL — anything Travis says about KNOWING the contact personally. Includes: prior conversations he's had, how long he's known them, how they met, shared activities, mutual connections, what they did together. Examples of phrases that trigger this: "I know him", "I've known Craig for X years", "we played hockey", "we go way back", "I met him at the conference", "his kid plays with mine", "I had him on a call last month", "we had coffee", "he's a friend", "his wife is my cousin's neighbor". This is critical — the drafter uses it to warm the tone significantly. Default empty if Travis didn't say anything relational.)
 
 DERIVE target_personas based on the role he mentioned. He always wants HR/Talent in addition to the function head:
 - Engineering role (engineer, engineering manager, design, project engineer) → ["Engineering Manager", "HR Manager"]
-- Production / general labour / skilled trades (production, plant, line, AZ driver, warehouse, fab) → ["Production Manager", "Operations Manager", "HR Manager"]
+- Production / general labour / skilled trades (production, plant, line, AZ driver, warehouse, fab, machine builder, assembler, welder, CNC, machinist, millwright, general labourer) → ["Production Manager", "Operations Manager", "HR Manager"]
 - Quality (quality manager, QA, QC) → ["Quality Manager", "Operations Manager", "HR Manager"]
 - Finance role (controller, accountant, finance, CFO) → ["CFO", "VP Finance", "HR Manager"]
 - Logistics / supply chain → ["Logistics Manager", "Operations Manager", "HR Manager"]
