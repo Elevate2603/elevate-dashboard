@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-B-DRAFTER-V6 -->
+<!-- ELEVATE-2026-0611-C-SENT-TODAY -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -711,6 +711,12 @@
   .jrv-inseq-draft-btn { background: rgba(200,130,10,0.18); border:1px solid rgba(200,130,10,0.45); color: var(--gold); cursor:pointer; padding:4px 9px; border-radius:4px; font-size:10.5px; font-weight:600; font-family: inherit; letter-spacing:0.2px; }
   .jrv-inseq-draft-btn:hover { background: rgba(200,130,10,0.32); }
   .jrv-inseq-draft-btn:disabled { opacity:0.6; cursor:wait; }
+  /* "Sent today" treatment: gold pill + left border + dim draft button (auto-clears at midnight client-side). */
+  .jrv-inseq-sent-today { background: linear-gradient(90deg, #c8820a, #e6a32b); border:1px solid #e6a32b; color:#0d0d0d; padding:3px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.3px; text-transform:uppercase; box-shadow: 0 0 8px rgba(200,130,10,0.4); }
+  .jrv-inseq-row-sent-today { border-left:3px solid #e6a32b !important; background: rgba(200,130,10,0.05); }
+  .jrv-inseq-draft-btn-sent { background: rgba(74,222,128,0.14) !important; border-color: rgba(74,222,128,0.4) !important; color: #4ade80 !important; cursor: not-allowed !important; opacity: 1 !important; }
+  .jrv-inseq-draft-btn-sent:hover { background: rgba(74,222,128,0.14) !important; }
+  .jrv-inseq-check:disabled { opacity:0.4; cursor:not-allowed; }
 
   /* Reach-out count + reply + bounce badges */
   .jrv-inseq-reach { font-family:'Consolas', monospace; font-size:10px; padding:3px 7px; background: rgba(255,255,255,0.05); color: var(--text-muted); border-radius:8px; letter-spacing:0.04em; white-space:nowrap; }
@@ -5629,6 +5635,20 @@ function jrvInSeqRecency(r) {
   return { color, daysAgo: days, label };
 }
 
+// True only if outlook_sent_at falls on today's local calendar date. Auto-clears
+// at midnight in the user's timezone without any backend touch — purely a date
+// comparison against the timestamp we already get from the queue fetch.
+function jrvSentToday(r) {
+  const ts = r && r.outlook_sent_at;
+  if (!ts) return false;
+  const sent = new Date(ts);
+  if (isNaN(sent.getTime())) return false;
+  const now = new Date();
+  return sent.getFullYear() === now.getFullYear()
+      && sent.getMonth() === now.getMonth()
+      && sent.getDate() === now.getDate();
+}
+
 function jrvInSeqStageBadge(r) {
   // Outlook-direct sends show "Outlook"; RCRM-enrolled show their sequence step if available.
   const seq = (r.active_sequence_name || r.sequence_name || '').trim();
@@ -5713,20 +5733,26 @@ function jrvRenderInSeq() {
       const bounced = (r.bounced === true || r.bounced === 'true');
       const bounceReason = (r.bounce_reason || '').trim();
       const checked = jrvInSeqState.selectedKeys.has(qk) ? ' checked' : '';
+      const sentToday = jrvSentToday(r);
+      const rowSentCls = sentToday ? ' jrv-inseq-row-sent-today' : '';
+      const draftBtnHtml = sentToday
+        ? `<button class="jrv-inseq-draft-btn jrv-inseq-draft-btn-sent" disabled title="An email was already sent to this contact today. Wait until tomorrow before sending another.">✓ Sent today</button>`
+        : `<button class="jrv-inseq-draft-btn" onclick="jrvDraftPreview('${escapeAttr(qk)}', this)" title="Generate a follow-up draft for this contact (popup preview, then Send via Outlook)">📧 Display Follow-up Email</button>`;
       return `
         <div class="jrv-inseq-row-wrap">
-          <div class="jrv-inseq-row" data-key="${escapeAttr(qk)}">
-            <input type="checkbox" class="jrv-inseq-check" data-key="${escapeAttr(qk)}" onchange="jrvToggleSelect('${escapeAttr(qk)}', this.checked)"${checked} title="Select for bulk send">
+          <div class="jrv-inseq-row${rowSentCls}" data-key="${escapeAttr(qk)}">
+            <input type="checkbox" class="jrv-inseq-check" data-key="${escapeAttr(qk)}" onchange="jrvToggleSelect('${escapeAttr(qk)}', this.checked)"${checked} title="Select for bulk send"${sentToday ? ' disabled' : ''}>
             <span class="jrv-inseq-dot ${g.color}" title="Last contact: ${escapeAttr(rec.label)}"></span>
             <div class="jrv-inseq-info">
               <div class="jrv-inseq-name" onclick="jrvToggleThread('${escapeAttr(email)}','${threadId}', this)" title="Click to see recent emails">${escapeHtml(name)}</div>
               ${meta ? `<div class="jrv-inseq-meta">${escapeHtml(meta)}</div>` : ''}
               <div class="jrv-inseq-badges">
+                ${sentToday ? `<span class="jrv-inseq-sent-today" title="You sent an email to this contact today. The badge clears at midnight.">✉ Sent today</span>` : ''}
                 <span class="jrv-inseq-reach${reachCls}" title="Outbound emails to this contact (Outlook sent items + Emailed notes)">${reachLabel}</span>
                 ${hasReplied ? `<span class="jrv-inseq-reply" title="Genuine human reply detected (auto-replies excluded)">Replied</span>` : ''}
                 ${bounced ? `<span class="jrv-inseq-bounce" title="${escapeAttr(bounceReason || 'Hard bounce detected — auto-removed from sequence, RCRM note logged')}">⚠ Bounced</span>` : ''}
                 ${jrvRcrmBtn(r)}
-                <button class="jrv-inseq-draft-btn" onclick="jrvDraftPreview('${escapeAttr(qk)}', this)" title="Generate a follow-up draft for this contact (popup preview, then Send via Outlook)">📧 Display Follow-up Email</button>
+                ${draftBtnHtml}
               </div>
               <div class="jrv-inseq-when">Last contact ${escapeHtml(rec.label)}</div>
             </div>
@@ -5875,10 +5901,23 @@ async function jrvSendDraftViaOutlook() {
 }
 
 // Bulk: draft + send for each selected contact. Single confirmation, N parallel fires.
+// Skip anyone already sent today to prevent double-sends (also reflected in disabled checkboxes).
 async function jrvBulkDraftAndSend() {
-  const keys = Array.from(jrvInSeqState.selectedKeys);
-  if (!keys.length) return;
-  if (!confirm('Draft and send ' + keys.length + ' email' + (keys.length === 1 ? '' : 's') + '?\n\nEach uses the new tone (personable open, series-aware). Drafts are written to the queue and sent via Outlook with RCRM logging. No further confirmation per email.')) return;
+  const allSelected = Array.from(jrvInSeqState.selectedKeys);
+  const records = jrvInSeqState.records || [];
+  const byKey = new Map(records.map(r => [r.key || '', r]));
+  const skipped = [];
+  const keys = allSelected.filter(qk => {
+    const rec = byKey.get(qk);
+    if (rec && jrvSentToday(rec)) { skipped.push(qk); return false; }
+    return true;
+  });
+  if (!keys.length) {
+    alert('All selected contacts already received an email today. Nothing to send.');
+    return;
+  }
+  const skipNote = skipped.length ? `\n\n${skipped.length} selected contact${skipped.length === 1 ? '' : 's'} already received an email today and will be skipped.` : '';
+  if (!confirm('Draft and send ' + keys.length + ' email' + (keys.length === 1 ? '' : 's') + '?\n\nEach uses the new tone (personable open, series-aware). Drafts are written to the queue and sent via Outlook with RCRM logging. No further confirmation per email.' + skipNote)) return;
   const btn = document.getElementById('jrvInSeqBulkBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Sending 0 / ' + keys.length + '…'; }
   let done = 0, failed = 0;
