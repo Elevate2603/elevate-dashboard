@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-E-EDITABLE-RCRM-LOG -->
+<!-- ELEVATE-2026-0611-F-MANUAL-LEAD -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -717,6 +717,21 @@
   .jrv-inseq-draft-btn-sent { background: rgba(74,222,128,0.14) !important; border-color: rgba(74,222,128,0.4) !important; color: #4ade80 !important; cursor: not-allowed !important; opacity: 1 !important; }
   .jrv-inseq-draft-btn-sent:hover { background: rgba(74,222,128,0.14) !important; }
   .jrv-inseq-check:disabled { opacity:0.4; cursor:not-allowed; }
+  /* Special sections at top: Responded Contact + Manual Lead */
+  .jrv-inseq-group-responded .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(74,222,128,0.12), rgba(74,222,128,0.04)); border-left:3px solid #4ade80; }
+  .jrv-inseq-group-manual .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(96,165,250,0.12), rgba(96,165,250,0.04)); border-left:3px solid #60a5fa; }
+  .jrv-inseq-special-icon { font-size:14px; }
+  .jrv-inseq-group-hint { font-size:11px; color: var(--text-muted); font-style:italic; margin-left:6px; }
+  .jrv-inseq-response-pill { padding:3px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.3px; text-transform:uppercase; }
+  .jrv-inseq-response-pill.warm { background: linear-gradient(90deg, #f97316, #fb923c); color:#0d0d0d; box-shadow: 0 0 8px rgba(249,115,22,0.4); }
+  .jrv-inseq-response-pill.cold { background: rgba(148,163,184,0.25); color:#cbd5e1; border:1px solid rgba(148,163,184,0.4); }
+  .jrv-inseq-manual-pill { background: rgba(96,165,250,0.2); border:1px solid rgba(96,165,250,0.45); color:#60a5fa; padding:3px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.3px; text-transform:uppercase; }
+  /* + Add Manual Lead button in modal head */
+  .jrv-add-manual-btn { background: rgba(96,165,250,0.18); border:1px solid rgba(96,165,250,0.45); color:#60a5fa; cursor:pointer; padding:6px 12px; border-radius:5px; font-size:11.5px; font-weight:600; font-family:inherit; letter-spacing:0.3px; }
+  .jrv-add-manual-btn:hover { background: rgba(96,165,250,0.32); }
+  /* Manual lead form inputs */
+  .jrv-manual-input { width:100%; background: rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); color: var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; }
+  .jrv-manual-input:focus { outline:none; border-color: var(--gold); }
 
   /* Reach-out count + reply + bounce badges */
   .jrv-inseq-reach { font-family:'Consolas', monospace; font-size:10px; padding:3px 7px; background: rgba(255,255,255,0.05); color: var(--text-muted); border-radius:8px; letter-spacing:0.04em; white-space:nowrap; }
@@ -2904,6 +2919,11 @@ const JRV_CONFIG = {
   PIPELINE_STAGE_MOVE_URL: 'https://hook.us2.make.com/63tnoage1a8w37ehmt7k78hbhv74qtnn',
   DRAFT_PREVIEW_URL: 'https://hook.us2.make.com/4r2s43f77i2f0nglpgbah1zzmdbv6sg7',
   OUTLOOK_SEND_URL: 'https://hook.us2.make.com/o22gxt6hnvuhey3e2e321uj0p1ny4nod',
+  // Manual Lead — voice-driven or form-driven entry into In Sequence with
+  // pipeline_stage=manual_lead. Auto-graduates to regular In Sequence after
+  // first send via Outlook (frontend fires PIPELINE_STAGE_MOVE_URL with
+  // stage=in_sequence inside jrvSendDraftViaOutlook).
+  MANUAL_LEAD_ADD_URL: 'https://hook.us2.make.com/bv66ntduff488fam82gwvg5ilvngfblk',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -5404,16 +5424,17 @@ function jrvLoadQueueData() {
 
 function jrvComputeCounts(records) {
   // Pipeline v2 (2026-06-09) — buckets: new, enrolled (In Sequence), mix (In the Mix).
-  // Staged/Approved are no longer rendered in the right rail per spec; Active Client
-  // count is driven separately by SCRIBE (off_limit_status_id === 166186 on the company).
+  // Manual Lead counts inside enrolled total so the IN SEQUENCE chip shows the
+  // full pipeline depth (manual leads live INSIDE the In Sequence panel).
   const c = { new:0, enrolled:0, mix:0 };
   for (const r of records) {
     const d = r.data || {};
-    if (d.is_client === true || d.is_client === 'true') continue; // active client tracked elsewhere
+    if (d.is_client === true || d.is_client === 'true') continue;
     if (d.removed_from_sequence === true || d.removed_from_sequence === 'true') continue;
     const stage = (d.pipeline_stage || '').toString().toLowerCase();
     if (stage === 'in_the_mix') { c.mix++; continue; }
-    if (d.in_sequence === true || d.in_sequence === 'true') { c.enrolled++; continue; }
+    // manual_lead, in_sequence, '' → all roll up into enrolled
+    if (stage === 'manual_lead' || d.in_sequence === true || d.in_sequence === 'true') { c.enrolled++; continue; }
     if (d.decision === 'pending') { c.new++; }
   }
   jrvState.counts = c;
@@ -5562,6 +5583,77 @@ function jrvOpenInSeqModal(mode) {
 
 function jrvOpenInTheMix() { jrvOpenInSeqModal('in_the_mix'); }
 
+// ── Manual Lead form ────────────────────────────────────────────────
+function jrvOpenAddManualLead() {
+  const modal = document.getElementById('jrvAddManualModal');
+  if (!modal) return;
+  // Clear fields each open
+  ['jrvManualCompany','jrvManualCity','jrvManualContext','jrvManualContacts'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  modal.style.display = 'flex';
+  setTimeout(() => { const c = document.getElementById('jrvManualCompany'); if (c) c.focus(); }, 50);
+}
+
+function jrvCloseAddManualLead() {
+  const modal = document.getElementById('jrvAddManualModal');
+  if (modal) modal.style.display = 'none';
+  const btn = document.getElementById('jrvManualAddBtn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Add to Manual Lead'; }
+}
+
+async function jrvSubmitManualLead() {
+  const company = (document.getElementById('jrvManualCompany').value || '').trim();
+  const city = (document.getElementById('jrvManualCity').value || '').trim();
+  const context = (document.getElementById('jrvManualContext').value || '').trim();
+  const contactsRaw = (document.getElementById('jrvManualContacts').value || '').trim();
+  if (!company) { alert('Company name is required.'); return; }
+  if (!contactsRaw) { alert('Add at least one contact (one per line: Name | email | title).'); return; }
+  const contacts = contactsRaw.split('\n').map(line => {
+    const parts = line.split('|').map(p => p.trim());
+    if (!parts[0]) return null;
+    return { name: parts[0], email: parts[1] || '', title: parts[2] || '', linkedin: parts[3] || '', phone: parts[4] || '' };
+  }).filter(Boolean);
+  if (!contacts.length) { alert('Could not parse any contacts. Format: Name | email | title (one per line).'); return; }
+  const btn = document.getElementById('jrvManualAddBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  try {
+    const res = await fetch(JRV_CONFIG.MANUAL_LEAD_ADD_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_name: company, company_city: city, context, contacts }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    jrvCloseAddManualLead();
+    // If In Sequence modal is open, refresh it; otherwise the next open will load fresh
+    const seqModal = document.getElementById('jrvInSeqModal');
+    if (seqModal && seqModal.style.display !== 'none') {
+      jrvFetchInSeq();
+    }
+  } catch (e) {
+    console.error('[Manual lead add] failed:', e);
+    alert('Add failed: ' + (e.message || ''));
+    if (btn) { btn.disabled = false; btn.textContent = 'Add to Manual Lead'; }
+  }
+}
+
+// Graduate a contact out of pipeline_stage=manual_lead after first send via Outlook.
+// Called from jrvSendDraftViaOutlook and jrvBulkDraftAndSend after the send succeeds.
+async function jrvGraduateFromManualLeadIfNeeded(queueKey) {
+  if (!queueKey) return;
+  const rec = (jrvInSeqState.records || []).find(r => (r.key || '') === queueKey);
+  if (!rec) return;
+  const stage = (rec.pipeline_stage || '').toString().toLowerCase();
+  if (stage !== 'manual_lead') return;
+  try {
+    const url = `${JRV_CONFIG.PIPELINE_STAGE_MOVE_URL}?queue_key=${encodeURIComponent(queueKey)}&stage=in_sequence`;
+    await fetch(url, { method: 'GET' });
+  } catch (e) {
+    console.error('[Manual lead graduate] failed:', e);
+  }
+}
+
 function jrvCloseInSeqModal() {
   const modal = document.getElementById('jrvInSeqModal');
   if (!modal) return;
@@ -5682,9 +5774,56 @@ function jrvRenderInSeq() {
     jrvRenderBulkBar();
     return;
   }
-  // Group + sort by recency. No more Pending Reviews subsection — drafting is on-demand only.
+  // Pipeline v2.1 — Two "special" sections at the very top of In Sequence mode:
+  // 1. Responded Contact: anyone with response_state = warm or cold (warm first)
+  // 2. Manual Lead: anyone with pipeline_stage = manual_lead and not yet sent
+  // Both pull from the SAME `filtered` set, then the remaining records go into
+  // the regular green/yellow/red recency groups so nobody is double-rendered.
+  // (In the Mix mode skips these special sections — keeps that panel clean.)
+  const showSpecials = jrvInSeqState.pipelineMode !== 'in_the_mix';
+  const respondedKeys = new Set();
+  const manualLeadKeys = new Set();
+  const respondedRecords = [];
+  const manualLeadRecords = [];
+  if (showSpecials) {
+    for (const r of filtered) {
+      const respState = (r.response_state || '').toString().toLowerCase();
+      if (respState === 'warm' || respState === 'cold') {
+        respondedKeys.add(r.key || '');
+        respondedRecords.push(r);
+      }
+      // Manual Lead: pipeline_stage=manual_lead AND not yet sent (graduates on first send).
+      // We dedup against responded so a manual lead that already replied surfaces in
+      // Responded Contact instead.
+      const stage = (r.pipeline_stage || '').toString().toLowerCase();
+      if (stage === 'manual_lead' && !respondedKeys.has(r.key || '')) {
+        manualLeadKeys.add(r.key || '');
+        manualLeadRecords.push(r);
+      }
+    }
+    // Warm first, then cold, newest responded_at first within each
+    respondedRecords.sort((a, b) => {
+      const ra = (a.response_state || '').toLowerCase();
+      const rb = (b.response_state || '').toLowerCase();
+      if (ra === 'warm' && rb !== 'warm') return -1;
+      if (rb === 'warm' && ra !== 'warm') return 1;
+      const da = Date.parse(a.responded_at || '') || 0;
+      const db = Date.parse(b.responded_at || '') || 0;
+      return db - da;
+    });
+    // Manual leads: most recently added first
+    manualLeadRecords.sort((a, b) => {
+      const da = Date.parse(a.manual_lead_added_at || a.added_at || '') || 0;
+      const db = Date.parse(b.manual_lead_added_at || b.added_at || '') || 0;
+      return db - da;
+    });
+  }
+
+  // Group + sort by recency. Exclude records already shown in the special sections.
   const buckets = { green: [], yellow: [], red: [] };
   for (const r of filtered) {
+    const qk = r.key || '';
+    if (respondedKeys.has(qk) || manualLeadKeys.has(qk)) continue;
     const rec = jrvInSeqRecency(r);
     buckets[rec.color].push({ r, rec });
   }
@@ -5712,56 +5851,106 @@ function jrvRenderInSeq() {
       </select>
     `;
   };
+  // Build one row's HTML. dotColor / whenLabel can be overridden by special sections.
+  const buildRow = (r, dotColor, whenLabel, extraBadgeHtml) => {
+    const name = (r.contact_name || r.contact_email || 'Unknown').trim();
+    const title = (r.contact_title || '').trim();
+    const company = (r.company_name || '').trim();
+    const email = (r.contact_email || '').trim();
+    const meta = [title, company].filter(Boolean).join(', ');
+    const qk = r.key || '';
+    const rcrmId = r.rcrm_contact_id || '';
+    const threadId = 'jrvThread_' + qk.replace(/[^a-z0-9_-]/gi, '_');
+    const reachCount = Number(r.reach_out_count || 0);
+    const reachLabel = reachCount === 0 ? '0 reach-outs'
+                     : reachCount === 1 ? '1 reach-out'
+                     : reachCount + ' reach-outs';
+    const reachCls = reachCount >= 2 ? ' gt2' : '';
+    const hasReplied = (r.has_replied === true || r.has_replied === 'true');
+    const bounced = (r.bounced === true || r.bounced === 'true');
+    const bounceReason = (r.bounce_reason || '').trim();
+    const checked = jrvInSeqState.selectedKeys.has(qk) ? ' checked' : '';
+    const sentToday = jrvSentToday(r);
+    const rowSentCls = sentToday ? ' jrv-inseq-row-sent-today' : '';
+    const draftBtnHtml = sentToday
+      ? `<button class="jrv-inseq-draft-btn jrv-inseq-draft-btn-sent" disabled title="An email was already sent to this contact today. Wait until tomorrow before sending another.">✓ Sent today</button>`
+      : `<button class="jrv-inseq-draft-btn" onclick="jrvDraftPreview('${escapeAttr(qk)}', this)" title="Generate a follow-up draft for this contact (popup preview, then Send via Outlook)">📧 Display Follow-up Email</button>`;
+    return `
+      <div class="jrv-inseq-row-wrap">
+        <div class="jrv-inseq-row${rowSentCls}" data-key="${escapeAttr(qk)}">
+          <input type="checkbox" class="jrv-inseq-check" data-key="${escapeAttr(qk)}" onchange="jrvToggleSelect('${escapeAttr(qk)}', this.checked)"${checked} title="Select for bulk send"${sentToday ? ' disabled' : ''}>
+          <span class="jrv-inseq-dot ${dotColor}" title="${escapeAttr(whenLabel)}"></span>
+          <div class="jrv-inseq-info">
+            <div class="jrv-inseq-name" onclick="jrvToggleThread('${escapeAttr(email)}','${threadId}', this)" title="Click to see recent emails">${escapeHtml(name)}</div>
+            ${meta ? `<div class="jrv-inseq-meta">${escapeHtml(meta)}</div>` : ''}
+            <div class="jrv-inseq-badges">
+              ${sentToday ? `<span class="jrv-inseq-sent-today" title="You sent an email to this contact today. The badge clears at midnight.">✉ Sent today</span>` : ''}
+              ${extraBadgeHtml || ''}
+              <span class="jrv-inseq-reach${reachCls}" title="Outbound emails to this contact (Outlook sent items + Emailed notes)">${reachLabel}</span>
+              ${hasReplied ? `<span class="jrv-inseq-reply" title="Genuine human reply detected (auto-replies excluded)">Replied</span>` : ''}
+              ${bounced ? `<span class="jrv-inseq-bounce" title="${escapeAttr(bounceReason || 'Hard bounce detected — auto-removed from sequence, RCRM note logged')}">⚠ Bounced</span>` : ''}
+              ${jrvRcrmBtn(r)}
+              ${draftBtnHtml}
+            </div>
+            <div class="jrv-inseq-when">${escapeHtml(whenLabel)}</div>
+          </div>
+          ${stageDropdownHtml(qk, rcrmId)}
+        </div>
+        <div class="jrv-inseq-thread" id="${threadId}"></div>
+      </div>
+    `;
+  };
+
+  // Responded Contact section — warm first (with a Response: Warm badge), then cold
+  let respondedHtml = '';
+  if (showSpecials && respondedRecords.length) {
+    const rowsHtml = respondedRecords.map(r => {
+      const respState = (r.response_state || '').toLowerCase();
+      const isWarm = respState === 'warm';
+      const badge = `<span class="jrv-inseq-response-pill ${isWarm ? 'warm' : 'cold'}" title="${isWarm ? 'Promising reply — eyes on this one' : 'Cold reply — not interested or pass'}">${isWarm ? '🔥 Response: Warm' : '🧊 Response: Cold'}</span>`;
+      const rec = jrvInSeqRecency(r);
+      return buildRow(r, isWarm ? 'green' : 'yellow', 'Responded ' + (r.responded_at ? new Date(r.responded_at).toLocaleDateString() : 'recently'), badge);
+    }).join('');
+    respondedHtml = `
+      <div class="jrv-inseq-group jrv-inseq-group-responded">
+        <div class="jrv-inseq-group-head">
+          <span class="jrv-inseq-special-icon">📬</span>
+          <span class="jrv-inseq-group-label">Responded Contact</span>
+          <span class="jrv-inseq-group-count">${respondedRecords.length}</span>
+          <span class="jrv-inseq-group-hint">Warm replies first — these need eyes on them</span>
+        </div>
+        ${rowsHtml}
+      </div>
+    `;
+  }
+
+  // Manual Lead section
+  let manualLeadHtml = '';
+  if (showSpecials && manualLeadRecords.length) {
+    const rowsHtml = manualLeadRecords.map(r => {
+      const ctx = (r.manual_lead_context || '').trim();
+      const badge = `<span class="jrv-inseq-manual-pill" title="${escapeAttr(ctx || 'Added manually via JARVIS or the Add Manual Lead form')}">✋ Manual Lead</span>`;
+      const addedAt = r.manual_lead_added_at || r.added_at;
+      const whenLabel = 'Added ' + (addedAt ? new Date(addedAt).toLocaleDateString() : 'recently');
+      return buildRow(r, 'green', whenLabel, badge);
+    }).join('');
+    manualLeadHtml = `
+      <div class="jrv-inseq-group jrv-inseq-group-manual">
+        <div class="jrv-inseq-group-head">
+          <span class="jrv-inseq-special-icon">✋</span>
+          <span class="jrv-inseq-group-label">Manual Lead</span>
+          <span class="jrv-inseq-group-count">${manualLeadRecords.length}</span>
+          <span class="jrv-inseq-group-hint">Graduates to In Sequence on first send</span>
+        </div>
+        ${rowsHtml}
+      </div>
+    `;
+  }
+
   const groupsHtml = groupOrder.map(g => {
     const items = buckets[g.color];
     if (!items.length) return '';
-    const rowsHtml = items.map(({ r, rec }) => {
-      const name = (r.contact_name || r.contact_email || 'Unknown').trim();
-      const title = (r.contact_title || '').trim();
-      const company = (r.company_name || '').trim();
-      const email = (r.contact_email || '').trim();
-      const meta = [title, company].filter(Boolean).join(', ');
-      const qk = r.key || '';
-      const rcrmId = r.rcrm_contact_id || '';
-      const threadId = 'jrvThread_' + qk.replace(/[^a-z0-9_-]/gi, '_');
-      const reachCount = Number(r.reach_out_count || 0);
-      const reachLabel = reachCount === 0 ? '0 reach-outs'
-                       : reachCount === 1 ? '1 reach-out'
-                       : reachCount + ' reach-outs';
-      const reachCls = reachCount >= 2 ? ' gt2' : '';
-      const hasReplied = (r.has_replied === true || r.has_replied === 'true');
-      const bounced = (r.bounced === true || r.bounced === 'true');
-      const bounceReason = (r.bounce_reason || '').trim();
-      const checked = jrvInSeqState.selectedKeys.has(qk) ? ' checked' : '';
-      const sentToday = jrvSentToday(r);
-      const rowSentCls = sentToday ? ' jrv-inseq-row-sent-today' : '';
-      const draftBtnHtml = sentToday
-        ? `<button class="jrv-inseq-draft-btn jrv-inseq-draft-btn-sent" disabled title="An email was already sent to this contact today. Wait until tomorrow before sending another.">✓ Sent today</button>`
-        : `<button class="jrv-inseq-draft-btn" onclick="jrvDraftPreview('${escapeAttr(qk)}', this)" title="Generate a follow-up draft for this contact (popup preview, then Send via Outlook)">📧 Display Follow-up Email</button>`;
-      return `
-        <div class="jrv-inseq-row-wrap">
-          <div class="jrv-inseq-row${rowSentCls}" data-key="${escapeAttr(qk)}">
-            <input type="checkbox" class="jrv-inseq-check" data-key="${escapeAttr(qk)}" onchange="jrvToggleSelect('${escapeAttr(qk)}', this.checked)"${checked} title="Select for bulk send"${sentToday ? ' disabled' : ''}>
-            <span class="jrv-inseq-dot ${g.color}" title="Last contact: ${escapeAttr(rec.label)}"></span>
-            <div class="jrv-inseq-info">
-              <div class="jrv-inseq-name" onclick="jrvToggleThread('${escapeAttr(email)}','${threadId}', this)" title="Click to see recent emails">${escapeHtml(name)}</div>
-              ${meta ? `<div class="jrv-inseq-meta">${escapeHtml(meta)}</div>` : ''}
-              <div class="jrv-inseq-badges">
-                ${sentToday ? `<span class="jrv-inseq-sent-today" title="You sent an email to this contact today. The badge clears at midnight.">✉ Sent today</span>` : ''}
-                <span class="jrv-inseq-reach${reachCls}" title="Outbound emails to this contact (Outlook sent items + Emailed notes)">${reachLabel}</span>
-                ${hasReplied ? `<span class="jrv-inseq-reply" title="Genuine human reply detected (auto-replies excluded)">Replied</span>` : ''}
-                ${bounced ? `<span class="jrv-inseq-bounce" title="${escapeAttr(bounceReason || 'Hard bounce detected — auto-removed from sequence, RCRM note logged')}">⚠ Bounced</span>` : ''}
-                ${jrvRcrmBtn(r)}
-                ${draftBtnHtml}
-              </div>
-              <div class="jrv-inseq-when">Last contact ${escapeHtml(rec.label)}</div>
-            </div>
-            ${stageDropdownHtml(qk, rcrmId)}
-          </div>
-          <div class="jrv-inseq-thread" id="${threadId}"></div>
-        </div>
-      `;
-    }).join('');
+    const rowsHtml = items.map(({ r, rec }) => buildRow(r, g.color, 'Last contact ' + rec.label, '')).join('');
     return `
       <div class="jrv-inseq-group">
         <div class="jrv-inseq-group-head">
@@ -5773,7 +5962,7 @@ function jrvRenderInSeq() {
       </div>
     `;
   }).join('');
-  body.innerHTML = groupsHtml || ('<div class="jrv-inseq-empty">' + emptyLabel + '</div>');
+  body.innerHTML = (respondedHtml + manualLeadHtml + groupsHtml) || ('<div class="jrv-inseq-empty">' + emptyLabel + '</div>');
   jrvRenderBulkBar();
 }
 
@@ -5910,6 +6099,8 @@ async function jrvSendDraftViaOutlook() {
       body: JSON.stringify({ queue_key: qk, subject, body }),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    // Auto-graduate if this was a manual lead (so it moves out of the Manual Lead section)
+    await jrvGraduateFromManualLeadIfNeeded(qk);
     jrvCloseDraftModal();
     // Refresh modal so the new send shows up in reach-out count + recency + sent-today badge
     jrvFetchInSeq();
@@ -5954,6 +6145,7 @@ async function jrvBulkDraftAndSend() {
         body: JSON.stringify({ queue_key: qk, subject: '', body: '' }),
       });
       if (!sendRes.ok) throw new Error('send HTTP ' + sendRes.status);
+      await jrvGraduateFromManualLeadIfNeeded(qk);
       done++;
     } catch (e) {
       console.error('[Bulk send]', qk, 'failed:', e);
@@ -6332,7 +6524,10 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="jrv-modal">
     <div class="jrv-modal-head">
       <div class="jrv-modal-title"><span id="jrvInSeqTitle">In Sequence</span> · <span id="jrvInSeqCount" style="color:var(--text-muted);">loading…</span></div>
-      <button class="jrv-modal-close" onclick="jrvCloseInSeqModal()" aria-label="Close">×</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="jrv-add-manual-btn" onclick="jrvOpenAddManualLead()" title="Add a manual lead via form (or tell JARVIS verbally)">+ Add Manual Lead</button>
+        <button class="jrv-modal-close" onclick="jrvCloseInSeqModal()" aria-label="Close">×</button>
+      </div>
     </div>
     <div class="jrv-inseq-searchbar">
       <input type="text" id="jrvInSeqSearch" class="jrv-inseq-search-input" placeholder="Search by name, company, or title…" oninput="jrvInSeqOnSearch(this.value)" autocomplete="off">
@@ -6345,6 +6540,41 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <div class="jrv-modal-body" id="jrvInSeqBody">
       <div class="jrv-inseq-empty">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ ADD MANUAL LEAD FORM ═══════════════════════ -->
+<div id="jrvAddManualModal" class="jrv-modal-overlay jrv-add-manual-modal" style="display:none;" onclick="if(event.target===this) jrvCloseAddManualLead()">
+  <div class="jrv-modal" style="max-width:720px;">
+    <div class="jrv-modal-head">
+      <div class="jrv-modal-title">Add Manual Lead</div>
+      <button class="jrv-modal-close" onclick="jrvCloseAddManualLead()" aria-label="Close">×</button>
+    </div>
+    <div class="jrv-modal-body" style="padding:18px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Company</label>
+          <input type="text" id="jrvManualCompany" placeholder="e.g. Multimatic" class="jrv-manual-input">
+        </div>
+        <div>
+          <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Company city</label>
+          <input type="text" id="jrvManualCity" placeholder="e.g. Markham" class="jrv-manual-input">
+        </div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Why this lead (context for the drafter)</label>
+        <textarea id="jrvManualContext" placeholder="e.g. Hiring a production manager. Role has been open ~6 weeks. Posted 3 times. ZoomInfo shows growing 12 percent year over year." class="jrv-manual-input" style="height:80px;resize:vertical;"></textarea>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Contacts (one per line: Name | email | title)</label>
+        <textarea id="jrvManualContacts" placeholder="e.g.&#10;Peter Krug | pkrug@multimatic.com | General Manager&#10;Jane Doe | jdoe@multimatic.com | HR Manager" class="jrv-manual-input" style="height:120px;resize:vertical;font-family:ui-monospace,monospace;font-size:12px;"></textarea>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Tip: voice-add through JARVIS pulls these automatically from ZoomInfo filtered to the company's city. Use this form when you have the contacts in hand.</div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button onclick="jrvCloseAddManualLead()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:var(--text);border-radius:6px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px;">Cancel</button>
+        <button id="jrvManualAddBtn" onclick="jrvSubmitManualLead()" style="background:var(--gold);border:1px solid var(--gold);color:#000;border-radius:6px;padding:9px 18px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;">Add to Manual Lead</button>
+      </div>
     </div>
   </div>
 </div>
