@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0612-AE-CLIENT-TOUCH -->
+<!-- ELEVATE-2026-0612-AF-TASKS-SCROLL-50PG -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -523,6 +523,17 @@
      Capped to ~4 visible task rows max so the News section below stays anchored
      and the left rail doesn't push past the Top 5 Hot Spots row's natural height. */
   .jrv-tasks-list { display:flex; flex-direction:column; gap:6px; max-height: 260px; overflow:hidden; }
+  /* Scroll variant for the left-rail panel — keeps the rail compact even with 20+ open tasks.
+     Thin dark scrollbar so it doesn't fight the dark theme. Buttons sit beneath in jrv-tasks-footer. */
+  .jrv-tasks-scroll { max-height: 320px; overflow-y: auto; padding-right: 2px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent; }
+  .jrv-tasks-scroll::-webkit-scrollbar { width: 6px; }
+  .jrv-tasks-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 3px; }
+  .jrv-tasks-scroll::-webkit-scrollbar-track { background: transparent; }
+  .jrv-tasks-footer { display:flex; gap:6px; margin-top:8px; }
+  .jrv-tasks-footer-btn { flex:1; background: rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); color: var(--text); cursor:pointer; padding:5px 10px; border-radius:4px; font-size:11px; font-family:inherit; letter-spacing:0.3px; }
+  .jrv-tasks-footer-btn:hover { background: rgba(255,255,255,0.10); }
+  .jrv-tasks-footer-btn-gold { background: rgba(200,130,10,0.18); border-color: rgba(200,130,10,0.45); color: var(--gold); }
+  .jrv-tasks-footer-btn-gold:hover { background: rgba(200,130,10,0.30); }
   .jrv-tasks-loading, .jrv-tasks-empty { color:var(--text-muted); font-size:11px; text-align:center; padding:14px 6px; font-style:italic; }
   .jrv-task-row { background:var(--dark3); border:1px solid var(--border); border-left:3px solid var(--gold); border-radius:6px; padding:8px 10px; display:flex; gap:8px; align-items:flex-start; font-size:11px; line-height:1.4; transition: opacity .25s, transform .25s; }
   .jrv-task-row.age-fresh { border-left-color:#C8820A; }
@@ -1214,17 +1225,14 @@
 
       <!-- LEFT RAIL: TASKS PANEL + NEWS (under Tasks). Both capped so they don't push past Top 5 Hot Spots. -->
       <aside class="jrv-rail">
-        <div class="jrv-rail-title" style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-          <span style="cursor:pointer;" onclick="jrvOpenTasksModal()" title="Open the full task list with all details">&#9673; Open Tasks &middot; <span id="jrvTasksCount">&mdash;</span></span>
-          <div style="display:flex;gap:4px;">
-            <button onclick="jrvOpenTasksModal()" title="Open the full task list — every task with notes, due time, source, and the rest" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);color:var(--text);cursor:pointer;padding:2px 8px;border-radius:4px;font-size:11px;font-family:inherit;letter-spacing:0.3px;">Open all</button>
-            <button onclick="jrvOpenAddTask()" title="Add a task manually" style="background:rgba(200,130,10,0.18);border:1px solid rgba(200,130,10,0.45);color:var(--gold);cursor:pointer;padding:2px 8px;border-radius:4px;font-size:11px;font-family:inherit;letter-spacing:0.3px;">+ Add</button>
-          </div>
-        </div>
-        <div class="jrv-tasks-list" id="jrvTasksList">
+        <div class="jrv-rail-title">&#9673; Open Tasks &middot; <span id="jrvTasksCount">&mdash;</span></div>
+        <div class="jrv-tasks-list jrv-tasks-scroll" id="jrvTasksList">
           <div class="jrv-tasks-loading">Loading tasks&hellip;</div>
         </div>
-        <button class="jrv-tasks-expand" id="jrvTasksExpand" style="display:none;" onclick="jrvOpenTasksModal()">&#9662; Expand &middot; <span id="jrvTasksMore">0</span> more</button>
+        <div class="jrv-tasks-footer">
+          <button onclick="jrvOpenTasksModal()" title="Open the full task list with notes, due time, source, and the rest" class="jrv-tasks-footer-btn">Open all</button>
+          <button onclick="jrvOpenAddTask()" title="Add a task manually" class="jrv-tasks-footer-btn jrv-tasks-footer-btn-gold">+ Add</button>
+        </div>
 
         <div class="jrv-rail-title" style="margin-top:14px;">&#9788; News &middot; <span id="jrvNewsCount">&mdash;</span></div>
         <div class="jrv-news-list" id="jrvNewsList">
@@ -3922,9 +3930,10 @@ function jrvRenderTasks() {
     if (expandBtn) expandBtn.style.display = 'none';
     return;
   }
-  const inline = jrvTasks.slice(0, JRV_TASKS_INLINE_MAX);
-  listEl.innerHTML = inline.map(t => jrvRenderTaskRow(t, false)).join('');
-  const overflow = n - inline.length;
+  // Scrollable rail — render every task, no inline-max cap. The container is height-capped
+  // with a thin dark scrollbar so the rail stays compact even with 20+ tasks.
+  listEl.innerHTML = jrvTasks.map(t => jrvRenderTaskRow(t, false)).join('');
+  const overflow = 0;
   if (expandBtn) {
     if (overflow > 0) {
       expandBtn.style.display = 'block';
