@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Active Clients — Last Touch decoration preview</title>
+<style>
+  :root {
+    --gold: #C8820A;
+    --dark1: #0d0d0e;
+    --dark2: #141416;
+    --dark3: #1c1c1f;
+    --text: #e8e8ea;
+    --border: #2a2a2f;
+    --text-muted: #999;
+  }
+  html, body { background: var(--dark1); color: var(--text); margin:0; padding:24px; font-family: -apple-system, system-ui, 'Segoe UI', sans-serif; }
+  h2 { font-size:13px; letter-spacing:0.16em; text-transform:uppercase; color: var(--gold); margin:24px 0 12px; }
+  .legend { margin-top:24px; color: var(--text-muted); font-size:11px; max-width:520px; line-height:1.55; }
+  .legend code { background: var(--dark3); padding:1px 6px; border-radius:3px; color: var(--gold); }
+
+  /* ────────────────── existing Active Clients styles (mirrored from index.html) ────────────────── */
+  .jrv-ac-root { background: var(--dark2); border:1px solid var(--border); border-radius:12px; padding:18px; width:340px; }
+  .jrv-ac-row { display:flex; flex-direction:column; }
+  .jrv-ac-header { background:none; border:none; color: var(--gold); cursor:pointer; padding:0; display:flex; align-items:center; gap:8px; font-family:'Consolas', monospace; font-size:12px; letter-spacing:0.14em; text-transform:uppercase; margin-bottom:10px; }
+  .jrv-ac-caret { font-size:9px; transition: transform .15s; }
+  .jrv-ac-open .jrv-ac-caret { transform: rotate(90deg); }
+  .jrv-ac-count { color: var(--text-muted); }
+  .jrv-ac-list { display:flex; flex-direction:column; gap:6px; }
+
+  /* Existing row — KEEP AS-IS, do not modify */
+  .jrv-ac-item {
+    display:flex; align-items:center; gap:10px;
+    background: var(--dark3); border:1px solid var(--border); border-radius:6px;
+    padding:8px 10px; text-decoration:none; color: var(--text); font-size:12px;
+    transition: background .12s;
+  }
+  .jrv-ac-item:hover { background: rgba(200,130,10,0.10); }
+  .jrv-ac-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .jrv-ac-dot-green  { background:#4ade80; box-shadow: 0 0 6px rgba(74,222,128,0.6); }
+  .jrv-ac-dot-yellow { background:#facc15; box-shadow: 0 0 6px rgba(250,204,21,0.6); }
+  .jrv-ac-dot-red    { background:#ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.6); }
+  .jrv-ac-dot-gray   { background:#5a5a62; }
+  .jrv-ac-name { flex:1; }
+  .jrv-ac-days { color: var(--text-muted); font-variant-numeric: tabular-nums; font-size:11px; }
+
+  /* ────────────────── NEW: block wraps existing row + sub-line + expanded panel ────────────────── */
+  .jrv-ac-block { display:flex; flex-direction:column; gap:0; }
+
+  /* Sub-line: chevron + last-touch summary. Click toggles expansion. */
+  .jrv-ac-subline {
+    display:flex; align-items:center; gap:8px;
+    background: rgba(0,0,0,0.18); border:1px solid var(--border); border-top:0;
+    border-radius: 0 0 6px 6px; margin-top:-1px;
+    padding:6px 10px 6px 28px;
+    cursor:pointer; font-size:10.5px; color: var(--text-muted);
+    transition: background .12s;
+  }
+  .jrv-ac-subline:hover { background: rgba(255,255,255,0.04); }
+  .jrv-ac-block .jrv-ac-item { border-radius: 6px 6px 0 0; border-bottom-color: transparent; }
+  .jrv-ac-block.no-touch .jrv-ac-item { border-radius:6px; border-bottom-color: var(--border); } /* no decoration when no record */
+  .jrv-ac-block.no-touch .jrv-ac-subline { display:none; }
+
+  .jrv-ac-sub-chev { font-size:9px; color: var(--text-muted); transition: transform .15s; }
+  .jrv-ac-block.is-expanded .jrv-ac-sub-chev { transform: rotate(90deg); color: var(--gold); }
+  .jrv-ac-sub-label { color: var(--text-muted); }
+  .jrv-ac-sub-date { font-weight:600; }
+  .jrv-ac-sub-date.lt-green  { color:#4ade80; }
+  .jrv-ac-sub-date.lt-amber  { color:#facc15; }
+  .jrv-ac-sub-date.lt-red    { color:#ef4444; }
+  .jrv-ac-sub-meta { color: var(--text); }
+  .jrv-ac-sub-meta-soft { color: var(--text-muted); }
+
+  /* Expanded panel: AI summary + last 5 interactions */
+  .jrv-ac-expanded {
+    display:none;
+    background: rgba(0,0,0,0.25); border:1px solid var(--border); border-top:0;
+    border-radius: 0 0 6px 6px; margin-top:-1px;
+    padding:10px 12px 12px;
+  }
+  .jrv-ac-block.is-expanded .jrv-ac-subline { border-radius:0; border-bottom-color:transparent; }
+  .jrv-ac-block.is-expanded .jrv-ac-expanded { display:block; }
+  .jrv-ac-summary { font-size:11.5px; line-height:1.5; color: var(--text); margin-bottom:10px; padding-left:2px; }
+  .jrv-ac-interactions { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:5px; }
+  .jrv-ac-interaction { display:grid; grid-template-columns: 56px 84px 1fr; gap:6px; align-items:baseline; font-size:11px; line-height:1.45; }
+  .jrv-ac-ix-type { font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:1px 5px; border-radius:8px; text-align:center; }
+  .jrv-ac-ix-type.t-email   { background: rgba(96,165,250,0.20); color:#60a5fa; border:1px solid rgba(96,165,250,0.4); }
+  .jrv-ac-ix-type.t-call    { background: rgba(74,222,128,0.18); color:#4ade80; border:1px solid rgba(74,222,128,0.4); }
+  .jrv-ac-ix-type.t-note    { background: rgba(200,130,10,0.18); color: var(--gold); border:1px solid rgba(200,130,10,0.4); }
+  .jrv-ac-ix-type.t-meeting { background: rgba(244,114,182,0.18); color:#f472b6; border:1px solid rgba(244,114,182,0.4); }
+  .jrv-ac-ix-type.t-sms     { background: rgba(168,162,158,0.18); color:#a8a29e; border:1px solid rgba(168,162,158,0.4); }
+  .jrv-ac-ix-date { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .jrv-ac-ix-body { color: var(--text); overflow-wrap:anywhere; word-break:normal; }
+  .jrv-ac-ix-person { color: var(--gold); font-weight:600; }
+  .jrv-ac-ix-gist { color: var(--text-muted); }
+  .jrv-ac-stale-note { font-size:10px; color: var(--text-muted); margin-top:8px; font-style:italic; padding-left:2px; }
+</style>
+</head>
+<body>
+
+<h2>Collapsed (default) — all 8 active clients</h2>
+<div class="jrv-ac-root">
+  <button class="jrv-ac-header jrv-ac-open">
+    <span class="jrv-ac-caret">▸</span>
+    <span class="jrv-ac-label">ACTIVE CLIENT</span>
+    <span class="jrv-ac-count">8</span>
+  </button>
+  <div class="jrv-ac-list">
+
+    <!-- ABC Technologies: 4 days, green -->
+    <div class="jrv-ac-block">
+      <a class="jrv-ac-item" href="#" target="_blank">
+        <span class="jrv-ac-dot jrv-ac-dot-green"></span>
+        <span class="jrv-ac-name">ABC Technologies</span>
+        <span class="jrv-ac-days">4d</span>
+      </a>
+      <div class="jrv-ac-subline">
+        <span class="jrv-ac-sub-chev">▸</span>
+        <span class="jrv-ac-sub-label">Last:</span>
+        <span class="jrv-ac-sub-date lt-green">4d ago</span>
+        <span class="jrv-ac-sub-meta-soft">·</span>
+        <span class="jrv-ac-sub-meta">email · Maria Borland</span>
+      </div>
+    </div>
+
+    <!-- Extreme Precision Screw Products: 1 day, green -->
+    <div class="jrv-ac-block">
+      <a class="jrv-ac-item" href="#" target="_blank">
+        <span class="jrv-ac-dot jrv-ac-dot-green"></span>
+        <span class="jrv-ac-name">Extreme Precision Screw Products</span>
+        <span class="jrv-ac-days">1d</span>
+      </a>
+      <div class="jrv-ac-subline">
+        <span class="jrv-ac-sub-chev">▸</span>
+        <span class="jrv-ac-sub-label">Last:</span>
+        <span class="jrv-ac-sub-date lt-green">yesterday</span>
+        <span class="jrv-ac-sub-meta-soft">·</span>
+        <span class="jrv-ac-sub-meta">email · Mike Badgley</span>
+      </div>
+    </div>
+
+    <!-- Blevins Screw Products: 3 days, green -->
+    <div class="jrv-ac-block">
+      <a class="jrv-ac-item" href="#" target="_blank">
+        <span class="jrv-ac-dot jrv-ac-dot-green"></span>
+        <span class="jrv-ac-name">Blevins Screw Products, Inc.</span>
+        <span class="jrv-ac-days">3d</span>
+      </a>
+      <div class="jrv-ac-subline">
+        <span class="jrv-ac-sub-chev">▸</span>
+        <span class="jrv-ac-sub-label">Last:</span>
+        <span class="jrv-ac-sub-date lt-green">3d ago</span>
+        <span class="jrv-ac-sub-meta-soft">·</span>
+        <span class="jrv-ac-sub-meta">email · Brad Patterson</span>
+      </div>
+    </div>
+
+    <!-- SyBridge Technologies: 24 days, amber (per new sub-line threshold) -->
+    <div class="jrv-ac-block">
+      <a class="jrv-ac-item" href="#" target="_blank">
+        <span class="jrv-ac-dot jrv-ac-dot-yellow"></span>
+        <span class="jrv-ac-name">SyBridge Technologies</span>
+        <span class="jrv-ac-days">24d</span>
+      </a>
+      <div class="jrv-ac-subline">
+        <span class="jrv-ac-sub-chev">▸</span>
+        <span class="jrv-ac-sub-label">Last:</span>
+        <span class="jrv-ac-sub-date lt-red">24d ago</span>
+        <span class="jrv-ac-sub-meta-soft">·</span>
+        <span class="jrv-ac-sub-meta">email · Shannon Ford</span>
+      </div>
+    </div>
+
+    <!-- Miller Waste - Windsor: 15 days, amber -->
+    <div class="jrv-ac-block">
+      <a class="jrv-ac-item" href="#" target="_blank">
+        <span class="jrv-ac-dot jrv-ac-dot-yellow"></span>
+        <span class="jrv-ac-name">Miller Waste - Windsor</span>
+        <span class="jrv-ac-days">15d</span>
+      </a>
+      <div class="jrv-ac-subline">
+        <span class="jrv-ac-sub-chev">▸</span>
+        <span class="jrv-ac-sub-label">Last:</span>
+        <span class="jrv-ac-sub-date lt-red">15d ago</span>
+        <span class="jrv-ac-sub-meta-soft">·</span>
+        <span class="jrv-ac-sub-meta">email · Steven Docherty</span>
+      </div>
+    </div>
+
+    <!-- The NARMCO Group: 106 days, red -->
+    <div class="jrv-ac-block">
+      <a class="jrv-ac-item" href="#" target="_blank">
+        <span class="jrv-ac-dot jrv-ac-dot-red"></span>
+        <span class="jrv-ac-name">The NARMCO Group</span>
+        <span class="jrv-ac-days">106d</span>
+      </a>
+      <div class="jrv-ac-subline">
+        <span class="jrv-ac-sub-chev">▸</span>
+        <span class="jrv-ac-sub-label">Last:</span>
+        <span class="jrv-ac-sub-date lt-red">3+ months</span>
+        <span class="jrv-ac-sub-meta-soft">·</span>
+        <span class="jrv-ac-sub-meta">email · Brad Elliott</span>
+      </div>
+    </div>
+
+    <!-- Cascades: stale record from before strict filter — graceful degrade, no decoration -->
+    <div class="jrv-ac-block no-touch">
+      <a class="jrv-ac-item" href="#" target="_blank">
+        <span class="jrv-ac-dot jrv-ac-dot-gray"></span>
+        <span class="jrv-ac-name">Cascades</span>
+        <span class="jrv-ac-days">—</span>
+      </a>
+    </div>
+
+    <!-- Manson Precision Reamers: stale, no decoration -->
+    <div class="jrv-ac-block no-touch">
+      <a class="jrv-ac-item" href="#" target="_blank">
+        <span class="jrv-ac-dot jrv-ac-dot-gray"></span>
+        <span class="jrv-ac-name">Manson Precision Reamers</span>
+        <span class="jrv-ac-days">—</span>
+      </a>
+    </div>
+
+  </div>
+</div>
+
+
+<h2>Expanded — same panel, three cards opened to show traffic-light variety</h2>
+<div class="jrv-ac-root">
+  <button class="jrv-ac-header jrv-ac-open">
+    <span class="jrv-ac-caret">▸</span>
+    <span class="jrv-ac-label">ACTIVE CLIENT</span>
+    <span class="jrv-ac-count">8</span>
+  </button>
+  <div class="jrv-ac-list">
+
+    <!-- ABC Technologies expanded: GREEN ≤7d -->
+    <div class="jrv-ac-block is-expanded">
+      <a class="jrv-ac-item" href="#" target="_blank">
+        <span class="jrv-ac-dot jrv-ac-dot-green"></span>
+        <span class="jrv-ac-name">ABC Technologies</span>
+        <span class="jrv-ac-days">4d</span>
+      </a>
+      <div class="jrv-ac-subline">
+        <span class="jrv-ac-sub-chev">▸</span>
+        <span class="jrv-ac-sub-label">Last:</span>
+        <span class="jrv-ac-sub-date lt-green">4d ago</span>
+        <span class="jrv-ac-sub-meta-soft">·</span>
+        <span class="jrv-ac-sub-meta">email · Maria Borland</span>
+      </div>
+      <div class="jrv-ac-expanded">
+        <div class="jrv-ac-summary">Travis last touched base with Maria Borland on June 8 via email, sending a brief check-in on the CNC Lead or Supervisor thread that had been active since mid-May around a strong CNC candidate with 20+ years of experience. There has been no inbound response visible since then, so it may be worth following up with a fresh angle — perhaps asking directly whether the CNC Supervisor role is still open.</div>
+        <ul class="jrv-ac-interactions">
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">Jun 8</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Maria Borland</span> <span class="jrv-ac-ix-gist">— RE: Cnc Lead or Supervisor: CAUTION: This email originated from outside…</span></span></li>
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">Jun 8</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Maria Borland</span> <span class="jrv-ac-ix-gist">— Re: Cnc Lead or Supervisor: Hi Maria, Just wanted to say hi! Hope all is well…</span></span></li>
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">May 20</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Maria Borland</span> <span class="jrv-ac-ix-gist">— Re: Cnc Lead or Supervisor: Thanks for the clarity and pushing for us…</span></span></li>
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">May 19</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Maria Borland</span> <span class="jrv-ac-ix-gist">— Cnc Lead or Supervisor: Do you need a CNC Supervisor? 20+ year candidate…</span></span></li>
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-call">CALL</span><span class="jrv-ac-ix-date">Apr 9 '25</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Margie Brumback</span> <span class="jrv-ac-ix-gist">— RCRM call log</span></span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Miller Waste - Windsor expanded: AMBER 8-14 d (actually red 15+) -->
+    <div class="jrv-ac-block is-expanded">
+      <a class="jrv-ac-item" href="#" target="_blank">
+        <span class="jrv-ac-dot jrv-ac-dot-yellow"></span>
+        <span class="jrv-ac-name">Miller Waste - Windsor</span>
+        <span class="jrv-ac-days">15d</span>
+      </a>
+      <div class="jrv-ac-subline">
+        <span class="jrv-ac-sub-chev">▸</span>
+        <span class="jrv-ac-sub-label">Last:</span>
+        <span class="jrv-ac-sub-date lt-red">15d ago</span>
+        <span class="jrv-ac-sub-meta-soft">·</span>
+        <span class="jrv-ac-sub-meta">email · Steven Docherty</span>
+      </div>
+      <div class="jrv-ac-expanded">
+        <div class="jrv-ac-summary">Elevate has been actively servicing Miller Waste since at least April, with weekly invoices sent to Steven Docherty as recently as May 28, and an active placement coordinated with Denny Harrington involving loaders Dante and Andrew. A vendor-status issue flagged by corporate on May 14 may be worth following up on to keep invoices flowing without disruption.</div>
+        <ul class="jrv-ac-interactions">
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">May 28</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Steven Docherty</span> <span class="jrv-ac-ix-gist">— Invoice 1543 from Elevate RS Corp.</span></span></li>
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">May 21</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Steven Docherty</span> <span class="jrv-ac-ix-gist">— Invoice 1537 from Elevate RS Corp.</span></span></li>
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">May 14</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Steven Docherty</span> <span class="jrv-ac-ix-gist">— Vendor Update - Elevate Miller: corporate team was saying we aren't a vendor…</span></span></li>
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">May 7</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Steven Docherty</span> <span class="jrv-ac-ix-gist">— Invoice 1525 from Elevate RS Corp.</span></span></li>
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">Apr 27</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Denny Harrington</span> <span class="jrv-ac-ix-gist">— Re: loaders: confirmation Dante and Andrew were there this morning…</span></span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- NARMCO Group expanded: RED >14d (way overdue, 100+ days) -->
+    <div class="jrv-ac-block is-expanded">
+      <a class="jrv-ac-item" href="#" target="_blank">
+        <span class="jrv-ac-dot jrv-ac-dot-red"></span>
+        <span class="jrv-ac-name">The NARMCO Group</span>
+        <span class="jrv-ac-days">106d</span>
+      </a>
+      <div class="jrv-ac-subline">
+        <span class="jrv-ac-sub-chev">▸</span>
+        <span class="jrv-ac-sub-label">Last:</span>
+        <span class="jrv-ac-sub-date lt-red">3+ months</span>
+        <span class="jrv-ac-sub-meta-soft">·</span>
+        <span class="jrv-ac-sub-meta">email · Brad Elliott</span>
+      </div>
+      <div class="jrv-ac-expanded">
+        <div class="jrv-ac-summary">Last touched February 26 via email with Brad Elliott, who responded humorously to a cold outreach saying he needs to turn off read-receipt notifications — a lighthearted reply that signals awareness but no clear interest yet. Given that all other contacts have gone quiet for weeks or months, may be worth a brief, low-pressure note referencing seasonal staffing pressures in Windsor to keep Elevate top of mind.</div>
+        <ul class="jrv-ac-interactions">
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">Feb 26</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Brad Elliott</span> <span class="jrv-ac-ix-gist">— Re: Brad - Elevate: I got to turn off these "read" emails. It's like seeing someone in an isle you know at a grocery store…</span></span></li>
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">Feb 26</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Brad Elliott</span> <span class="jrv-ac-ix-gist">— Brad - Elevate: Hi Brad, I got good news and I got bad news…</span></span></li>
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">Feb 26</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Robert Zgomba</span> <span class="jrv-ac-ix-gist">— Rob - Elevate: Hi Robert, I got good news and I got bad news…</span></span></li>
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-email">EMAIL</span><span class="jrv-ac-ix-date">Jan 22</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Amber Rodzik</span> <span class="jrv-ac-ix-gist">— Re: Elevate - Narmco: I saw this was opened, so I'll stop short of waving through the window…</span></span></li>
+          <li class="jrv-ac-interaction"><span class="jrv-ac-ix-type t-call">CALL</span><span class="jrv-ac-ix-date">Sep 30 '25</span><span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">Sandra Gauthier</span> <span class="jrv-ac-ix-gist">— RCRM call log</span></span></li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="legend">
+  <p><strong>What you're seeing:</strong></p>
+  <ul>
+    <li>Existing row (dot + name + days) is <strong>unchanged</strong> — same markup, same `.jrv-ac-item`, same dot classes from SCRIBE. The current rendering survives.</li>
+    <li>New <code>.jrv-ac-subline</code> appears <strong>below</strong> the existing row, joined visually by border-radius. Shows <code>Last: <date> · <channel> · <person></code>.</li>
+    <li>Date text colored by brief thresholds: <span style="color:#4ade80;">green ≤7 days</span>, <span style="color:#facc15;">amber 8–14</span>, <span style="color:#ef4444;">red >14</span>. (The big dot keeps its current scheme since you said don't change colors there.)</li>
+    <li>Click the sub-line → chevron rotates, panel expands with AI summary + last 5 interactions (icon + date + person + gist).</li>
+    <li><strong>Graceful degrade</strong>: clients without a touch record (Cascades & Manson here from the V1 partial coverage) render as today — gray dot, em-dash days, NO sub-line at all. Existing pre-Touch behavior preserved verbatim.</li>
+    <li>Channel icons color-coded: <span style="color:#60a5fa;">EMAIL</span>, <span style="color:#4ade80;">CALL</span>, <span style="color:#C8820A;">NOTE</span>, <span style="color:#f472b6;">MEETING</span>, <span style="color:#a8a29e;">SMS</span>.</li>
+  </ul>
+  <p style="margin-top:16px;"><strong>Phase 5 partial findings:</strong></p>
+  <ul>
+    <li>6 of 8 clients have clean parsed last_touch this run. The 2 with stale data (Cascades, Manson) are showing pre-fix data because their Outlook search results failed the strict participants filter and the bundle never reached UpdateRecord. Tomorrow's cron run + a small architectural tweak (always-write skeleton before the Anthropic filter) will close the gap. For now they fall back to the "no touch record" gray rendering above.</li>
+    <li>Real AI summaries on the 6 that worked are very on-target — names, dates, topic context all match Outlook reality.</li>
+  </ul>
+</div>
+
+</body>
+</html>

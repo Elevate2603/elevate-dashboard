@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ELEVATE-2026-0611-AD-TASKS-EXPANDED-MODAL -->
+<!-- ELEVATE-2026-0612-AE-CLIENT-TOUCH -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -942,6 +942,54 @@
   .jrv-ac-tooltip-label { display:block; font-size:9px; letter-spacing:0.12em; color: var(--jrv-ac-gold); margin-bottom:4px; }
   .jrv-ac-tooltip-name { color:#f4f4f8; font-weight:600; }
   .jrv-ac-tooltip-meta { display:block; color: var(--jrv-ac-dim); font-size:10.5px; margin-top:2px; }
+  /* Active Client touch decoration — additive; existing .jrv-ac-item rendering above stays exactly as is.
+     The block wraps the existing row + a sub-line (last contact summary) + an expandable panel (AI summary + 5 interactions). */
+  .jrv-ac-block { display:flex; flex-direction:column; }
+  .jrv-ac-block .jrv-ac-item { border-radius: 6px 6px 0 0; border-bottom-color: transparent; }
+  .jrv-ac-block.no-touch .jrv-ac-item { border-radius:6px; border-bottom-color: var(--border); }
+  .jrv-ac-subline {
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    background: rgba(0,0,0,0.18); border:1px solid var(--border); border-top:0;
+    border-radius: 0 0 6px 6px; margin-top:-1px;
+    padding:6px 10px 6px 28px;
+    cursor:pointer; font-size:10.5px; color: var(--text-muted);
+    transition: background .12s;
+  }
+  .jrv-ac-subline:hover { background: rgba(255,255,255,0.04); }
+  .jrv-ac-block.no-touch .jrv-ac-subline { display:none; }
+  .jrv-ac-sub-chev { font-size:9px; color: var(--text-muted); transition: transform .15s; flex-shrink:0; }
+  .jrv-ac-block.is-expanded .jrv-ac-sub-chev { transform: rotate(90deg); color: var(--gold); }
+  .jrv-ac-sub-date { font-weight:600; }
+  .jrv-ac-sub-date.lt-green { color:#4ade80; }
+  .jrv-ac-sub-date.lt-amber { color:#facc15; }
+  .jrv-ac-sub-date.lt-red   { color:#ef4444; }
+  .jrv-ac-sub-meta-soft { color: var(--text-muted); }
+  .jrv-ac-sub-meta { color: var(--text); }
+  .jrv-ac-expanded {
+    display:none;
+    background: rgba(0,0,0,0.25); border:1px solid var(--border); border-top:0;
+    border-radius: 0 0 6px 6px; margin-top:-1px;
+    padding:10px 12px 12px;
+  }
+  .jrv-ac-block.is-expanded .jrv-ac-subline { border-radius:0; border-bottom-color:transparent; }
+  .jrv-ac-block.is-expanded .jrv-ac-expanded { display:block; }
+  .jrv-ac-summary { font-size:11.5px; line-height:1.5; color: var(--text); margin-bottom:10px; padding-left:2px; }
+  .jrv-ac-interactions { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:5px; }
+  .jrv-ac-interaction { display:grid; grid-template-columns: 56px 84px 1fr; gap:6px; align-items:baseline; font-size:11px; line-height:1.45; }
+  .jrv-ac-ix-type { font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:1px 5px; border-radius:8px; text-align:center; white-space:nowrap; }
+  .jrv-ac-ix-type.t-email   { background: rgba(96,165,250,0.20); color:#60a5fa; border:1px solid rgba(96,165,250,0.4); }
+  .jrv-ac-ix-type.t-call    { background: rgba(74,222,128,0.18); color:#4ade80; border:1px solid rgba(74,222,128,0.4); }
+  .jrv-ac-ix-type.t-note    { background: rgba(200,130,10,0.18); color: var(--gold); border:1px solid rgba(200,130,10,0.4); }
+  .jrv-ac-ix-type.t-meeting { background: rgba(244,114,182,0.18); color:#f472b6; border:1px solid rgba(244,114,182,0.4); }
+  .jrv-ac-ix-type.t-sms     { background: rgba(168,162,158,0.18); color:#a8a29e; border:1px solid rgba(168,162,158,0.4); }
+  .jrv-ac-ix-date { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .jrv-ac-ix-body { color: var(--text); overflow-wrap:anywhere; word-break:normal; }
+  .jrv-ac-ix-person { color: var(--gold); font-weight:600; }
+  .jrv-ac-ix-gist { color: var(--text-muted); }
+  .jrv-ac-refresh-btn { background:none; border:none; color: var(--text-muted); cursor:pointer; font-size:11px; padding:0 4px; line-height:1; transition: color .15s; }
+  .jrv-ac-refresh-btn:hover { color: var(--gold); }
+  .jrv-ac-refresh-btn.is-loading { animation: jrv-ac-spin 0.8s linear infinite; }
+  @keyframes jrv-ac-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
   /* Market Hot Spots — 3-column row: Top 5 Hot Spots | Radar | Hot Hiring Positions.
      Radar holds its ~560px center column; the panels flex to whatever's left on each side. */
@@ -1239,11 +1287,14 @@
         <!-- ACTIVE CLIENT — expandable traffic-light list (jrv-ac- component, self-contained) -->
         <div class="jrv-ac-root">
           <div class="jrv-ac-row" id="jrvAcRow">
-            <button type="button" class="jrv-ac-header" id="jrvAcHeader" aria-expanded="false">
-              <span class="jrv-ac-caret" id="jrvAcCaret">▸</span>
-              <span class="jrv-ac-label">ACTIVE CLIENT</span>
-              <span class="jrv-ac-count" id="jrvAcCount">0</span>
-            </button>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+              <button type="button" class="jrv-ac-header" id="jrvAcHeader" aria-expanded="false" style="flex:1;">
+                <span class="jrv-ac-caret" id="jrvAcCaret">▸</span>
+                <span class="jrv-ac-label">ACTIVE CLIENT</span>
+                <span class="jrv-ac-count" id="jrvAcCount">0</span>
+              </button>
+              <button type="button" id="jrvAcRefreshBtn" class="jrv-ac-refresh-btn" title="Refresh last-touch data" onclick="window.jrvLoadClientTouch && window.jrvLoadClientTouch()">↻</button>
+            </div>
             <div class="jrv-ac-list" id="jrvAcList" hidden>
               <div class="jrv-ac-empty" id="jrvAcEmpty">No active clients loaded.</div>
             </div>
@@ -2988,6 +3039,11 @@ const JRV_CONFIG = {
   // Add task (Make scenario 5364097). POST {task_text, due_at (ISO 8601 or empty), notes, source} → AddRecord on elevate_tasks.
   // Voice intake routes here from jrvShowTaskAddPrefill after Travis reviews/edits in the popup.
   TASK_ADD_URL: 'https://hook.us2.make.com/ky85bkn8hrhdhhf113q2m3taqasohclb',
+  // Client Touch Fetch (Make scenario 5370107) reads elevate_client_touch and returns per-client last-touch
+  // data: { rcrm_company_slug, company_name, last_touch_at, last_touch_channel, last_touch_person, summary,
+  // interactions_json, refreshed_at, contacts_scanned, outlook_events_found }. Dashboard decorates the
+  // existing Active Clients panel without altering its current rendering or colors.
+  CLIENT_TOUCH_FETCH_URL: 'https://hook.us2.make.com/xt7ij1jc490ijr1yf2ucfhbxe07igd15',
   // Bids & Tenders — Tender Fetch (Make scenario 5289494) reads elevate_tenders datastore 105264
   // and returns the unarchived list. Tender Update (Make scenario 5289495) accepts {tender_id, stage}
   // and flips archived=true on terminal stages so the card drops from view.
@@ -7524,6 +7580,87 @@ function jrvSetFeedBadge(live, count) {
       return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
+    // ── Touch decoration helpers (additive — never alter the existing dot/name/days row) ──
+    const touchBySlug = {};                // populated by jrvClientTouchFetch
+    const expandedSlugs = new Set();        // remember which slugs the user opened
+    function touchTierFor(days) {
+      if (typeof days !== 'number' || days < 0) return null;
+      if (days <= 7) return 'green';
+      if (days <= 14) return 'amber';
+      return 'red';
+    }
+    function touchRelDate(iso) {
+      if (!iso) return '';
+      const t = new Date(iso).getTime();
+      if (isNaN(t)) return '';
+      const days = Math.floor((Date.now() - t) / 86400000);
+      if (days < 0) return 'just now';
+      if (days === 0) return 'today';
+      if (days === 1) return 'yesterday';
+      if (days < 30) return days + 'd ago';
+      if (days < 365) return Math.floor(days / 30) + 'mo ago';
+      return Math.floor(days / 365) + 'y ago';
+    }
+    function touchAbsDate(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString([], { month:'short', day:'numeric' });
+    }
+    function parseInteractions(text) {
+      if (!text) return [];
+      const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean);
+      const out = [];
+      for (const line of lines) {
+        const parts = line.split('|');
+        if (parts.length < 4) continue;
+        const iso = (parts[0] || '').trim();
+        if (!iso || isNaN(new Date(iso).getTime())) continue;
+        out.push({
+          iso,
+          channel: (parts[1] || '').trim().toLowerCase(),
+          person: (parts[2] || '').trim(),
+          gist: parts.slice(3).join('|').trim()
+        });
+      }
+      return out.slice(0, 5);
+    }
+    function renderTouchSubline(slug, t) {
+      const tier = touchTierFor(t.days_since != null ? Number(t.days_since) : null);
+      const dateText = touchRelDate(t.last_touch_at) || touchAbsDate(t.last_touch_at) || 'no date';
+      const channel = (t.last_touch_channel || '').trim();
+      const person = (t.last_touch_person || '').trim();
+      const metaBits = [];
+      if (channel) metaBits.push(channel);
+      if (person) metaBits.push(person);
+      const meta = metaBits.length ? metaBits.join(' · ') : 'no channel';
+      return '<div class="jrv-ac-subline" data-slug="' + esc(slug) + '">'
+        + '<span class="jrv-ac-sub-chev">▸</span>'
+        + '<span>Last:</span>'
+        + '<span class="jrv-ac-sub-date ' + (tier ? 'lt-' + tier : '') + '">' + esc(dateText) + '</span>'
+        + '<span class="jrv-ac-sub-meta-soft">·</span>'
+        + '<span class="jrv-ac-sub-meta">' + esc(meta) + '</span>'
+        + '</div>';
+    }
+    function renderExpanded(t) {
+      const interactions = parseInteractions(t.interactions_json);
+      const summary = (t.summary || '').trim();
+      const lines = interactions.map(i => {
+        const typeClass = 't-' + (['email','call','note','meeting','sms'].includes(i.channel) ? i.channel : 'email');
+        const dateLabel = touchAbsDate(i.iso) + (new Date(i.iso).getFullYear() !== new Date().getFullYear() ? ' ' + (new Date(i.iso).getFullYear()) : '');
+        return '<li class="jrv-ac-interaction">'
+          + '<span class="jrv-ac-ix-type ' + typeClass + '">' + esc(i.channel.toUpperCase()) + '</span>'
+          + '<span class="jrv-ac-ix-date">' + esc(dateLabel) + '</span>'
+          + '<span class="jrv-ac-ix-body"><span class="jrv-ac-ix-person">' + esc(i.person || 'Unknown') + '</span>'
+            + (i.gist ? ' <span class="jrv-ac-ix-gist">— ' + esc(i.gist.slice(0, 160)) + '</span>' : '')
+          + '</span></li>';
+      }).join('');
+      return '<div class="jrv-ac-expanded">'
+        + (summary ? '<div class="jrv-ac-summary">' + esc(summary) + '</div>' : '')
+        + (lines ? '<ul class="jrv-ac-interactions">' + lines + '</ul>' : '<div class="jrv-ac-summary" style="color:var(--text-muted);">No interactions logged yet.</div>')
+        + '</div>';
+    }
+
     function render() {
       count.textContent = clients.length;
       const sorted = clients.slice().sort((a, b) => {
@@ -7541,7 +7678,7 @@ function jrvSetFeedBadge(live, count) {
         const tipHow = (typeof c.daysSinceContact === 'number')
           ? (channelVerb(lc.channel) + ' ' + c.daysSinceContact + ' day' + (c.daysSinceContact === 1 ? '' : 's') + ' ago')
           : 'no contact on record';
-        return '<a class="jrv-ac-item" href="' + esc(rcrmUrlFor(c.slug)) + '" target="_blank" rel="noopener" '
+        const itemHtml = '<a class="jrv-ac-item" href="' + esc(rcrmUrlFor(c.slug)) + '" target="_blank" rel="noopener" '
           + 'data-tip-name="' + esc(tipName || 'Unknown contact') + '" '
           + 'data-tip-role="' + esc(tipRole) + '" '
           + 'data-tip-how="' + esc(tipHow) + '">'
@@ -7549,6 +7686,16 @@ function jrvSetFeedBadge(live, count) {
           + '<span class="jrv-ac-name">' + esc(c.name || 'Unknown company') + '</span>'
           + '<span class="jrv-ac-days">' + esc(days) + '</span>'
           + '</a>';
+        // Decoration only when we have a touch record for this slug
+        const t = touchBySlug[c.slug];
+        const hasTouch = t && (t.last_touch_at || t.summary);
+        const expanded = expandedSlugs.has(c.slug);
+        const blockClass = 'jrv-ac-block' + (hasTouch ? '' : ' no-touch') + (expanded ? ' is-expanded' : '');
+        return '<div class="' + blockClass + '" data-slug="' + esc(c.slug) + '">'
+          + itemHtml
+          + (hasTouch ? renderTouchSubline(c.slug, t) : '')
+          + (hasTouch && expanded ? renderExpanded(t) : '')
+          + '</div>';
       }).join('');
     }
 
@@ -7590,12 +7737,47 @@ function jrvSetFeedBadge(live, count) {
     list.addEventListener('mouseout',  e => { const it = e.target.closest('.jrv-ac-item'); if (it && !it.contains(e.relatedTarget)) hideTooltip(); });
     list.addEventListener('scroll', hideTooltip, { passive: true });
 
+    // Click handler on the sub-line toggles expansion. We use closest() so clicks
+    // inside the chevron/text all work, but never the existing <a> link row.
+    list.addEventListener('click', e => {
+      const sub = e.target.closest('.jrv-ac-subline');
+      if (!sub) return;
+      const block = sub.closest('.jrv-ac-block');
+      if (!block) return;
+      const slug = block.dataset.slug;
+      if (expandedSlugs.has(slug)) expandedSlugs.delete(slug);
+      else expandedSlugs.add(slug);
+      render();
+    });
+
+    // Fetch the per-client touch data and re-render with decoration.
+    // Graceful: if fetch fails or returns nothing, the panel renders today's version (no sub-lines).
+    function loadTouch() {
+      if (!JRV_CONFIG || !JRV_CONFIG.CLIENT_TOUCH_FETCH_URL) return;
+      const btn = document.getElementById('jrvAcRefreshBtn');
+      if (btn) btn.classList.add('is-loading');
+      fetch(JRV_CONFIG.CLIENT_TOUCH_FETCH_URL)
+        .then(r => r.ok ? r.json() : [])
+        .then(arr => {
+          if (!Array.isArray(arr)) return;
+          arr.forEach(t => {
+            if (t && t.rcrm_company_slug) touchBySlug[t.rcrm_company_slug] = t;
+          });
+          render();
+        })
+        .catch(err => console.warn('[client-touch] fetch failed:', err && err.message))
+        .finally(() => { if (btn) btn.classList.remove('is-loading'); });
+    }
+    window.jrvLoadClientTouch = loadTouch;
+
     window.jrvActiveClientsUpdate = function(newList) {
       if (!Array.isArray(newList)) return;
       clients = newList;
       render();
     };
     render();
+    // Defer initial touch fetch slightly so the existing scribe call lands first
+    setTimeout(loadTouch, 1200);
   });
 })();
 
