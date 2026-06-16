@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- BUILD: ELEVATE-2026-0616-2 -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -3278,6 +3279,60 @@ function jrvPrimeVoices() {
 
 // SCRIBE — pull follow-up lists from RCRM (Outlook later). Lists A/B/C/D land here
 // and feed the daily report's CLIENT FOLLOW-UPS section.
+// ════════════════════════════════════════════════════════════════════════
+// PANEL CACHE — stale-while-revalidate (cost control, 2026-06-16).
+// Paints each panel from localStorage instantly (0 Make ops), then revalidates
+// in the background ONLY if the cached copy is older than the TTL (or force=true).
+// Mutating actions call jrvCacheBust(key) so the next load re-pulls fresh — the
+// cache never holds a version older than the last action. This generalizes the
+// approach jrvLoadMarketIntel has always used to the other Make-backed panels.
+// NOTE: jrvLoadFollowUps hits the Netlify SCRIBE function (not a Make webhook),
+// so it is intentionally left uncached here — no Make ops to save.
+// ════════════════════════════════════════════════════════════════════════
+const JRV_PANEL_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const JRV_CACHE_KEYS = {
+  queue:     'jrv_cache_queue_v1',
+  tasks:     'jrv_cache_tasks_v1',
+  tenders:   'jrv_cache_tenders_v1',
+  shortlist: 'jrv_cache_shortlist_v1',
+  brief:     'jrv_cache_brief_v1',
+  signals:   'jrv_cache_signals_v1'
+};
+
+function jrvCacheRead(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return (o && typeof o.cachedAt === 'number') ? o : null;
+  } catch (_) { return null; }
+}
+function jrvCacheWrite(key, data) {
+  try { localStorage.setItem(key, JSON.stringify({ cachedAt: Date.now(), data: data })); } catch (_) {}
+}
+function jrvCacheBust(key) {
+  try { localStorage.removeItem(key); } catch (_) {}
+}
+
+// Generic stale-while-revalidate loader. apply(data) processes + renders and runs
+// for BOTH the cached paint and the fresh response, so a warm load renders
+// identically to a live fetch. onError(err, hadCache) lets each panel keep its
+// existing empty-state behavior on a cold miss while preserving the cached paint
+// when a background refresh fails.
+function jrvCachedLoad(opts) {
+  const key = opts.key, url = opts.url, apply = opts.apply, force = opts.force;
+  const ttl = (typeof opts.ttlMs === 'number') ? opts.ttlMs : JRV_PANEL_TTL_MS;
+  const cached = jrvCacheRead(key);
+  const hadCache = !!cached;
+  if (cached) { try { apply(cached.data); } catch (_) {} }
+  // Fresh enough and not forced → no network call, no Make operation.
+  if (!force && cached && (Date.now() - cached.cachedAt) < ttl) return;
+  fetch(url, { method: 'GET' })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
+    .then(function (data) { jrvCacheWrite(key, data); try { apply(data); } catch (_) {} })
+    .catch(function (err) { if (opts.onError) opts.onError(err, hadCache); });
+}
+
 function jrvLoadFollowUps() {
   if (!JRV_CONFIG.SCRIBE_URL) return;
   fetch(JRV_CONFIG.SCRIBE_URL)
@@ -3296,16 +3351,19 @@ function jrvLoadFollowUps() {
 }
 
 // Pull hiring signals from datastore 97143 so JARVIS has them in context for every command.
-function jrvLoadHiringSignals() {
+function jrvLoadHiringSignals(force) {
   if (!JRV_CONFIG.SIGNALS_URL) return;
-  fetch(JRV_CONFIG.SIGNALS_URL)
-    .then(r => r.ok ? r.json() : [])
-    .then(data => {
+  jrvCachedLoad({
+    key: JRV_CACHE_KEYS.signals,
+    url: JRV_CONFIG.SIGNALS_URL,
+    force: force,
+    apply: function (data) {
       const arr = (Array.isArray(data) ? data : []).map(r => (r && r.aggregate) ? r.aggregate : r).filter(r => r && r.key);
       jrvState.hiringSignals = arr;
       jrvRenderMarketHotSpots();
-    })
-    .catch(() => { jrvState.hiringSignals = []; jrvRenderMarketHotSpots(); });
+    },
+    onError: function (e, hadCache) { if (hadCache) return; jrvState.hiringSignals = []; jrvRenderMarketHotSpots(); }
+  });
 }
 
 // Live market intel — Job Bank Canada + news + Indeed via Claude web_search.
@@ -3485,19 +3543,22 @@ function jrvCloseNewsModal() {
 // ════════════════════════════════════════════════════════════════════════
 let jrvTenders = [];
 
-function jrvLoadTenders() {
+function jrvLoadTenders(force) {
   if (!JRV_CONFIG.TENDER_FETCH_URL) return;
-  fetch(JRV_CONFIG.TENDER_FETCH_URL, { method: 'GET' })
-    .then(r => r.ok ? r.json() : [])
-    .then(arr => {
+  jrvCachedLoad({
+    key: JRV_CACHE_KEYS.tenders,
+    url: JRV_CONFIG.TENDER_FETCH_URL,
+    force: force,
+    apply: function (arr) {
       if (!Array.isArray(arr)) arr = [];
       // Make BasicAggregator wraps entries under {aggregate: {...}} — unwrap defensively.
       jrvTenders = arr
         .map(t => (t && t.aggregate) ? t.aggregate : t)
         .filter(t => t && t.tender_id);
       jrvRenderTenders();
-    })
-    .catch(e => { console.warn('[tenders] fetch failed', e); jrvTenders = []; jrvRenderTenders(); });
+    },
+    onError: function (e, hadCache) { console.warn('[tenders] fetch failed', e); if (hadCache) return; jrvTenders = []; jrvRenderTenders(); }
+  });
 }
 
 function jrvDaysUntil(dateStr) {
@@ -3582,6 +3643,7 @@ function jrvUpdateTenderStage(tenderId, newStage) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tender_id: tenderId, stage: newStage })
   }).catch(e => console.warn('[tender update] failed', e));
+  jrvCacheBust(JRV_CACHE_KEYS.tenders); // write-through: next load reflects the new stage
   // Terminal stages drop from view; non-terminal just recolor the card.
   const TERMINAL = ['Submitted','Pass','Won','Lost'];
   if (TERMINAL.indexOf(newStage) !== -1) {
@@ -3844,10 +3906,12 @@ function jrvInitAgentVoicePicker() {
 
 function jrvLoadMorningBrief(force) {
   if (!JRV_CONFIG.BRIEF_URL) return;
-  const url = JRV_CONFIG.BRIEF_URL + (force ? '?t=' + Date.now() : '');
-  fetch(url, { method: 'GET' })
-    .then(r => r.ok ? r.json() : null)
-    .then(data => {
+  jrvCachedLoad({
+    key: JRV_CACHE_KEYS.brief,
+    // Force adds a cache-buster so a manual Fetch defeats any browser/CDN cache.
+    url: JRV_CONFIG.BRIEF_URL + (force ? '?t=' + Date.now() : ''),
+    force: force,
+    apply: function (data) {
       if (!data || !data.brief_date) { jrvBriefData = null; jrvRenderBriefCard(); return; }
       // v1 architecture: *_json fields hold plain-text summaries (e.g.
       // "RCRM holds 100 companies. Sample names: …"), not structured JSON.
@@ -3862,8 +3926,9 @@ function jrvLoadMorningBrief(force) {
         market_intel_text: data.market_intel_json || ''
       };
       jrvRenderBriefCard();
-    })
-    .catch(e => { console.warn('[brief] fetch failed', e); jrvBriefData = null; jrvRenderBriefCard(); });
+    },
+    onError: function (e, hadCache) { console.warn('[brief] fetch failed', e); if (hadCache) return; jrvBriefData = null; jrvRenderBriefCard(); }
+  });
 }
 
 function jrvRenderBriefCard() {
@@ -3910,11 +3975,13 @@ function jrvPlayBriefNarration() {
 let jrvTasks = [];                          // current open tasks (unwrapped, sorted newest-first)
 const JRV_TASKS_INLINE_MAX = 4;             // tasks shown directly in the left rail before "Expand"
 
-function jrvLoadTasks() {
+function jrvLoadTasks(force) {
   if (!JRV_CONFIG.TASKS_FETCH_URL) return;
-  fetch(JRV_CONFIG.TASKS_FETCH_URL, { method: 'GET' })
-    .then(r => r.ok ? r.json() : [])
-    .then(arr => {
+  jrvCachedLoad({
+    key: JRV_CACHE_KEYS.tasks,
+    url: JRV_CONFIG.TASKS_FETCH_URL,
+    force: force,
+    apply: function (arr) {
       if (!Array.isArray(arr)) arr = [];
       // Make's BasicAggregator wraps each entry under {aggregate: {…}}.
       // Unwrap defensively. When the upstream SearchRecord returns zero records,
@@ -3924,8 +3991,9 @@ function jrvLoadTasks() {
         .map(t => (t && t.aggregate) ? t.aggregate : t)
         .filter(t => t && t.task_text);
       jrvRenderTasks();
-    })
-    .catch(e => { console.warn('[tasks] fetch failed', e); jrvTasks = []; jrvRenderTasks(); });
+    },
+    onError: function (e, hadCache) { console.warn('[tasks] fetch failed', e); if (hadCache) return; jrvTasks = []; jrvRenderTasks(); }
+  });
 }
 
 function jrvTaskAgeClass(createdAt) {
@@ -3990,11 +4058,13 @@ function jrvSrxScoreBadge(score) {
   return '<span class="jrv-srx-score ' + cls + '">' + s + '</span>';
 }
 
-function jrvLoadShortlist() {
+function jrvLoadShortlist(force) {
   if (!JRV_CONFIG.SOURCING_FETCH_URL) return;
-  fetch(JRV_CONFIG.SOURCING_FETCH_URL, { method: 'GET' })
-    .then(r => r.ok ? r.json() : [])
-    .then(arr => {
+  jrvCachedLoad({
+    key: JRV_CACHE_KEYS.shortlist,
+    url: JRV_CONFIG.SOURCING_FETCH_URL,
+    force: force,
+    apply: function (arr) {
       if (!Array.isArray(arr)) arr = [];
       // Make's BasicAggregator wraps each entry under {aggregate: {…}}. Unwrap
       // defensively. Filter out phantom bundles with empty candidate_label.
@@ -4002,8 +4072,9 @@ function jrvLoadShortlist() {
         .map(p => (p && p.aggregate) ? p.aggregate : p)
         .filter(p => p && p.candidate_label);
       jrvRenderShortlist();
-    })
-    .catch(e => { console.warn('[srx] fetch failed', e); jrvSrxPicks = []; jrvRenderShortlist(); });
+    },
+    onError: function (e, hadCache) { console.warn('[srx] fetch failed', e); if (hadCache) return; jrvSrxPicks = []; jrvRenderShortlist(); }
+  });
 }
 
 function jrvRenderShortlist() {
@@ -4094,6 +4165,7 @@ function jrvMarkTaskComplete(taskId, checkboxEl) {
   const rows = document.querySelectorAll('.jrv-task-row[data-task-id="' + taskId.replace(/"/g, '\\"') + '"]');
   rows.forEach(r => r.classList.add('completing'));
   jrvTasks = jrvTasks.filter(t => t.task_id !== taskId);
+  jrvCacheBust(JRV_CACHE_KEYS.tasks); // write-through: next load re-pulls without the completed task
   setTimeout(() => { jrvRenderTasks(); jrvRenderTaskModal(); }, 250);
   if (!JRV_CONFIG.TASK_COMPLETE_URL) return;
   fetch(JRV_CONFIG.TASK_COMPLETE_URL, {
@@ -5402,7 +5474,7 @@ async function jrvSubmitTaskAdd() {
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     jrvCloseAddTask();
-    jrvLoadTasks();
+    jrvLoadTasks(true); // force-fresh: bypass cache so the new task shows immediately
   } catch (e) {
     console.error('[task add] failed:', e);
     alert('Add failed: ' + (e.message || ''));
@@ -5447,6 +5519,15 @@ function jrvFormatDueLabel(dueAt) {
 // adds anything missing (especially the relationship history that JARVIS won't
 // know unless he says it), and submits. The popup is a review-and-add step, not
 // a chatty interaction — JARVIS already said "on it" in the spoken reply.
+// Last voice-heard manual-lead context (company/city/role/personas). Stashed by
+// jrvShowManualLeadPrefill and reused by the on-demand Search button so the
+// brain's suggested target titles still help even after Travis fixes a mishear.
+let jrvManualLeadVoiceUi = null;
+// company|city key of the last SUCCESSFUL Manual Lead search. Hitting Search
+// again on the same name is a no-op (no re-spent RCRM/ZI ops); editing the
+// company or city changes the key, which re-runs the search.
+let jrvManualLeadLastQuery = '';
+
 function jrvShowManualLeadPrefill(ui) {
   // In Sequence modal underneath so the Manual Lead section is visible after submit
   jrvOpenInSeqModal('in_sequence');
@@ -5498,50 +5579,76 @@ function jrvShowManualLeadPrefill(ui) {
     // Personal context — only set if the brain heard something relational in
     // Travis's voice. Otherwise the field stays empty so Travis can add it.
     if (personalEl) personalEl.value = (ui.personal_context || '').toString().trim();
-    // Step 1: check RCRM first (free) AND ZoomInfo (paid) in parallel for
-    // company candidates. Saves a ZI credit when the company is already in
-    // our CRM. The merged candidate list shows RCRM matches first with a
-    // "✓ In RCRM" tag so the cheap choice is obvious at a glance.
-    if (contactsEl && ui.company_name && Array.isArray(ui.target_personas) && ui.target_personas.length) {
-      contactsEl.value = 'Checking RCRM + ZoomInfo for company match…';
-      contactsEl.disabled = true;
-      Promise.all([
-        jrvFetchRCRMCompanyCandidates(ui.company_name),
-        jrvFetchZICompanyCandidates(ui.company_name, ui.company_city || ''),
-      ])
-        .then(([rcrmCandidates, ziCandidates]) => {
-          // Stash full RCRM candidate list so the contact-fetch stage can
-          // pull from every matching RCRM company variant later
-          jrvLastRcrmCompanyCandidates = rcrmCandidates || [];
-          const merged = [...rcrmCandidates, ...ziCandidates];
-          if (!merged.length) {
-            contactsEl.value = '';
-            contactsEl.disabled = false;
-            contactsEl.placeholder = 'No RCRM or ZoomInfo match for "' + (ui.company_name || '') + '". Paste contacts manually: Name | email | title.';
-            return;
-          }
-          // Always show the picker — Travis picks which company match is right.
-          // If there's only ONE candidate, auto-expand it so he sees contacts
-          // immediately without an extra click.
-          contactsEl.value = '';
-          contactsEl.disabled = false;
-          contactsEl.placeholder = 'Tick contacts above and click Pull selected.';
-          jrvRenderCompanyCandidates(merged, ui.company_name || '', ui);
-          if (merged.length === 1) {
-            // Defer to next tick so the DOM is mounted
-            setTimeout(() => jrvToggleCompanyExpand(0), 50);
-          }
-        })
-        .catch(() => {
-          contactsEl.disabled = false;
-          contactsEl.value = '';
-          contactsEl.placeholder = 'Lookup failed. Paste contacts manually: Name | email | title.';
-        });
+    // Stash the voice-heard context (incl. target_personas) so the on-demand
+    // Search button can reuse it. Deliberately DO NOT auto-search here: JARVIS
+    // often mishears or misspells the company, and auto-searching would burn a
+    // wasted ZoomInfo lookup on the wrong name. Travis reviews/fixes the company
+    // field, then clicks "Search contacts" to run the RCRM + ZI lookup.
+    jrvManualLeadVoiceUi = ui;
+    if (contactsEl) {
+      contactsEl.value = '';
+      contactsEl.disabled = false;
+      contactsEl.placeholder = 'Check the company name above, fix any mishear, then click "Search company".';
     }
     // Focus the personal context field so Travis can quickly type the relationship
     // history that JARVIS wouldn't know from the voice command alone.
     if (personalEl) personalEl.focus();
   }, 100);
+}
+
+// On-demand company + contact search for the Manual Lead form. Reads the CURRENT
+// company/city/context fields (so Travis can correct a JARVIS mishear first),
+// then runs the same RCRM + ZI lookup the voice path used to auto-run. Nothing
+// searches until this button is clicked — no wasted ZI lookups on a wrong name.
+async function jrvManualLeadSearch() {
+  const companyEl = document.getElementById('jrvManualCompany');
+  const cityEl = document.getElementById('jrvManualCity');
+  const contextEl = document.getElementById('jrvManualContext');
+  const btn = document.getElementById('jrvManualSearchBtn');
+  const cont = document.getElementById('jrvManualCandidates');
+  const company = ((companyEl && companyEl.value) || '').trim();
+  const city = ((cityEl && cityEl.value) || '').trim();
+  if (!company) { alert('Enter a company name to search.'); if (companyEl) companyEl.focus(); return; }
+  // Already pulled this exact company/city this session → don't re-spend ops.
+  // Just re-show the existing picker. Editing the name changes the key below.
+  const q = (company + '|' + city).toLowerCase();
+  if (jrvManualLeadState && q === jrvManualLeadLastQuery) {
+    if (cont) cont.style.display = 'block';
+    return;
+  }
+  // Scrape the role being hired from the context box (same pattern as submit) for fit scoring.
+  let role = '';
+  const ctx = ((contextEl && contextEl.value) || '').toString();
+  const roleMatch = ctx.match(/\bhiring\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i);
+  if (roleMatch && roleMatch[1]) role = roleMatch[1].trim();
+  // Reuse the brain's suggested target titles if we have them — they describe
+  // who to pull (independent of how the company name is spelled).
+  const personas = (jrvManualLeadVoiceUi && Array.isArray(jrvManualLeadVoiceUi.target_personas))
+    ? jrvManualLeadVoiceUi.target_personas : [];
+  const ui = { company_name: company, company_city: city, role_being_hired: role, target_personas: personas };
+  if (btn) { btn.disabled = true; btn.textContent = 'Searching…'; }
+  if (cont) { cont.style.display = 'block'; cont.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">Searching RCRM + ZoomInfo for "' + escapeHtml(company) + '"…</div>'; }
+  try {
+    const [rcrmCandidates, ziCandidates] = await Promise.all([
+      jrvFetchRCRMCompanyCandidates(company),
+      jrvFetchZICompanyCandidates(company, city),
+    ]);
+    jrvLastRcrmCompanyCandidates = rcrmCandidates || [];
+    const merged = [...(rcrmCandidates || []), ...(ziCandidates || [])];
+    if (!merged.length) {
+      if (cont) cont.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">No RCRM or ZoomInfo match for "' + escapeHtml(company) + '". Check the spelling/city above and search again, or paste contacts manually below.</div>';
+      return;
+    }
+    jrvManualLeadLastQuery = q; // remember this company/city so a repeat click won't re-search
+    jrvRenderCompanyCandidates(merged, company, ui);
+    // One match → expand it so contacts show without an extra click.
+    if (merged.length === 1) setTimeout(() => jrvToggleCompanyExpand(0), 50);
+  } catch (e) {
+    console.warn('[manual lead search] failed:', e);
+    if (cont) cont.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">Search failed — try again, or paste contacts manually below.</div>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 Search company'; }
+  }
 }
 
 // RCRM Company Candidates — search RecruitCRM first so we don't burn ZoomInfo
@@ -6656,24 +6763,28 @@ function jrvCaptureStyle(transcript) {
   try { localStorage.setItem(JRV_STYLE_KEY, JSON.stringify(jrvState.styleSamples)); } catch (_) {}
 }
 
-function jrvLoadQueueData() {
-  fetch(JRV_CONFIG.DATA_URL)
-    .then(r => r.json())
-    .then(data => {
+function jrvLoadQueueData(force) {
+  jrvCachedLoad({
+    key: JRV_CACHE_KEYS.queue,
+    url: JRV_CONFIG.DATA_URL,
+    force: force,
+    apply: function (data) {
       const records = (Array.isArray(data) ? data : []).map(r => (r && r.aggregate) ? r.aggregate : r).filter(r => r && r.key && r.data);
       jrvState.records = records;
       jrvComputeCounts(records);
       jrvRenderStages();
       jrvRenderRecent(records);
       jrvSetFeedBadge(true, records.length);
-    })
-    .catch(err => {
+    },
+    onError: function (err, hadCache) {
       console.warn('[JARVIS] Queue fetch failed:', err);
+      if (hadCache) return; // keep the cached paint instead of dropping to demo mode
       jrvSetFeedBadge(false, 0);
       jrvRenderStages(); // shows dashes
       const log = document.getElementById('jrvLog');
       if (log) log.innerHTML = '<div class="jrv-log-empty">Demo mode — live feed unavailable</div>';
-    });
+    }
+  });
 }
 
 function jrvComputeCounts(records) {
@@ -6846,6 +6957,12 @@ function jrvOpenAddManualLead() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  // Fresh open → drop any prior voice context and hide the candidate picker so
+  // nothing stale shows. The Search button repopulates it on demand.
+  jrvManualLeadVoiceUi = null;
+  jrvManualLeadLastQuery = '';
+  const candReset = document.getElementById('jrvManualCandidates');
+  if (candReset) { candReset.style.display = 'none'; candReset.innerHTML = ''; }
   modal.style.display = 'flex';
   setTimeout(() => { const c = document.getElementById('jrvManualCompany'); if (c) c.focus(); }, 50);
 }
@@ -6912,6 +7029,7 @@ async function jrvSubmitManualLead() {
       body: JSON.stringify({ company_name: company, company_city: city, target_role: targetRole, context, contacts }),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    jrvCacheBust(JRV_CACHE_KEYS.queue); // write-through: new lead enters the pipeline counts
     jrvCloseAddManualLead();
     // If In Sequence modal is open, refresh it; otherwise the next open will load fresh
     const seqModal = document.getElementById('jrvInSeqModal');
@@ -7303,6 +7421,7 @@ async function jrvOnStageChange(queueKey, rcrmId, selectEl) {
     const url = `${JRV_CONFIG.PIPELINE_STAGE_MOVE_URL}?queue_key=${encodeURIComponent(queueKey)}&stage=${encodeURIComponent(value)}`;
     const res = await fetch(url, { method: 'GET' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    jrvCacheBust(JRV_CACHE_KEYS.queue); // write-through: stage change shifts the pipeline counts
     // Drop from current panel (record's stage no longer matches)
     jrvInSeqState.records = (jrvInSeqState.records || []).filter(r => (r.key || '') !== queueKey);
     jrvInSeqState.selectedKeys.delete(queueKey);
@@ -7393,6 +7512,7 @@ async function jrvSendDraftViaOutlook() {
       body: JSON.stringify({ queue_key: qk, subject, body }),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    jrvCacheBust(JRV_CACHE_KEYS.queue); // write-through: send (+ possible graduate) changes pipeline state
     // Auto-graduate if this was a manual lead (so it moves out of the Manual Lead section)
     await jrvGraduateFromManualLeadIfNeeded(qk);
     jrvCloseDraftModal();
@@ -7451,6 +7571,7 @@ async function jrvBulkDraftAndSend() {
     btn.disabled = false;
     btn.textContent = 'Draft and send all selected';
   }
+  jrvCacheBust(JRV_CACHE_KEYS.queue); // write-through: bulk send (+ graduates) changes pipeline state
   jrvClearSelection();
   jrvFetchInSeq();
   if (failed) alert(failed + ' of ' + keys.length + ' sends failed. Check console for details.');
@@ -7464,6 +7585,7 @@ async function jrvRemoveFromSeq(queueKey, rcrmContactId, btn) {
     const url = `${JRV_CONFIG.INSEQ_REMOVE_URL}?queue_key=${encodeURIComponent(queueKey)}&rcrm_contact_id=${encodeURIComponent(rcrmContactId || '')}`;
     const res = await fetch(url, { method: 'GET' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    jrvCacheBust(JRV_CACHE_KEYS.queue); // write-through: un-enroll drops them from the pipeline counts
     // Mark removed in local state and re-render
     jrvInSeqState.records = jrvInSeqState.records.filter(r => (r.key || '') !== queueKey);
     jrvRenderInSeq();
@@ -7985,6 +8107,10 @@ document.addEventListener('DOMContentLoaded', function() {
           <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Company city</label>
           <input type="text" id="jrvManualCity" placeholder="e.g. Markham" class="jrv-manual-input">
         </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+        <button type="button" id="jrvManualSearchBtn" onclick="jrvManualLeadSearch()" style="background:rgba(200,130,10,0.18);border:1px solid rgba(200,130,10,0.5);color:var(--gold);border-radius:6px;padding:8px 16px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;letter-spacing:0.4px;">🔍 Search company</button>
+        <span style="font-size:11px;color:var(--text-muted);">Fix the company / city above if JARVIS misheard, then search ZoomInfo + RCRM.</span>
       </div>
       <div style="margin-bottom:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
