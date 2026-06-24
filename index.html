@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0624-B -->
+<!-- BUILD: ELEVATE-2026-0624-C -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -3321,12 +3321,20 @@ function jrvCacheBust(key) {
 // when a background refresh fails.
 function jrvCachedLoad(opts) {
   const key = opts.key, url = opts.url, apply = opts.apply, force = opts.force;
-  const ttl = (typeof opts.ttlMs === 'number') ? opts.ttlMs : JRV_PANEL_TTL_MS;
+  // Default policy: refresh at most ONCE PER CALENDAR DAY. The Make-backed panels
+  // only change when the morning crons run, so re-pulling repeatedly through the day
+  // just burns operations. A panel may still opt into a shorter window via ttlMs.
+  // Mutating actions call jrvCacheBust(key) for an immediate re-pull when something
+  // actually changes.
+  const ttl = (typeof opts.ttlMs === 'number') ? opts.ttlMs : null;
   const cached = jrvCacheRead(key);
   const hadCache = !!cached;
   if (cached) { try { apply(cached.data); } catch (_) {} }
+  const fresh = !!cached && (ttl === null
+    ? new Date(cached.cachedAt).toDateString() === new Date().toDateString()
+    : (Date.now() - cached.cachedAt) < ttl);
   // Fresh enough and not forced → no network call, no Make operation.
-  if (!force && cached && (Date.now() - cached.cachedAt) < ttl) return;
+  if (!force && fresh) return;
   fetch(url, { method: 'GET' })
     .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
     .then(function (data) { jrvCacheWrite(key, data); try { apply(data); } catch (_) {} })
