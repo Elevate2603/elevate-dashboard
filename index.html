@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0624-C -->
+<!-- BUILD: ELEVATE-2026-0624-D -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -3296,7 +3296,9 @@ const JRV_CACHE_KEYS = {
   tenders:   'jrv_cache_tenders_v1',
   shortlist: 'jrv_cache_shortlist_v1',
   brief:     'jrv_cache_brief_v1',
-  signals:   'jrv_cache_signals_v1'
+  signals:   'jrv_cache_signals_v1',
+  inseq:     'jrv_cache_inseq_v1',
+  inmix:     'jrv_cache_inmix_v1'
 };
 
 function jrvCacheRead(key) {
@@ -3312,6 +3314,22 @@ function jrvCacheWrite(key, data) {
 }
 function jrvCacheBust(key) {
   try { localStorage.removeItem(key); } catch (_) {}
+}
+
+// Once-per-calendar-day freshness with a morning-cron guard: a copy cached BEFORE
+// today's crons have written (08:30 local) is treated as stale so an early load
+// doesn't pin pre-cron data all day. Fresh only if cached today AND at/after 08:30.
+const JRV_CRON_FRESH_AFTER_HHMM = '08:30';
+function jrvCacheFreshToday(cachedAt) {
+  if (!cachedAt) return false;
+  const now = new Date();
+  const c = new Date(cachedAt);
+  if (isNaN(c.getTime())) return false;
+  if (c.toDateString() !== now.toDateString()) return false;
+  const parts = String(JRV_CRON_FRESH_AFTER_HHMM).split(':');
+  const cutoff = new Date(now);
+  cutoff.setHours(parseInt(parts[0], 10) || 0, parseInt(parts[1], 10) || 0, 0, 0);
+  return c.getTime() >= cutoff.getTime();
 }
 
 // Generic stale-while-revalidate loader. apply(data) processes + renders and runs
@@ -3331,7 +3349,7 @@ function jrvCachedLoad(opts) {
   const hadCache = !!cached;
   if (cached) { try { apply(cached.data); } catch (_) {} }
   const fresh = !!cached && (ttl === null
-    ? new Date(cached.cachedAt).toDateString() === new Date().toDateString()
+    ? jrvCacheFreshToday(cached.cachedAt)
     : (Date.now() - cached.cachedAt) < ttl);
   // Fresh enough and not forced → no network call, no Make operation.
   if (!force && fresh) return;
@@ -7082,12 +7100,15 @@ async function jrvSubmitManualLead() {
       body: JSON.stringify({ company_name: company, company_city: city, target_role: targetRole, context, contacts }),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    jrvCacheBust(JRV_CACHE_KEYS.queue); // write-through: new lead enters the pipeline counts
+    jrvCacheBust(JRV_CACHE_KEYS.queue); // new lead enters the pipeline counts
+    jrvCacheBust(JRV_CACHE_KEYS.inseq); // new lead carries a backend-generated key
     jrvCloseAddManualLead();
-    // If In Sequence modal is open, refresh it; otherwise the next open will load fresh
+    // Manual add is infrequent and the later draft/send need the backend-generated
+    // queue key, so this is the ONE action that forces a single fresh pull (when the
+    // modal is open) rather than fabricating a local record.
     const seqModal = document.getElementById('jrvInSeqModal');
     if (seqModal && seqModal.style.display !== 'none') {
-      jrvFetchInSeq();
+      jrvFetchInSeq(true);
     }
   } catch (e) {
     console.error('[Manual lead add] failed:', e);
@@ -7119,14 +7140,30 @@ function jrvCloseInSeqModal() {
   document.body.style.overflow = '';
 }
 
-async function jrvFetchInSeq() {
+function jrvInSeqCacheKey() {
+  return (jrvInSeqState.pipelineMode === 'in_the_mix') ? JRV_CACHE_KEYS.inmix : JRV_CACHE_KEYS.inseq;
+}
+
+// Stale-while-revalidate, once per calendar day. Paints instantly from the cached
+// copy, and only reads Make when today's cache is missing/stale or force===true
+// (the Refresh button). Every write action updates jrvInSeqState.records in memory
+// instead of calling this — so a normal day of use makes at most one Make read here.
+async function jrvFetchInSeq(force) {
   const body = document.getElementById('jrvInSeqBody');
   const countEl = document.getElementById('jrvInSeqCount');
   if (!body) return;
+  const cacheKey = jrvInSeqCacheKey();
+  const cached = jrvCacheRead(cacheKey);
+  if (cached && Array.isArray(cached.data)) {
+    jrvInSeqState.records = cached.data;
+    jrvRenderInSeq();
+    jrvResolveMissingSlugs(jrvInSeqState.records, function () { jrvRenderInSeq(); jrvCacheWrite(cacheKey, jrvInSeqState.records); });
+  }
+  // Fresh today (post-cron) and not forced → no Make operation.
+  if (!force && cached && jrvCacheFreshToday(cached.cachedAt)) return;
   if (jrvInSeqState.loading) return;
   jrvInSeqState.loading = true;
-  body.innerHTML = '<div class="jrv-inseq-empty">Loading…</div>';
-  if (countEl) countEl.textContent = 'loading…';
+  if (!cached) { body.innerHTML = '<div class="jrv-inseq-empty">Loading…</div>'; if (countEl) countEl.textContent = 'loading…'; }
   try {
     const url = jrvInSeqState.pipelineMode === 'in_the_mix' ? JRV_CONFIG.INSEQ_MIX_FETCH_URL : JRV_CONFIG.INSEQ_FETCH_URL;
     const res = await fetch(url, { method: 'GET' });
@@ -7152,18 +7189,24 @@ async function jrvFetchInSeq() {
                          return stage !== 'in_the_mix';
                        });
     jrvInSeqState.records = records;
+    jrvCacheWrite(cacheKey, records);
     jrvRenderInSeq();
     // Lazy slug resolution for any displayed contact missing rcrm_contact_id.
     // Fires per-email, throttled, session-cached, scoped to ONLY what's on screen.
-    jrvResolveMissingSlugs(records, jrvRenderInSeq);
+    // Write resolved slugs back into the cached copy so they are never re-resolved
+    // for that contact within the day.
+    jrvResolveMissingSlugs(records, function () { jrvRenderInSeq(); jrvCacheWrite(cacheKey, jrvInSeqState.records); });
     // Classifier runs as its own daily cron (M-F 06:30 EDT) right after Recency
     // Refresh writes the latest last_communication_subject. We do NOT fire it
-    // from the panel — see commit 6d5bc6b vs the next one. Tag updates land
-    // overnight, which is enough resolution for the workflow.
+    // from the panel. Tag updates land overnight, which is enough resolution.
   } catch (e) {
     console.error('[InSeq] fetch error:', e);
-    body.innerHTML = '<div class="jrv-inseq-empty">Could not load. ' + escapeHtml(e.message || '') + '</div>';
-    if (countEl) countEl.textContent = 'error';
+    // Keep the cached paint on a background-refresh failure; only show the error
+    // state on a cold miss (nothing was painted).
+    if (!cached) {
+      body.innerHTML = '<div class="jrv-inseq-empty">Could not load. ' + escapeHtml(e.message || '') + '</div>';
+      if (countEl) countEl.textContent = 'error';
+    }
   } finally {
     jrvInSeqState.loading = false;
   }
@@ -7478,10 +7521,14 @@ async function jrvOnStageChange(queueKey, rcrmId, selectEl) {
     const url = `${JRV_CONFIG.PIPELINE_STAGE_MOVE_URL}?queue_key=${encodeURIComponent(queueKey)}&stage=${encodeURIComponent(value)}`;
     const res = await fetch(url, { method: 'GET' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    jrvCacheBust(JRV_CACHE_KEYS.queue); // write-through: stage change shifts the pipeline counts
-    // Drop from current panel (record's stage no longer matches)
+    jrvCacheBust(JRV_CACHE_KEYS.queue); // counts reconcile on next natural load
+    // Drop from current panel (record's stage no longer matches), persist that to
+    // the current day cache, and invalidate the DESTINATION panel's cache so it
+    // reconciles (shows the moved contact) the next time it is opened. No re-read here.
     jrvInSeqState.records = (jrvInSeqState.records || []).filter(r => (r.key || '') !== queueKey);
     jrvInSeqState.selectedKeys.delete(queueKey);
+    jrvCacheWrite(jrvInSeqCacheKey(), jrvInSeqState.records);
+    jrvCacheBust(jrvInSeqState.pipelineMode === 'in_the_mix' ? JRV_CACHE_KEYS.inseq : JRV_CACHE_KEYS.inmix);
     jrvRenderInSeq();
   } catch (e) {
     console.error('[Pipeline stage move] failed:', e);
@@ -7546,6 +7593,29 @@ function jrvCloseDraftModal() {
   jrvDraftState.currentBody = '';
 }
 
+// Optimistic local update after a CONFIRMED-OK send. Mark sent-today, bump the
+// reach-out count, graduate a manual lead, and drop a Responded contact back into
+// the In Sequence flow (Travis just replied — ball is in their court). No Make read.
+// Only ever called after the live send returned ok, so the screen never shows a
+// state the backend rejected.
+function jrvApplyLocalSend(queueKey, subject) {
+  const rec = (jrvInSeqState.records || []).find(r => (r.key || '') === queueKey);
+  if (!rec) return;
+  const nowIso = new Date().toISOString();
+  rec.outlook_sent_at = nowIso;
+  rec.outlook_status = 'sent';
+  rec.last_communication = nowIso;
+  if (subject) rec.last_communication_subject = subject;
+  const n = parseInt(rec.reach_out_count, 10);
+  rec.reach_out_count = (isNaN(n) ? 0 : n) + 1;
+  rec.pending_review = false;
+  if ((rec.pipeline_stage || '').toString().toLowerCase() === 'manual_lead') rec.pipeline_stage = 'in_sequence';
+  const rs = (rec.response_state || '').toString().toLowerCase();
+  if (rs === 'warm' || rs === 'cold') rec.response_state = '';
+  jrvCacheWrite(jrvInSeqCacheKey(), jrvInSeqState.records);
+  jrvRenderInSeq();
+}
+
 async function jrvSendDraftViaOutlook() {
   const qk = jrvDraftState.currentKey;
   if (!qk) return;
@@ -7569,12 +7639,13 @@ async function jrvSendDraftViaOutlook() {
       body: JSON.stringify({ queue_key: qk, subject, body }),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    jrvCacheBust(JRV_CACHE_KEYS.queue); // write-through: send (+ possible graduate) changes pipeline state
-    // Auto-graduate if this was a manual lead (so it moves out of the Manual Lead section)
+    jrvCacheBust(JRV_CACHE_KEYS.queue); // pipeline counts reconcile on next natural load
+    // Auto-graduate if this was a manual lead (fires the stage-move write; no re-read)
     await jrvGraduateFromManualLeadIfNeeded(qk);
+    // Update the panel in memory instead of re-reading Make — the browser already
+    // knows the outcome. Tomorrow's once-a-day cold load reconciles with backend.
+    jrvApplyLocalSend(qk, subject);
     jrvCloseDraftModal();
-    // Refresh modal so the new send shows up in reach-out count + recency + sent-today badge
-    jrvFetchInSeq();
   } catch (e) {
     console.error('[Outlook send] failed:', e);
     alert('Send failed: ' + (e.message || ''));
@@ -7603,6 +7674,7 @@ async function jrvBulkDraftAndSend() {
   const btn = document.getElementById('jrvInSeqBulkBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Sending 0 / ' + keys.length + '…'; }
   let done = 0, failed = 0;
+  const sent = [];
   await Promise.all(keys.map(async qk => {
     try {
       // Draft (writes draft fields to queue) — drafter v6 reads queue + writes back
@@ -7618,6 +7690,7 @@ async function jrvBulkDraftAndSend() {
       if (!sendRes.ok) throw new Error('send HTTP ' + sendRes.status);
       await jrvGraduateFromManualLeadIfNeeded(qk);
       done++;
+      sent.push(qk);
     } catch (e) {
       console.error('[Bulk send]', qk, 'failed:', e);
       failed++;
@@ -7628,9 +7701,10 @@ async function jrvBulkDraftAndSend() {
     btn.disabled = false;
     btn.textContent = 'Draft and send all selected';
   }
-  jrvCacheBust(JRV_CACHE_KEYS.queue); // write-through: bulk send (+ graduates) changes pipeline state
+  jrvCacheBust(JRV_CACHE_KEYS.queue); // pipeline counts reconcile on next natural load
   jrvClearSelection();
-  jrvFetchInSeq();
+  // Update each sent contact in memory — no Make re-read.
+  sent.forEach(function (qk) { jrvApplyLocalSend(qk, ''); });
   if (failed) alert(failed + ' of ' + keys.length + ' sends failed. Check console for details.');
 }
 
@@ -7642,9 +7716,10 @@ async function jrvRemoveFromSeq(queueKey, rcrmContactId, btn) {
     const url = `${JRV_CONFIG.INSEQ_REMOVE_URL}?queue_key=${encodeURIComponent(queueKey)}&rcrm_contact_id=${encodeURIComponent(rcrmContactId || '')}`;
     const res = await fetch(url, { method: 'GET' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    jrvCacheBust(JRV_CACHE_KEYS.queue); // write-through: un-enroll drops them from the pipeline counts
-    // Mark removed in local state and re-render
+    jrvCacheBust(JRV_CACHE_KEYS.queue); // counts reconcile on next natural load
+    // Drop from local state, persist to the day cache, re-render — no Make re-read.
     jrvInSeqState.records = jrvInSeqState.records.filter(r => (r.key || '') !== queueKey);
+    jrvCacheWrite(jrvInSeqCacheKey(), jrvInSeqState.records);
     jrvRenderInSeq();
   } catch (e) {
     console.error('[InSeq] remove error:', e);
@@ -8124,6 +8199,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="jrv-modal-head">
       <div class="jrv-modal-title"><span id="jrvInSeqTitle">In Sequence</span> · <span id="jrvInSeqCount" style="color:var(--text-muted);">loading…</span></div>
       <div style="display:flex;gap:8px;align-items:center;">
+        <button class="jrv-add-manual-btn" onclick="jrvFetchInSeq(true)" title="Pull the latest from Make now. This panel otherwise refreshes once a day automatically to save operations.">⟳ Refresh</button>
         <button class="jrv-add-manual-btn" onclick="jrvOpenAddManualLead()" title="Add a manual lead via form (or tell JARVIS verbally)">+ Add Manual Lead</button>
         <button class="jrv-modal-close" onclick="jrvCloseInSeqModal()" aria-label="Close">×</button>
       </div>
