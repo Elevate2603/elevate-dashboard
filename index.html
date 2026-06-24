@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0624-A -->
+<!-- BUILD: ELEVATE-2026-0624-B -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -7324,7 +7324,11 @@ function jrvRenderInSeq() {
                      : reachCount === 1 ? '1 reach-out'
                      : reachCount + ' reach-outs';
     const reachCls = reachCount >= 2 ? ' gt2' : '';
-    const hasReplied = (r.has_replied === true || r.has_replied === 'true');
+    // "Replied" badge follows the AI verdict, not the raw inbound flag: a genuine
+    // human reply is response_state warm or cold. Auto-replies (out-of-office)
+    // classify as auto_reply and are intentionally NOT counted as a reply.
+    const _rs = (r.response_state || '').toString().toLowerCase();
+    const hasReplied = (_rs === 'warm' || _rs === 'cold');
     const bounced = (r.bounced === true || r.bounced === 'true');
     const bounceReason = (r.bounce_reason || '').trim();
     const checked = jrvInSeqState.selectedKeys.has(qk) ? ' checked' : '';
