@@ -265,3 +265,21 @@ HR Manager, Production Manager, Plant Manager, Warehouse Manager, General Manage
 ## Pricing Rule
 
 Korean clients get +30% markup.
+
+## Memory & Session Learning (STANDARD — do this every session)
+
+We treat every session as something to learn from. Two layers, and they are not the same thing:
+
+1. **Raw transcripts — automatic, no action needed.** Claude Code already writes a full transcript of every session (messages, tool calls, results) to `~/.claude/projects/C--Users-touellette-projects-elevate-dashboard/<session-id>/`. Nothing to maintain here; the complete record always exists.
+
+2. **Distilled memory — your responsibility, every session.** The reusable "experience" lives in `~/.claude/projects/C--Users-touellette-projects-elevate-dashboard/memory/`, indexed by `MEMORY.md` (loaded into context at the start of every session). This is what makes us smarter over time, and it only happens if you do it deliberately.
+
+**The standard:** before ending any substantial session — and immediately after you discover something non-obvious, get a correction from Travis, or land/important-change a piece of the pipeline — capture it as a memory file. Do not wait to be asked.
+
+- **Always write a memory when:** you hit and solved a Make/RCRM/IML gotcha; Travis gives feedback on how to work or a quality bar; a scenario, datastore, build token, or pipeline state materially changes; you confirm or disprove a prior assumption; a cost/credit lesson is learned.
+- **Type it correctly:** `feedback` (how Travis wants work done — include the why), `project` (ongoing state/decisions, convert relative dates to absolute), `reference` (hard facts/IDs/URLs), `user` (who Travis is).
+- **One fact per file**, kebab-case name, add a one-line pointer to `MEMORY.md`, and link related memories with `[[name]]`.
+- **Dedupe and correct:** update the existing file rather than duplicating; delete memories that turn out to be wrong. Don't store what the repo/git/CLAUDE.md already records.
+- **End-of-session sweep:** when wrapping up, ask "what did we learn that a future session would need and couldn't derive from the code?" — and write those down before signing off.
+
+This section is the standing instruction; follow it without being prompted.
