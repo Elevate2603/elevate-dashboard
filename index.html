@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0616-2 -->
+<!-- BUILD: ELEVATE-2026-0624-A -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -5528,6 +5528,28 @@ let jrvManualLeadVoiceUi = null;
 // company or city changes the key, which re-runs the search.
 let jrvManualLeadLastQuery = '';
 
+// Shared "what are they hiring for" extractor. Used by the voice prefill, the
+// on-demand Search, AND submit so all three agree. Previously submit + search
+// used only a single `hiring` pattern, so a form-typed lead phrased "looking
+// for a plant manager" lost target_role entirely (empty datastore/RCRM field +
+// no picker fit-scoring). One extractor, five+ phrasings, used everywhere.
+const JRV_ROLE_PATTERNS = [
+  /\bhiring\s+(?:an?\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
+  /\bpost(?:ed|ing|s)?\s+(?:up\s+)?(?:for|a)\s+(?:an?\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
+  /\b(?:looking|searching|recruiting)\s+for\s+(?:an?\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
+  /\bopen(?:ing)?\s+for\s+(?:an?\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
+  /\b(?:position|role|job)\s+(?:for|of|is)\s+(?:an?\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
+  /\bneed(?:s|ed)?\s+(?:an?\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
+];
+function jrvExtractRoleBeingHired(text) {
+  const s = (text == null ? '' : text).toString();
+  for (const re of JRV_ROLE_PATTERNS) {
+    const m = s.match(re);
+    if (m && m[1]) return m[1].trim();
+  }
+  return '';
+}
+
 function jrvShowManualLeadPrefill(ui) {
   // In Sequence modal underneath so the Manual Lead section is visible after submit
   jrvOpenInSeqModal('in_sequence');
@@ -5547,18 +5569,7 @@ function jrvShowManualLeadPrefill(ui) {
     let resolvedRole = (ui.role_being_hired || '').trim();
     if (!resolvedRole && ui.context) {
       // Safety net: scrape role from spoken context if brain didn't emit it
-      const ctx = ui.context.toString();
-      const patterns = [
-        /\bhiring\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
-        /\bpost(?:ed|ing|s)?\s+(?:up\s+)?(?:for|a)\s+(?:an?\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
-        /\b(?:looking|searching|recruiting)\s+for\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
-        /\bopen(?:ing)?\s+for\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
-        /\b(?:position|role|job)\s+(?:for|of|is)\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i,
-      ];
-      for (const re of patterns) {
-        const m = ctx.match(re);
-        if (m && m[1]) { resolvedRole = m[1].trim(); break; }
-      }
+      resolvedRole = jrvExtractRoleBeingHired(ui.context);
     }
     // Stash on ui so the picker can use it for fit scoring even though the
     // field is gone — jrvManualLeadState carries ui through to jrvRenderInlineContacts.
@@ -5616,11 +5627,8 @@ async function jrvManualLeadSearch() {
     if (cont) cont.style.display = 'block';
     return;
   }
-  // Scrape the role being hired from the context box (same pattern as submit) for fit scoring.
-  let role = '';
-  const ctx = ((contextEl && contextEl.value) || '').toString();
-  const roleMatch = ctx.match(/\bhiring\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i);
-  if (roleMatch && roleMatch[1]) role = roleMatch[1].trim();
+  // Scrape the role being hired from the context box (shared extractor) for fit scoring.
+  const role = jrvExtractRoleBeingHired((contextEl && contextEl.value) || '');
   // Reuse the brain's suggested target titles if we have them — they describe
   // who to pull (independent of how the company name is spelled).
   const personas = (jrvManualLeadVoiceUi && Array.isArray(jrvManualLeadVoiceUi.target_personas))
@@ -6030,7 +6038,7 @@ async function jrvPullSelectedContacts() {
     const key = (c.email || '').toLowerCase();
     if (key && seenEmails.has(key)) return;
     if (key) seenEmails.add(key);
-    final.push({ name: c.name, email: c.email, title: c.title, city: c.city });
+    final.push({ name: c.name, email: c.email, title: c.title, city: c.city, linkedin: c.linkedin || '', phone: c.phone || '' });
   });
   enrichedZi.forEach(c => {
     const key = (c.email || '').toLowerCase();
@@ -6040,7 +6048,15 @@ async function jrvPullSelectedContacts() {
   });
   const contactsEl = document.getElementById('jrvManualContacts');
   if (contactsEl) {
-    const lines = final.map(c => `${c.name} | ${c.email} | ${c.title}${c.city ? ' | ' + c.city : ''}`);
+    // Positional columns: Name | email | title | city | linkedin | phone.
+    // Trim only TRAILING empties so simple rows stay clean (Name | email | title)
+    // while phone/linkedin survive when present (was previously dropped here).
+    const lines = final.map(c => {
+      const cols = [c.name || '', c.email || '', c.title || '', c.city || '', c.linkedin || '', c.phone || ''];
+      let last = cols.length - 1;
+      while (last > 2 && !cols[last]) last--;   // always keep at least name | email | title
+      return cols.slice(0, last + 1).join(' | ');
+    });
     contactsEl.value = lines.join('\n');
     contactsEl.disabled = false;
   }
@@ -6991,29 +7007,58 @@ async function jrvSubmitManualLead() {
   const city = (document.getElementById('jrvManualCity').value || '').trim();
   const businessContext = (document.getElementById('jrvManualContext').value || '').trim();
   // Role lives inside businessContext now ("Hiring X." prefix). Scrape it back
-  // out so the Manual Lead Add webhook still gets a clean target_role field for
-  // datastore/RCRM custom-field writes.
-  let targetRole = '';
-  const roleMatch = businessContext.match(/\bhiring\s+(?:an?\s+|a\s+)?([A-Za-z][A-Za-z /&-]{2,60}?)(?=[.,;:!\n]|$)/i);
-  if (roleMatch && roleMatch[1]) targetRole = roleMatch[1].trim();
+  // out (shared extractor) so the Manual Lead Add webhook still gets a clean
+  // target_role field for datastore/RCRM custom-field writes — works whether the
+  // lead was spoken or typed straight into the form.
+  const targetRole = jrvExtractRoleBeingHired(businessContext);
   const personalContext = (document.getElementById('jrvManualPersonal').value || '').trim();
   const contactsRaw = (document.getElementById('jrvManualContacts').value || '').trim();
   if (!company) { alert('Company name is required.'); return; }
   if (!contactsRaw) { alert('Add at least one contact (one per line: Name | email | title).'); return; }
-  const contacts = contactsRaw.split('\n').map(line => {
-    const parts = line.split('|').map(p => p.trim());
-    if (!parts[0]) return null;
-    // Format: Name | email | title | city (LinkedIn + phone optional, after city)
-    return {
-      name: parts[0],
-      email: parts[1] || '',
-      title: parts[2] || '',
-      city: parts[3] || '',
-      linkedin: parts[4] || '',
-      phone: parts[5] || '',
-    };
+  const contacts = contactsRaw.split('\n').map(rawLine => {
+    const line = (rawLine || '').trim();
+    if (!line) return null;
+    // Always sniff the email out of the whole line first, so an entry pasted
+    // WITHOUT pipe delimiters (e.g. "Emilio Moreno Plant Manager e@x.com") still
+    // captures the address instead of dumping everything into the name field —
+    // an empty contact_email makes the drafter abort with "Accepted"/no subject.
+    const emailSniff = (line.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [''])[0];
+    if (line.includes('|')) {
+      // Pipe format: Name | email | title | city | LinkedIn | phone
+      const parts = line.split('|').map(p => p.trim());
+      if (!parts[0]) return null;
+      return {
+        name: parts[0],
+        email: parts[1] || emailSniff,
+        title: parts[2] || '',
+        city: parts[3] || '',
+        linkedin: parts[4] || '',
+        phone: parts[5] || '',
+      };
+    }
+    // No pipes: pull the email out, then best-effort split the remainder into
+    // name + title using common role keywords (everything from the keyword on
+    // is the title). If no keyword matches, the whole remainder is the name.
+    let rest = (emailSniff ? line.replace(emailSniff, '') : line)
+      .replace(/[,|]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    let name = rest, title = '';
+    const titleRe = /\b(plant manager|production manager|operations manager|general manager|hr manager|human resources manager|warehouse manager|engineering manager|maintenance manager|quality manager|program manager|project manager|director of [a-z ]+|vice president|plant director|controller|cfo|coo|ceo|president|vp|supervisor|manager|director|foreman|recruiter|owner|buyer|planner|scheduler|estimator|coordinator)\b/i;
+    const tm = rest.match(titleRe);
+    if (tm && tm.index > 0) {
+      title = rest.slice(tm.index).trim();
+      name = rest.slice(0, tm.index).trim();
+    }
+    if (!name) name = rest || emailSniff;
+    return { name, email: emailSniff, title, city: '', linkedin: '', phone: '' };
   }).filter(Boolean);
   if (!contacts.length) { alert('Could not parse any contacts. Format: Name | email | title (one per line).'); return; }
+  // Every contact emailless? They can't be sent to via Outlook and so never
+  // graduate out of Manual Lead — warn, but allow it (Travis may be tracking a
+  // call-only relationship he'll work by phone).
+  const withEmail = contacts.filter(c => c.email && c.email.includes('@')).length;
+  if (!withEmail) {
+    if (!confirm('None of these contacts have an email. They can\'t be emailed via Outlook and won\'t graduate out of Manual Lead. Add anyway (e.g. to track a call-only relationship)?')) return;
+  }
   // Compose the context blob with explicit section markers so the Email Drafter
   // can pick up the relationship cues and warm the tone accordingly.
   let context = businessContext;
