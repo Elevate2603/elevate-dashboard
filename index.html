@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0624-D -->
+<!-- BUILD: ELEVATE-2026-0709-A -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -7804,9 +7804,14 @@ async function jrvToggleThread(contactEmail, threadId, nameEl) {
     const url = `${JRV_CONFIG.INSEQ_THREAD_URL}?contact_email=${encodeURIComponent(contactEmail)}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    const messages = await res.json();
-    jrvThreadCache[contactEmail] = Array.isArray(messages) ? messages : [];
-    jrvRenderThread(jrvThreadCache[contactEmail], thread, contactEmail);
+    // Thread Fetch returns a JSON array. A contact with zero email history makes
+    // Make skip the respond module and return the literal "Accepted" — parse
+    // defensively so that case renders as "no history" rather than an error.
+    const raw = await res.text();
+    let messages = [];
+    try { const parsed = JSON.parse(raw); if (Array.isArray(parsed)) messages = parsed; } catch (_) { /* "Accepted"/non-JSON = no history */ }
+    jrvThreadCache[contactEmail] = messages;
+    jrvRenderThread(messages, thread, contactEmail);
   } catch (e) {
     console.error('[InSeq] thread fetch error:', e);
     thread.innerHTML = '<div class="jrv-inseq-thread-empty">Could not load thread: ' + escapeHtml(e.message || '') + '</div>';
