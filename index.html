@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0709-B -->
+<!-- BUILD: ELEVATE-2026-0709-C -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -7396,13 +7396,14 @@ function jrvRenderInSeq() {
     { color: 'red',    label: 'Overdue (31+ days)' },
   ];
   const mode = jrvInSeqState.pipelineMode;
-  const stageDropdownHtml = (qk, rcrmId) => {
+  const stageDropdownHtml = (qk, rcrmId, companySlug) => {
     const moveLabel = mode === 'in_the_mix' ? 'Move back to In Sequence' : 'Move to In the Mix';
     const moveStage = mode === 'in_the_mix' ? 'in_sequence' : 'in_the_mix';
     return `
-      <select class="jrv-inseq-stage-select" onchange="jrvOnStageChange('${escapeAttr(qk)}','${escapeAttr(rcrmId)}', this)">
+      <select class="jrv-inseq-stage-select" onchange="jrvOnStageChange('${escapeAttr(qk)}','${escapeAttr(rcrmId)}', this, '${escapeAttr(companySlug || '')}')">
         <option value="" selected>${escapeHtml(mode === 'in_the_mix' ? 'In the Mix' : 'In Sequence')}</option>
         <option value="${escapeAttr(moveStage)}">${escapeHtml(moveLabel)}</option>
+        <option value="__client__">✓ Mark as Client (Closed Won)</option>
         <option value="__remove__">Remove (un-enroll)</option>
       </select>
     `;
@@ -7457,7 +7458,7 @@ function jrvRenderInSeq() {
             </div>
             <div class="jrv-inseq-when">${escapeHtml(whenLabel)}</div>
           </div>
-          ${stageDropdownHtml(qk, rcrmId)}
+          ${stageDropdownHtml(qk, rcrmId, r.rcrm_company_slug || '')}
         </div>
         <div class="jrv-inseq-thread" id="${threadId}"></div>
       </div>
@@ -7558,13 +7559,17 @@ function jrvClearSelection() {
 
 // Stage dropdown handler. value "in_the_mix" or "in_sequence" = move stage,
 // value "__remove__" = un-enroll. Empty = no-op (the placeholder selection).
-async function jrvOnStageChange(queueKey, rcrmId, selectEl) {
+async function jrvOnStageChange(queueKey, rcrmId, selectEl, companySlug) {
   if (!selectEl || !queueKey) return;
   const value = selectEl.value;
   if (!value) return;
   if (value === '__remove__') {
     selectEl.value = '';
     return jrvRemoveFromSeq(queueKey, rcrmId, null);
+  }
+  if (value === '__client__') {
+    selectEl.value = '';
+    return jrvMarkAsClient(queueKey, rcrmId, companySlug || '');
   }
   // Move stage
   selectEl.disabled = true;
@@ -7776,6 +7781,35 @@ async function jrvRemoveFromSeq(queueKey, rcrmContactId, btn) {
     console.error('[InSeq] remove error:', e);
     if (btn) { btn.disabled = false; btn.textContent = '×'; }
     alert('Remove failed: ' + (e.message || ''));
+  }
+}
+
+// Mark a contact as a CLIENT (Closed Won). Reuses the In Sequence Remove webhook
+// with mark_client=true: it un-enrolls from the RCRM sequence AND flags the queue
+// record is_client=true + removed_from_sequence=true, so the contact drops out of
+// BOTH In Sequence and In the Mix (both fetches now exclude is_client server-side).
+// Use this when a deal closes — NOT plain un-enroll, which doesn't record the win.
+async function jrvMarkAsClient(queueKey, rcrmContactId, rcrmCompanySlug) {
+  if (!queueKey) return;
+  if (!confirm('Mark this contact as a CLIENT (Closed Won)?\n\nThis un-enrolls them from the RCRM sequence and removes them from BOTH In Sequence and In the Mix. Use this once a deal has closed.')) return;
+  try {
+    const url = `${JRV_CONFIG.INSEQ_REMOVE_URL}?queue_key=${encodeURIComponent(queueKey)}`
+      + `&rcrm_contact_id=${encodeURIComponent(rcrmContactId || '')}`
+      + `&mark_client=true`
+      + `&rcrm_company_slug=${encodeURIComponent(rcrmCompanySlug || '')}`;
+    const res = await fetch(url, { method: 'GET' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    jrvCacheBust(JRV_CACHE_KEYS.queue); // pipeline counts reconcile on next natural load
+    // Drop from the current panel, persist, and invalidate the OTHER pipeline's
+    // cache so it reconciles too (a client leaves both). No Make re-read here.
+    jrvInSeqState.records = (jrvInSeqState.records || []).filter(r => (r.key || '') !== queueKey);
+    jrvInSeqState.selectedKeys.delete(queueKey);
+    jrvCacheWrite(jrvInSeqCacheKey(), jrvInSeqState.records);
+    jrvCacheBust(jrvInSeqState.pipelineMode === 'in_the_mix' ? JRV_CACHE_KEYS.inseq : JRV_CACHE_KEYS.inmix);
+    jrvRenderInSeq();
+  } catch (e) {
+    console.error('[Mark as client] failed:', e);
+    alert('Mark as client failed: ' + (e.message || ''));
   }
 }
 
