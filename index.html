@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0709-G -->
+<!-- BUILD: ELEVATE-2026-0709-H -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -8340,8 +8340,8 @@ function jrvSetFeedBadge(live, count) {
     // editable popup → Active Client Send (Outlook + RCRM note) → optimistic flip:
     // set last_touch_at = now so the dot goes green/"today" without waiting for the
     // weekly scan. Mirrors the In Sequence draft/send loop.
-    const ACD_DRAFT_URL = (window.JRV_CONFIG && JRV_CONFIG.ACTIVE_CLIENT_DRAFT_URL) || '';
-    const ACD_SEND_URL  = (window.JRV_CONFIG && JRV_CONFIG.ACTIVE_CLIENT_SEND_URL) || '';
+    const ACD_DRAFT_URL = (typeof JRV_CONFIG !== 'undefined' && JRV_CONFIG.ACTIVE_CLIENT_DRAFT_URL) || '';
+    const ACD_SEND_URL  = (typeof JRV_CONFIG !== 'undefined' && JRV_CONFIG.ACTIVE_CLIENT_SEND_URL) || '';
     let acdSlug = null, acdName = '', acdToName = '';
     const acd = document.createElement('div');
     acd.className = 'jrv-acd-overlay';
@@ -8424,6 +8424,10 @@ function jrvSetFeedBadge(live, count) {
       if (!Array.isArray(newList)) return;
       clients = newList;
       render();
+      // The client list arrives from the slow scribe scan, often AFTER the initial
+      // 1.2s touch fetch. If touch data hasn't landed yet, fetch it now so colours +
+      // last-communication lines populate the moment the real clients show.
+      if (!Object.keys(touchBySlug).length) loadTouch();
     };
     render();
     // Defer initial touch fetch slightly so the existing scribe call lands first
