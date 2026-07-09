@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0709-F -->
+<!-- BUILD: ELEVATE-2026-0709-G -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -770,6 +770,22 @@
   .jrv-inseq-group-responded .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(74,222,128,0.12), rgba(74,222,128,0.04)); border-left:3px solid #4ade80; }
   .jrv-inseq-group-manual .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(96,165,250,0.12), rgba(96,165,250,0.04)); border-left:3px solid #60a5fa; }
   .jrv-inseq-group-bounced .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(220,38,38,0.18), rgba(220,38,38,0.05)); border-left:3px solid #dc2626; }
+  /* Active Client account-care draft button + popup */
+  .jrv-ac-actions { padding: 4px 0 2px 22px; }
+  .jrv-ac-draft-btn { background: rgba(200,130,10,0.16); border:1px solid rgba(200,130,10,0.45); color:#e8a53a; cursor:pointer; padding:4px 10px; border-radius:5px; font-size:11px; font-weight:600; font-family:inherit; letter-spacing:0.3px; }
+  .jrv-ac-draft-btn:hover { background: rgba(200,130,10,0.3); }
+  .jrv-acd-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.62); display:flex; align-items:center; justify-content:center; padding:20px; z-index:9999; }
+  .jrv-acd-modal { background:#161619; border:1px solid rgba(255,255,255,0.1); border-radius:14px; width:100%; max-width:560px; padding:20px; box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+  .jrv-acd-title { margin:0 0 3px; font-size:15px; color:var(--text, #e9e6df); }
+  .jrv-acd-ctx { color:#8b867c; font-size:11.5px; margin-bottom:14px; }
+  .jrv-acd-lab { display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:#8b867c; margin:10px 0 4px; }
+  .jrv-acd-in { width:100%; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); color:var(--text, #e9e6df); border-radius:7px; padding:9px 11px; font-size:13px; font-family:inherit; }
+  .jrv-acd-in:focus { outline:none; border-color:#C8820A; }
+  .jrv-acd-body { height:170px; resize:vertical; line-height:1.55; }
+  .jrv-acd-row { display:flex; gap:10px; justify-content:flex-end; margin-top:16px; }
+  .jrv-acd-send { background:#C8820A; border:1px solid #C8820A; color:#1a1205; font-weight:700; padding:9px 16px; border-radius:6px; font-family:inherit; font-size:12.5px; cursor:pointer; }
+  .jrv-acd-send:disabled { opacity:0.6; cursor:default; }
+  .jrv-acd-cancel { background:transparent; border:1px solid rgba(255,255,255,0.12); color:#8b867c; padding:9px 16px; border-radius:6px; font-family:inherit; font-size:12.5px; cursor:pointer; }
   .jrv-inseq-special-icon { font-size:14px; }
   .jrv-inseq-group-hint { font-size:11px; color: var(--text-muted); font-style:italic; margin-left:6px; }
   .jrv-inseq-response-pill { padding:3px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.3px; text-transform:uppercase; }
@@ -3076,6 +3092,12 @@ const JRV_CONFIG = {
   // interactions_json, refreshed_at, contacts_scanned, outlook_events_found }. Dashboard decorates the
   // existing Active Clients panel without altering its current rendering or colors.
   CLIENT_TOUCH_FETCH_URL: 'https://hook.us2.make.com/xt7ij1jc490ijr1yf2ucfhbxe07igd15',
+  // Active Client account-care draft + send. Draft (5619355): resolves the client's
+  // contact from the company slug, reads the prior Outlook thread, drafts a warm
+  // account-care email (relationship doctrine, banned "checking in"/"no agenda"),
+  // returns "TO: email|name\nSUBJECT: ..\nBODY: ..". Send (5619370): Outlook send + RCRM company note.
+  ACTIVE_CLIENT_DRAFT_URL: 'https://hook.us2.make.com/n5hh31d9q60n16rvj78jn2xgacargefv',
+  ACTIVE_CLIENT_SEND_URL: 'https://hook.us2.make.com/27pcxk512w3tjudf2u2wcvqt4fpobyuw',
   // Sourcing Shortlist Fetch (Make scenario 5372954) reads elevate_sourcing_shortlist datastore 107864
   // and returns picks scored by Claude Vision from the local Indeed sourcing automation. Sorted by score desc,
   // excludes records flagged dismissed=true. The local Python script POSTs to a separate Sourcing Shortlist Add
@@ -8235,6 +8257,7 @@ function jrvSetFeedBadge(live, count) {
         return '<div class="' + blockClass + '" data-slug="' + esc(c.slug) + '">'
           + itemHtml
           + (hasTouch ? renderTouchSubline(c.slug, t) : '')
+          + '<div class="jrv-ac-actions"><button class="jrv-ac-draft-btn" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '">✎ Draft email</button></div>'
           + (hasTouch && expanded ? renderExpanded(t) : '')
           + '</div>';
       }).join('');
@@ -8310,6 +8333,92 @@ function jrvSetFeedBadge(live, count) {
         .finally(() => { if (btn) btn.classList.remove('is-loading'); });
     }
     window.jrvLoadClientTouch = loadTouch;
+
+    // ── Account-care draft + send ─────────────────────────────────────────────
+    // "Draft email" per client → Active Client Draft webhook (resolves the contact
+    // from the company, reads the prior thread, drafts warm account-care copy) →
+    // editable popup → Active Client Send (Outlook + RCRM note) → optimistic flip:
+    // set last_touch_at = now so the dot goes green/"today" without waiting for the
+    // weekly scan. Mirrors the In Sequence draft/send loop.
+    const ACD_DRAFT_URL = (window.JRV_CONFIG && JRV_CONFIG.ACTIVE_CLIENT_DRAFT_URL) || '';
+    const ACD_SEND_URL  = (window.JRV_CONFIG && JRV_CONFIG.ACTIVE_CLIENT_SEND_URL) || '';
+    let acdSlug = null, acdName = '', acdToName = '';
+    const acd = document.createElement('div');
+    acd.className = 'jrv-acd-overlay';
+    acd.style.display = 'none';
+    acd.innerHTML = '<div class="jrv-acd-modal">'
+      + '<h3 class="jrv-acd-title" id="jrvAcdTitle">Draft email</h3>'
+      + '<div class="jrv-acd-ctx" id="jrvAcdCtx"></div>'
+      + '<label class="jrv-acd-lab">To</label><input class="jrv-acd-in" id="jrvAcdTo" autocomplete="off">'
+      + '<label class="jrv-acd-lab">Subject</label><input class="jrv-acd-in" id="jrvAcdSubj" autocomplete="off">'
+      + '<label class="jrv-acd-lab">Body — drafted from your prior emails with them</label><textarea class="jrv-acd-in jrv-acd-body" id="jrvAcdBody"></textarea>'
+      + '<div class="jrv-acd-row"><button class="jrv-acd-cancel" id="jrvAcdCancel">Cancel</button><button class="jrv-acd-send" id="jrvAcdSend">Send via Outlook</button></div>'
+      + '</div>';
+    document.body.appendChild(acd);
+    const acdQ = sel => acd.querySelector(sel);
+    function acdClose() { acd.style.display = 'none'; }
+    acdQ('#jrvAcdCancel').addEventListener('click', acdClose);
+    acd.addEventListener('click', e => { if (e.target === acd) acdClose(); });
+
+    async function acdOpen(slug, name) {
+      if (!ACD_DRAFT_URL) { alert('Active Client drafting is not configured.'); return; }
+      acdSlug = slug; acdName = name || ''; acdToName = '';
+      acdQ('#jrvAcdTitle').textContent = 'Draft email — ' + (name || 'client');
+      acdQ('#jrvAcdCtx').textContent = 'Reading your prior emails with ' + (name || 'this client') + ' for context…';
+      acdQ('#jrvAcdTo').value = ''; acdQ('#jrvAcdSubj').value = ''; acdQ('#jrvAcdBody').value = 'Drafting…';
+      acd.style.display = 'flex';
+      try {
+        const url = ACD_DRAFT_URL + '?rcrm_company_slug=' + encodeURIComponent(slug) + '&company_name=' + encodeURIComponent(name || '');
+        const res = await fetch(url);
+        const text = await res.text();
+        // Response: "TO: email|name\nSUBJECT: ..\nBODY: .." (plain text, no JSON escaping)
+        const toM = text.match(/^TO:\s*([^\n]*)/);
+        let toEmail = '';
+        if (toM) { const p = toM[1].split('|'); toEmail = (p[0] || '').trim(); acdToName = (p[1] || '').trim(); }
+        const subjM = text.match(/SUBJECT:\s*([^\n]*)/);
+        const bodyIdx = text.indexOf('BODY:');
+        acdQ('#jrvAcdTo').value = toEmail;
+        acdQ('#jrvAcdSubj').value = subjM ? subjM[1].trim() : '';
+        acdQ('#jrvAcdBody').value = bodyIdx >= 0 ? text.slice(bodyIdx + 5).trim() : text.trim();
+        acdQ('#jrvAcdCtx').textContent = 'Account care, friend to friend. Edit anything, then send.' + (acdToName ? ' Recipient: ' + acdToName : '');
+      } catch (e) {
+        acdQ('#jrvAcdBody').value = '';
+        acdQ('#jrvAcdCtx').textContent = 'Could not draft: ' + (e.message || '');
+      }
+    }
+
+    acdQ('#jrvAcdSend').addEventListener('click', async () => {
+      const to = acdQ('#jrvAcdTo').value.trim();
+      const subject = acdQ('#jrvAcdSubj').value.trim();
+      const body = acdQ('#jrvAcdBody').value.trim();
+      if (!to || !subject || !body) { alert('Need a recipient, a subject, and a body.'); return; }
+      const btn = acdQ('#jrvAcdSend'); btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        const res = await fetch(ACD_SEND_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: to, subject: subject, body: body, contact_name: acdToName || to, rcrm_company_slug: acdSlug || '', company_name: acdName || '' }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        // Optimistic flip — mark touched now so the dot goes green/"today" immediately.
+        const nowIso = new Date().toISOString();
+        touchBySlug[acdSlug] = Object.assign({}, touchBySlug[acdSlug] || {}, {
+          rcrm_company_slug: acdSlug, last_touch_at: nowIso, last_touch_channel: 'email',
+          last_touch_person: acdToName || to,
+        });
+        acdClose(); render();
+      } catch (e) {
+        alert('Send failed: ' + (e.message || ''));
+      } finally { btn.disabled = false; btn.textContent = 'Send via Outlook'; }
+    });
+
+    // Delegated click for the per-row Draft button (button sits outside the RCRM <a>).
+    list.addEventListener('click', e => {
+      const db = e.target.closest('.jrv-ac-draft-btn');
+      if (!db) return;
+      e.preventDefault(); e.stopPropagation();
+      acdOpen(db.dataset.slug, db.dataset.name);
+    });
 
     window.jrvActiveClientsUpdate = function(newList) {
       if (!Array.isArray(newList)) return;
