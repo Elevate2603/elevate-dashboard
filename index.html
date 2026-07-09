@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0709-D -->
+<!-- BUILD: ELEVATE-2026-0709-E -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -769,6 +769,7 @@
   /* Special sections at top: Responded Contact + Manual Lead */
   .jrv-inseq-group-responded .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(74,222,128,0.12), rgba(74,222,128,0.04)); border-left:3px solid #4ade80; }
   .jrv-inseq-group-manual .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(96,165,250,0.12), rgba(96,165,250,0.04)); border-left:3px solid #60a5fa; }
+  .jrv-inseq-group-bounced .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(220,38,38,0.18), rgba(220,38,38,0.05)); border-left:3px solid #dc2626; }
   .jrv-inseq-special-icon { font-size:14px; }
   .jrv-inseq-group-hint { font-size:11px; color: var(--text-muted); font-style:italic; margin-left:6px; }
   .jrv-inseq-response-pill { padding:3px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.3px; text-transform:uppercase; }
@@ -7337,12 +7338,24 @@ function jrvRenderInSeq() {
   // the regular green/yellow/red recency groups so nobody is double-rendered.
   // (In the Mix mode skips these special sections — keeps that panel clean.)
   const showSpecials = jrvInSeqState.pipelineMode !== 'in_the_mix';
+  // Undeliverable / bounced — highest-priority flag. Shown in BOTH modes at the very
+  // top so a dead address is never hidden. A bounced record appears ONLY here (it is
+  // excluded from the Responded/Manual/recency sections below).
+  const bouncedKeys = new Set();
+  const bouncedRecords = [];
+  for (const r of filtered) {
+    if (r.bounced === true || r.bounced === 'true') {
+      bouncedKeys.add(r.key || '');
+      bouncedRecords.push(r);
+    }
+  }
   const respondedKeys = new Set();
   const manualLeadKeys = new Set();
   const respondedRecords = [];
   const manualLeadRecords = [];
   if (showSpecials) {
     for (const r of filtered) {
+      if (bouncedKeys.has(r.key || '')) continue; // bounced shows only in its own section
       const respState = (r.response_state || '').toString().toLowerCase();
       if (respState === 'warm' || respState === 'cold') {
         respondedKeys.add(r.key || '');
@@ -7379,7 +7392,7 @@ function jrvRenderInSeq() {
   const buckets = { green: [], yellow: [], red: [] };
   for (const r of filtered) {
     const qk = r.key || '';
-    if (respondedKeys.has(qk) || manualLeadKeys.has(qk)) continue;
+    if (bouncedKeys.has(qk) || respondedKeys.has(qk) || manualLeadKeys.has(qk)) continue;
     const rec = jrvInSeqRecency(r);
     buckets[rec.color].push({ r, rec });
   }
@@ -7526,7 +7539,28 @@ function jrvRenderInSeq() {
       </div>
     `;
   }).join('');
-  body.innerHTML = (respondedHtml + manualLeadHtml + groupsHtml) || ('<div class="jrv-inseq-empty">' + emptyLabel + '</div>');
+  // Undeliverable section — pinned to the very top so bounces are the first thing seen.
+  let bouncedHtml = '';
+  if (bouncedRecords.length) {
+    bouncedRecords.sort((a, b) => (Date.parse(b.last_communication || '') || 0) - (Date.parse(a.last_communication || '') || 0));
+    const rowsHtml = bouncedRecords.map(r => {
+      const reason = (r.bounce_reason || 'Email undeliverable — address invalid or rejected.').trim();
+      const badge = `<span class="jrv-inseq-bounce" title="${escapeAttr(reason)}">⚠ Undeliverable</span>`;
+      return buildRow(r, 'red', 'Bounced — verify the address or remove', badge);
+    }).join('');
+    bouncedHtml = `
+      <div class="jrv-inseq-group jrv-inseq-group-bounced">
+        <div class="jrv-inseq-group-head">
+          <span class="jrv-inseq-special-icon">⚠</span>
+          <span class="jrv-inseq-group-label">Undeliverable — needs your call</span>
+          <span class="jrv-inseq-group-count">${bouncedRecords.length}</span>
+          <span class="jrv-inseq-group-hint">Email hard-bounced. Sends are stopped — fix the address or Remove (un-enroll).</span>
+        </div>
+        ${rowsHtml}
+      </div>
+    `;
+  }
+  body.innerHTML = (bouncedHtml + respondedHtml + manualLeadHtml + groupsHtml) || ('<div class="jrv-inseq-empty">' + emptyLabel + '</div>');
   jrvRenderBulkBar();
 }
 
