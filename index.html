@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0709-A -->
+<!-- BUILD: ELEVATE-2026-0709-B -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -7078,6 +7078,19 @@ async function jrvSubmitManualLead() {
     return { name, email: emailSniff, title, city: '', linkedin: '', phone: '' };
   }).filter(Boolean);
   if (!contacts.length) { alert('Could not parse any contacts. Format: Name | email | title (one per line).'); return; }
+  // Don't silently re-add someone already in the pipeline (that's how the
+  // Laurie Levesque / Laura Irvine duplicates happened). Check the loaded In
+  // Sequence set by email; if the panel was never opened this list is empty and
+  // we can't check here, but the backend now keys manual leads deterministically
+  // so an exact re-add upserts instead of duplicating.
+  const existingByEmail = new Set((jrvInSeqState.records || [])
+    .map(r => (r.contact_email || '').toString().trim().toLowerCase())
+    .filter(Boolean));
+  const alreadyIn = contacts.filter(c => c.email && existingByEmail.has(c.email.trim().toLowerCase()));
+  if (alreadyIn.length) {
+    const names = alreadyIn.map(c => '• ' + c.name + ' (' + c.email + ')').join('\n');
+    if (!confirm('Already in your pipeline:\n' + names + '\n\nRe-adding overwrites their existing entry (resets follow-up history). Add anyway?')) return;
+  }
   // Every contact emailless? They can't be sent to via Outlook and so never
   // graduate out of Manual Lead — warn, but allow it (Travis may be tracking a
   // call-only relationship he'll work by phone).
@@ -7148,6 +7161,43 @@ function jrvInSeqCacheKey() {
 // copy, and only reads Make when today's cache is missing/stale or force===true
 // (the Refresh button). Every write action updates jrvInSeqState.records in memory
 // instead of calling this — so a normal day of use makes at most one Make read here.
+// ── Duplicate collapse ──────────────────────────────────────────────────────
+// A contact can end up with more than one queue record — e.g. a manual lead
+// re-added on a later day used to get a fresh timestamped key (fixed at the
+// source now, but old data still carries pairs like Laurie Levesque ×2). We must
+// NEVER show the same person twice, so collapse by normalized contact_email and
+// keep the single record with the most real history. Records with no email can't
+// be matched safely, so they pass through untouched.
+function jrvDupScore(r) {
+  let s = 0;
+  const rs = (r.response_state || '').toString().toLowerCase();
+  if (rs === 'warm') s += 5000; else if (rs === 'cold') s += 4000;
+  if (r.has_replied === true || r.has_replied === 'true') s += 2000;
+  if (r.outlook_sent_at) s += 1000;
+  s += (Number(r.reach_out_count) || 0) * 200;
+  // An active record beats one already removed from sequence.
+  if (!(r.removed_from_sequence === true || r.removed_from_sequence === 'true')) s += 500;
+  // Recency tiebreak, kept tiny so history signals dominate the choice.
+  const times = [r.outlook_sent_at, r.last_communication, r.responded_at, r.manual_lead_added_at, r.added_at]
+    .map(v => (v ? Date.parse(v) : NaN)).filter(t => !isNaN(t));
+  if (times.length) s += Math.max(...times) / 1e12;
+  return s;
+}
+function jrvDedupeByContact(records) {
+  const winners = new Map(); // normalized email → best record
+  const passthrough = [];    // records with no email — can't dedupe
+  let collapsed = 0;
+  for (const r of (records || [])) {
+    const email = (r.contact_email || '').toString().trim().toLowerCase();
+    if (!email) { passthrough.push(r); continue; }
+    const cur = winners.get(email);
+    if (!cur) { winners.set(email, r); }
+    else { collapsed++; if (jrvDupScore(r) > jrvDupScore(cur)) winners.set(email, r); }
+  }
+  if (collapsed) console.warn('[InSeq] collapsed ' + collapsed + ' duplicate contact record(s) by email');
+  return passthrough.concat(Array.from(winners.values()));
+}
+
 async function jrvFetchInSeq(force) {
   const body = document.getElementById('jrvInSeqBody');
   const countEl = document.getElementById('jrvInSeqCount');
@@ -7155,7 +7205,7 @@ async function jrvFetchInSeq(force) {
   const cacheKey = jrvInSeqCacheKey();
   const cached = jrvCacheRead(cacheKey);
   if (cached && Array.isArray(cached.data)) {
-    jrvInSeqState.records = cached.data;
+    jrvInSeqState.records = jrvDedupeByContact(cached.data);
     jrvRenderInSeq();
     jrvResolveMissingSlugs(jrvInSeqState.records, function () { jrvRenderInSeq(); jrvCacheWrite(cacheKey, jrvInSeqState.records); });
   }
@@ -7188,14 +7238,15 @@ async function jrvFetchInSeq(force) {
                          if (jrvInSeqState.pipelineMode === 'in_the_mix') return stage === 'in_the_mix';
                          return stage !== 'in_the_mix';
                        });
-    jrvInSeqState.records = records;
-    jrvCacheWrite(cacheKey, records);
+    const deduped = jrvDedupeByContact(records);
+    jrvInSeqState.records = deduped;
+    jrvCacheWrite(cacheKey, deduped);
     jrvRenderInSeq();
     // Lazy slug resolution for any displayed contact missing rcrm_contact_id.
     // Fires per-email, throttled, session-cached, scoped to ONLY what's on screen.
     // Write resolved slugs back into the cached copy so they are never re-resolved
     // for that contact within the day.
-    jrvResolveMissingSlugs(records, function () { jrvRenderInSeq(); jrvCacheWrite(cacheKey, jrvInSeqState.records); });
+    jrvResolveMissingSlugs(deduped, function () { jrvRenderInSeq(); jrvCacheWrite(cacheKey, jrvInSeqState.records); });
     // Classifier runs as its own daily cron (M-F 06:30 EDT) right after Recency
     // Refresh writes the latest last_communication_subject. We do NOT fire it
     // from the panel. Tag updates land overnight, which is enough resolution.
