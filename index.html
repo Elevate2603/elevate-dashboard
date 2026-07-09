@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0709-E -->
+<!-- BUILD: ELEVATE-2026-0709-F -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -8109,6 +8109,21 @@ function jrvSetFeedBadge(live, count) {
       if (days <= 14) return 'amber';
       return 'red';
     }
+    // Days since last real touch, computed from the weekly scan's last_touch_at (the
+    // reliable field). The feed's days_since is often null, so never trust it directly.
+    function acDaysFromIso(iso) {
+      if (!iso) return null;
+      const ms = new Date(iso).getTime();
+      if (isNaN(ms)) return null;
+      return Math.floor((Date.now() - ms) / 86400000);
+    }
+    // Effective recency for a client: prefer the weekly touch scan (last_touch_at),
+    // fall back to the scribe rollup. Drives BOTH the dot colour and the days label.
+    function acEffectiveDays(c, t) {
+      const td = t ? acDaysFromIso(t.last_touch_at) : null;
+      if (td != null) return td;
+      return (typeof c.daysSinceContact === 'number') ? c.daysSinceContact : null;
+    }
     function touchRelDate(iso) {
       if (!iso) return '';
       const t = new Date(iso).getTime();
@@ -8146,10 +8161,15 @@ function jrvSetFeedBadge(live, count) {
       return out.slice(0, 5);
     }
     function renderTouchSubline(slug, t) {
-      const tier = touchTierFor(t.days_since != null ? Number(t.days_since) : null);
+      const tier = touchTierFor(acDaysFromIso(t.last_touch_at));
       const dateText = touchRelDate(t.last_touch_at) || touchAbsDate(t.last_touch_at) || 'no date';
       const channel = (t.last_touch_channel || '').trim();
       const person = (t.last_touch_person || '').trim();
+      // Most recent interaction's subject (gist = "Subject: preview") — show the subject
+      // so Travis sees the last thing discussed without expanding.
+      const ix = parseInteractions(t.interactions_json);
+      let subject = ix.length ? (ix[0].gist || '').split(':')[0].trim() : '';
+      if (subject.length > 44) subject = subject.slice(0, 42) + '…';
       const metaBits = [];
       if (channel) metaBits.push(channel);
       if (person) metaBits.push(person);
@@ -8159,7 +8179,7 @@ function jrvSetFeedBadge(live, count) {
         + '<span>Last:</span>'
         + '<span class="jrv-ac-sub-date ' + (tier ? 'lt-' + tier : '') + '">' + esc(dateText) + '</span>'
         + '<span class="jrv-ac-sub-meta-soft">·</span>'
-        + '<span class="jrv-ac-sub-meta">' + esc(meta) + '</span>'
+        + '<span class="jrv-ac-sub-meta">' + esc(meta) + (subject ? ' · “' + esc(subject) + '”' : '') + '</span>'
         + '</div>';
     }
     function renderExpanded(t) {
@@ -8184,19 +8204,21 @@ function jrvSetFeedBadge(live, count) {
     function render() {
       count.textContent = clients.length;
       const sorted = clients.slice().sort((a, b) => {
-        const da = (typeof a.daysSinceContact === 'number') ? a.daysSinceContact : -1;
-        const db = (typeof b.daysSinceContact === 'number') ? b.daysSinceContact : -1;
-        return db - da;
+        const da = acEffectiveDays(a, touchBySlug[a.slug]);
+        const db = acEffectiveDays(b, touchBySlug[b.slug]);
+        return (db == null ? -1 : db) - (da == null ? -1 : da);
       });
       if (!sorted.length) { list.innerHTML = '<div class="jrv-ac-empty">No active clients.</div>'; return; }
       list.innerHTML = sorted.map(c => {
-        const tier = tierFor(c.daysSinceContact);
-        const days = (typeof c.daysSinceContact === 'number') ? (c.daysSinceContact + 'd') : '—';
+        const t = touchBySlug[c.slug];
+        const effDays = acEffectiveDays(c, t);
+        const tier = tierFor(effDays);
+        const days = (typeof effDays === 'number') ? (effDays + 'd') : '—';
         const lc = c.lastContact || {};
-        const tipName = (lc.firstName || '') + (lc.lastName ? ' ' + lc.lastName : '');
+        const tipName = (t && t.last_touch_person) || ((lc.firstName || '') + (lc.lastName ? ' ' + lc.lastName : ''));
         const tipRole = lc.role || '';
-        const tipHow = (typeof c.daysSinceContact === 'number')
-          ? (channelVerb(lc.channel) + ' ' + c.daysSinceContact + ' day' + (c.daysSinceContact === 1 ? '' : 's') + ' ago')
+        const tipHow = (typeof effDays === 'number')
+          ? (channelVerb((t && t.last_touch_channel) || lc.channel) + ' ' + effDays + ' day' + (effDays === 1 ? '' : 's') + ' ago')
           : 'no contact on record';
         const itemHtml = '<a class="jrv-ac-item" href="' + esc(rcrmUrlFor(c.slug)) + '" target="_blank" rel="noopener" '
           + 'data-tip-name="' + esc(tipName || 'Unknown contact') + '" '
@@ -8207,7 +8229,6 @@ function jrvSetFeedBadge(live, count) {
           + '<span class="jrv-ac-days">' + esc(days) + '</span>'
           + '</a>';
         // Decoration only when we have a touch record for this slug
-        const t = touchBySlug[c.slug];
         const hasTouch = t && (t.last_touch_at || t.summary);
         const expanded = expandedSlugs.has(c.slug);
         const blockClass = 'jrv-ac-block' + (hasTouch ? '' : ' no-touch') + (expanded ? ' is-expanded' : '');
