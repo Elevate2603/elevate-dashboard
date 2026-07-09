@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0709-H -->
+<!-- BUILD: ELEVATE-2026-0709-I -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -2530,19 +2530,25 @@ async function submitOne(idx) {
 
   console.log('[ApprovalSingle] ' + c.contact_name + ' (' + decision + ') -> POST');
   try {
-    const resp = await fetch(APPROVAL_WEBHOOK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    // Declines go to Queue Decline (persists decision=decline so the card stays gone).
+    // Approvals go to the Approval Handler (creates RCRM company+contact, enrolls).
+    const resp = (decision === 'decline')
+      ? await fetch(QUEUE_DECLINE_URL + '?queue_key=' + encodeURIComponent(c.key || ''), { method: 'GET' })
+      : await fetch(APPROVAL_WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const bodyText = await resp.text();
     console.log('[ApprovalSingle] ' + c.contact_name + ' (' + decision + ') -> HTTP ' + resp.status + ' | body: ' + bodyText);
     btn.classList.remove('sending');
     if (resp.ok) {
       btn.classList.add('sent');
-      btn.textContent = '✓ Submitted';
+      btn.textContent = decision === 'decline' ? '✓ Removed' : '✓ Submitted';
       card.classList.add('submitted');
       c._submitted = true;
+      // A declined card is gone for good — drop it from the list so it disappears now
+      // and does not reappear on the next fetch (the record is now decision=decline).
+      if (decision === 'decline') {
+        const gone = c.key || '';
+        setTimeout(() => { queueContacts = queueContacts.filter(x => (x.key || '') !== gone); renderQueue(); }, 500);
+      }
     } else {
       btn.classList.add('failed');
       btn.textContent = '✕ HTTP ' + resp.status + ' — retry';
@@ -2612,11 +2618,10 @@ async function submitQueue() {
     const payload = buildPayload(c);
     const decision = payload.decision;
     try {
-      const resp = await fetch(APPROVAL_WEBHOOK, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      // Declines persist decision=decline (Queue Decline); approvals go to the handler.
+      const resp = (decision === 'decline')
+        ? await fetch(QUEUE_DECLINE_URL + '?queue_key=' + encodeURIComponent(c.key || ''), { method: 'GET' })
+        : await fetch(APPROVAL_WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const bodyText = await resp.text();
       console.log('[Approval] ' + c.contact_name + ' (' + decision + ') -> HTTP ' + resp.status + ' | body: ' + bodyText);
       if (resp.ok) {
@@ -2696,6 +2701,10 @@ const ANTHROPIC_KEY   = 'ANTHROPIC_KEY_REMOVED';
 const SIGNAL_WRITER   = 'https://hook.us2.make.com/iavptl5ghkx1qinlyi7pb567mw1ccuk0';
 const SIGNAL_FETCH    = 'https://hook.us2.make.com/tt27x57x9jlln7tjw4uvvb9d48hppp26';
 const QUEUE_FETCH     = 'https://hook.us2.make.com/fbwggrimbt2iidjeckvs25sk61hej2lh';
+// Queue Decline (5620094): persists decision=decline on the queue record so a removed
+// card stays gone. The Approval Handler only processes approvals, so declines were
+// never written back and reappeared on the next fetch.
+const QUEUE_DECLINE_URL = 'https://hook.us2.make.com/q1z8moe6j4qavjkefq4srp3snjxbqp5s';
 const SIGNAL_PROMPT   = `You are the Market Signal Engine for Elevate RS Corp, a staffing and recruitment agency based in Windsor, Ontario, Canada. Elevate specializes in automotive Tier 1/Tier 2, EV/battery, manufacturing, and government/municipal staffing and recruitment across Ontario and the GTA.
 
 Your job is to scan the internet RIGHT NOW for real, actionable BD signals that Elevate should act on today or in the next 30-90 days. Use web search aggressively across multiple searches.
