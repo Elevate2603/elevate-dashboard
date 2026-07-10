@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0710-B -->
+<!-- BUILD: ELEVATE-2026-0710-C -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -8344,7 +8344,11 @@ function jrvSetFeedBadge(live, count) {
         .then(arr => {
           if (!Array.isArray(arr)) return;
           arr.forEach(t => {
-            if (t && t.rcrm_company_slug) touchBySlug[t.rcrm_company_slug] = t;
+            // The Make fetch wraps each row as {group, aggregate:{...}} — unwrap it,
+            // else t.rcrm_company_slug is undefined and touchBySlug never populates
+            // (which left the whole panel falling back to scribe / going gray).
+            const rec = (t && t.aggregate) ? t.aggregate : t;
+            if (rec && rec.rcrm_company_slug) touchBySlug[rec.rcrm_company_slug] = rec;
           });
           render();
         })
