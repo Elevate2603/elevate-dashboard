@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0709-I -->
+<!-- BUILD: ELEVATE-2026-0710-A -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -8148,12 +8148,14 @@ function jrvSetFeedBadge(live, count) {
       if (isNaN(ms)) return null;
       return Math.floor((Date.now() - ms) / 86400000);
     }
-    // Effective recency for a client: prefer the weekly touch scan (last_touch_at),
-    // fall back to the scribe rollup. Drives BOTH the dot colour and the days label.
+    // Effective recency for a client — the weekly touch scan's last_touch_at is the ONLY
+    // reliable source (it cross-references Outlook + RCRM). scribe's daysSinceContact is
+    // RCRM-only with its Outlook lookup dark, so it produced false reds (e.g. Cascades
+    // showed 247d when the real last touch was 7d). Never fall back to it: if there's no
+    // touch date yet, return null → the dot renders gray "—" (awaiting scan), not a
+    // fabricated stale red.
     function acEffectiveDays(c, t) {
-      const td = t ? acDaysFromIso(t.last_touch_at) : null;
-      if (td != null) return td;
-      return (typeof c.daysSinceContact === 'number') ? c.daysSinceContact : null;
+      return t ? acDaysFromIso(t.last_touch_at) : null;
     }
     function touchRelDate(iso) {
       if (!iso) return '';
