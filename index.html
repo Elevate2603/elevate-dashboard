@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0710-D -->
+<!-- BUILD: ELEVATE-2026-0710-E -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -799,6 +799,18 @@
   .jrv-acm-body { padding:14px 18px; overflow-y:auto; }
   .jrv-acm-body .jrv-ac-name { font-size:14px; }
   .jrv-acm-body .jrv-ac-tier-label { font-size:12px; }
+  /* Discovered contacts (not in RCRM) */
+  .jrv-ac-disc-badge { margin-left:6px; background:rgba(200,130,10,0.18); color:#e8a53a; border:1px solid rgba(200,130,10,0.4); font-size:9.5px; font-weight:800; padding:1px 6px; border-radius:9px; }
+  .jrv-ac-disc { margin:8px 0 4px; padding:8px 10px; background:rgba(200,130,10,0.06); border:1px solid rgba(200,130,10,0.2); border-radius:8px; }
+  .jrv-ac-disc-head { font-size:10px; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:#e8a53a; margin-bottom:6px; }
+  .jrv-ac-disc-row { display:flex; align-items:center; gap:8px; padding:4px 0; }
+  .jrv-ac-disc-info { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .jrv-ac-disc-name { font-size:12.5px; font-weight:650; color:var(--text, #e9e6df); }
+  .jrv-ac-disc-meta { font-size:11px; color:#8b867c; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .jrv-ac-add-btn { flex:none; background:#C8820A; border:1px solid #C8820A; color:#1a1205; cursor:pointer; padding:5px 10px; border-radius:5px; font-size:11px; font-weight:700; font-family:inherit; }
+  .jrv-ac-add-btn:hover { filter:brightness(1.08); }
+  .jrv-ac-add-btn:disabled { opacity:0.75; cursor:default; }
+  .jrv-ac-add-btn.added { background:transparent; border-color:rgba(74,222,128,0.5); color:#4ade80; }
   .jrv-acd-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.62); display:flex; align-items:center; justify-content:center; padding:20px; z-index:9999; }
   .jrv-acd-modal { background:#161619; border:1px solid rgba(255,255,255,0.1); border-radius:14px; width:100%; max-width:560px; padding:20px; box-shadow:0 20px 60px rgba(0,0,0,0.5); }
   .jrv-acd-title { margin:0 0 3px; font-size:15px; color:var(--text, #e9e6df); }
@@ -3137,6 +3149,10 @@ const JRV_CONFIG = {
   // scan (catches mail with anyone at the domain, not just saved RCRM contacts) →
   // returns LAST_AT|PERSON|SUBJECT + updates the touch record. Fixes the per-contact gap.
   ACTIVE_CLIENT_REFRESH_URL: 'https://hook.us2.make.com/3qf271eyojf5on4k9rqf31iqd6p8a9pv',
+  // Add Contact To RCRM (5627578): POST /v1/contacts with company_slug + name/title/phone.
+  // Used by the "Add to RCRM" button on discovered contacts (people you email at a client
+  // who aren't saved in RCRM yet, surfaced by the weekly domain scan).
+  ADD_CONTACT_URL: 'https://hook.us2.make.com/ck7v5qfeocg2o13dtp2157pb75df2qes',
   // Sourcing Shortlist Fetch (Make scenario 5372954) reads elevate_sourcing_shortlist datastore 107864
   // and returns picks scored by Claude Vision from the local Indeed sourcing automation. Sorted by score desc,
   // excludes records flagged dismissed=true. The local Python script POSTs to a separate Sourcing Shortlist Add
@@ -8245,7 +8261,29 @@ function jrvSetFeedBadge(live, count) {
         + '<span class="jrv-ac-sub-meta">' + esc(meta) + (subject ? ' · “' + esc(subject) + '”' : '') + '</span>'
         + '</div>';
     }
-    function renderExpanded(t) {
+    // Discovered contacts — people Travis emails at this client who are NOT in RCRM.
+    // Each gets a one-click "Add to RCRM" button (creates the contact under the company).
+    function renderDiscovered(slug, t) {
+      let dc = [];
+      try { dc = JSON.parse(t.discovered_contacts_json || '[]'); } catch (_) { dc = []; }
+      if (!Array.isArray(dc) || !dc.length) return '';
+      const rows = dc.filter(p => p && (p.email || p.name)).map(p => {
+        const nm = (p.name || '').trim(), title = (p.title || '').trim(), email = (p.email || '').trim(), phone = (p.phone || '').trim();
+        const meta = [title, email, phone].filter(Boolean).join(' · ');
+        return '<div class="jrv-ac-disc-row">'
+          + '<div class="jrv-ac-disc-info"><span class="jrv-ac-disc-name">' + esc(nm || email) + '</span>'
+          + (meta ? '<span class="jrv-ac-disc-meta">' + esc(meta) + '</span>' : '') + '</div>'
+          + '<button class="jrv-ac-add-btn" data-slug="' + esc(slug) + '" data-name="' + esc(nm) + '" data-title="' + esc(title) + '" data-email="' + esc(email) + '" data-phone="' + esc(phone) + '">+ Add to RCRM</button>'
+          + '</div>';
+      }).join('');
+      if (!rows) return '';
+      return '<div class="jrv-ac-disc"><div class="jrv-ac-disc-head">✦ Emailing them, not in RCRM yet</div>' + rows + '</div>';
+    }
+    function discoveredCount(t) {
+      if (!t) return 0;
+      try { const dc = JSON.parse(t.discovered_contacts_json || '[]'); return Array.isArray(dc) ? dc.length : 0; } catch (_) { return 0; }
+    }
+    function renderExpanded(slug, t) {
       const interactions = parseInteractions(t.interactions_json);
       const summary = (t.summary || '').trim();
       const lines = interactions.map(i => {
@@ -8260,6 +8298,7 @@ function jrvSetFeedBadge(live, count) {
       }).join('');
       return '<div class="jrv-ac-expanded">'
         + (summary ? '<div class="jrv-ac-summary">' + esc(summary) + '</div>' : '')
+        + renderDiscovered(slug, t)
         + (lines ? '<ul class="jrv-ac-interactions">' + lines + '</ul>' : '<div class="jrv-ac-summary" style="color:var(--text-muted);">No interactions logged yet.</div>')
         + '</div>';
     }
@@ -8270,6 +8309,7 @@ function jrvSetFeedBadge(live, count) {
     // One client's card HTML (used in both the inline panel and the pop-out modal).
     function clientBlockHtml(c) {
       const t = touchBySlug[c.slug];
+      const discN = discoveredCount(t);
       const effDays = acEffectiveDays(c, t);
       const tier = tierFor(effDays);
       const days = (typeof effDays === 'number') ? (effDays + 'd') : '—';
@@ -8285,6 +8325,7 @@ function jrvSetFeedBadge(live, count) {
         + 'data-tip-how="' + esc(tipHow) + '">'
         + '<span class="jrv-ac-dot jrv-ac-dot-' + tier + '" aria-hidden="true"></span>'
         + '<span class="jrv-ac-name">' + esc(c.name || 'Unknown company') + '</span>'
+        + (discN ? '<span class="jrv-ac-disc-badge" title="' + discN + ' people you email here are not in RCRM — expand to add">+' + discN + '</span>' : '')
         + '<span class="jrv-ac-days">' + esc(days) + '</span>'
         + '</a>';
       const hasTouch = t && (t.last_touch_at || t.summary);
@@ -8295,7 +8336,7 @@ function jrvSetFeedBadge(live, count) {
         + (hasTouch ? renderTouchSubline(c.slug, t) : '')
         + '<div class="jrv-ac-actions"><button class="jrv-ac-draft-btn" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '">✎ Draft email</button>'
         + '<button class="jrv-ac-refresh-one" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Scan this company\'s domain for your latest email (catches people not in RCRM)">↻ Refresh</button></div>'
-        + (hasTouch && expanded ? renderExpanded(t) : '')
+        + (hasTouch && expanded ? renderExpanded(c.slug, t) : '')
         + '</div>';
     }
 
@@ -8570,6 +8611,36 @@ function jrvSetFeedBadge(live, count) {
         console.error('[AC refresh]', err);
         rb.textContent = 'failed'; setTimeout(() => { rb.textContent = orig; rb.disabled = false; }, 1800);
       }
+    });
+
+    // Add a discovered contact to RCRM (creates the contact under the company).
+    document.addEventListener('click', async e => {
+      const ab = e.target.closest('.jrv-ac-add-btn');
+      if (!ab) return;
+      e.preventDefault(); e.stopPropagation();
+      const addUrl = (typeof JRV_CONFIG !== 'undefined' && JRV_CONFIG.ADD_CONTACT_URL) || '';
+      if (!addUrl) { alert('Add to RCRM is not configured.'); return; }
+      const slug = ab.dataset.slug, name = (ab.dataset.name || '').trim();
+      const email = (ab.dataset.email || '').trim(), title = (ab.dataset.title || '').trim(), phone = (ab.dataset.phone || '').trim();
+      if (!email && !name) return;
+      const first = name.split(' ')[0] || name;
+      const last = name.split(' ').slice(1).join(' ');
+      ab.disabled = true; ab.textContent = 'Adding…';
+      try {
+        const url = addUrl + '?rcrm_company_slug=' + encodeURIComponent(slug)
+          + '&first_name=' + encodeURIComponent(first) + '&last_name=' + encodeURIComponent(last)
+          + '&email=' + encodeURIComponent(email) + '&designation=' + encodeURIComponent(title)
+          + '&contact_number=' + encodeURIComponent(phone);
+        const res = await fetch(url);
+        const j = await res.json().catch(() => ({}));
+        if (res.ok && j.ok) {
+          ab.textContent = '✓ Added to RCRM'; ab.classList.add('added');
+          // Drop from the local discovered list so it won't reappear this session
+          // (next scan also excludes it, since it's now a known RCRM contact).
+          const t = touchBySlug[slug];
+          if (t) { try { const dc = JSON.parse(t.discovered_contacts_json || '[]').filter(p => (p.email || '').toLowerCase() !== email.toLowerCase()); t.discovered_contacts_json = JSON.stringify(dc); } catch (_) {} }
+        } else { ab.textContent = '✕ Failed — retry'; ab.disabled = false; }
+      } catch (err) { console.error('[AC add]', err); ab.textContent = '✕ Failed — retry'; ab.disabled = false; }
     });
 
     window.jrvActiveClientsUpdate = function(newList) {
