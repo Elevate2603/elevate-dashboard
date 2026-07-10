@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0710-A -->
+<!-- BUILD: ELEVATE-2026-0710-B -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -774,6 +774,9 @@
   .jrv-ac-actions { padding: 4px 0 2px 22px; }
   .jrv-ac-draft-btn { background: rgba(200,130,10,0.16); border:1px solid rgba(200,130,10,0.45); color:#e8a53a; cursor:pointer; padding:4px 10px; border-radius:5px; font-size:11px; font-weight:600; font-family:inherit; letter-spacing:0.3px; }
   .jrv-ac-draft-btn:hover { background: rgba(200,130,10,0.3); }
+  .jrv-ac-refresh-one { margin-left:6px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.14); color:#9aa; cursor:pointer; padding:4px 9px; border-radius:5px; font-size:11px; font-weight:600; font-family:inherit; letter-spacing:0.3px; }
+  .jrv-ac-refresh-one:hover { background: rgba(255,255,255,0.1); color:#ccd; }
+  .jrv-ac-refresh-one:disabled { opacity:0.6; cursor:default; }
   .jrv-acd-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.62); display:flex; align-items:center; justify-content:center; padding:20px; z-index:9999; }
   .jrv-acd-modal { background:#161619; border:1px solid rgba(255,255,255,0.1); border-radius:14px; width:100%; max-width:560px; padding:20px; box-shadow:0 20px 60px rgba(0,0,0,0.5); }
   .jrv-acd-title { margin:0 0 3px; font-size:15px; color:var(--text, #e9e6df); }
@@ -3107,6 +3110,10 @@ const JRV_CONFIG = {
   // returns "TO: email|name\nSUBJECT: ..\nBODY: ..". Send (5619370): Outlook send + RCRM company note.
   ACTIVE_CLIENT_DRAFT_URL: 'https://hook.us2.make.com/n5hh31d9q60n16rvj78jn2xgacargefv',
   ACTIVE_CLIENT_SEND_URL: 'https://hook.us2.make.com/27pcxk512w3tjudf2u2wcvqt4fpobyuw',
+  // Active Client Refresh One (5625756): on click, one $search "@companydomain" mailbox
+  // scan (catches mail with anyone at the domain, not just saved RCRM contacts) →
+  // returns LAST_AT|PERSON|SUBJECT + updates the touch record. Fixes the per-contact gap.
+  ACTIVE_CLIENT_REFRESH_URL: 'https://hook.us2.make.com/3qf271eyojf5on4k9rqf31iqd6p8a9pv',
   // Sourcing Shortlist Fetch (Make scenario 5372954) reads elevate_sourcing_shortlist datastore 107864
   // and returns picks scored by Claude Vision from the local Indeed sourcing automation. Sorted by score desc,
   // excludes records flagged dismissed=true. The local Python script POSTs to a separate Sourcing Shortlist Add
@@ -8268,7 +8275,8 @@ function jrvSetFeedBadge(live, count) {
         return '<div class="' + blockClass + '" data-slug="' + esc(c.slug) + '">'
           + itemHtml
           + (hasTouch ? renderTouchSubline(c.slug, t) : '')
-          + '<div class="jrv-ac-actions"><button class="jrv-ac-draft-btn" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '">✎ Draft email</button></div>'
+          + '<div class="jrv-ac-actions"><button class="jrv-ac-draft-btn" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '">✎ Draft email</button>'
+          + '<button class="jrv-ac-refresh-one" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Scan this company\'s domain for your latest email (catches people not in RCRM)">↻ Refresh</button></div>'
           + (hasTouch && expanded ? renderExpanded(t) : '')
           + '</div>';
       }).join('');
@@ -8429,6 +8437,41 @@ function jrvSetFeedBadge(live, count) {
       if (!db) return;
       e.preventDefault(); e.stopPropagation();
       acdOpen(db.dataset.slug, db.dataset.name);
+    });
+
+    // Delegated click for the per-client Refresh — one domain mailbox scan on demand.
+    const ACD_REFRESH_URL = (typeof JRV_CONFIG !== 'undefined' && JRV_CONFIG.ACTIVE_CLIENT_REFRESH_URL) || '';
+    list.addEventListener('click', async e => {
+      const rb = e.target.closest('.jrv-ac-refresh-one');
+      if (!rb) return;
+      e.preventDefault(); e.stopPropagation();
+      if (!ACD_REFRESH_URL) { alert('Refresh is not configured.'); return; }
+      const slug = rb.dataset.slug, name = rb.dataset.name || '';
+      const orig = rb.textContent; rb.textContent = '↻ …'; rb.disabled = true;
+      try {
+        const url = ACD_REFRESH_URL + '?rcrm_company_slug=' + encodeURIComponent(slug) + '&company_name=' + encodeURIComponent(name);
+        const res = await fetch(url);
+        const text = await res.text();
+        // Response: "LAST_AT: <iso>\nPERSON: <name>\nSUBJECT: <subj>"
+        const at = (text.match(/LAST_AT:\s*([^\n]*)/) || [])[1] || '';
+        const person = (text.match(/PERSON:\s*([^\n]*)/) || [])[1] || '';
+        const subject = (text.match(/SUBJECT:\s*([^\n]*)/) || [])[1] || '';
+        if (at && at.trim().startsWith('20')) {
+          const prev = touchBySlug[slug] || {};
+          touchBySlug[slug] = Object.assign({}, prev, {
+            rcrm_company_slug: slug, last_touch_at: at.trim(), last_touch_channel: 'email',
+            last_touch_person: (person || '').trim(),
+            interactions_json: at.trim() + '|email|' + (person || '').trim() + '|' + (subject || '').trim(),
+          });
+          render();
+        } else {
+          rb.textContent = 'no recent email'; setTimeout(() => { rb.textContent = orig; rb.disabled = false; }, 1800);
+          return;
+        }
+      } catch (err) {
+        console.error('[AC refresh]', err);
+        rb.textContent = 'failed'; setTimeout(() => { rb.textContent = orig; rb.disabled = false; }, 1800);
+      }
     });
 
     window.jrvActiveClientsUpdate = function(newList) {
