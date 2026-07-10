@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0710-C -->
+<!-- BUILD: ELEVATE-2026-0710-D -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -777,6 +777,28 @@
   .jrv-ac-refresh-one { margin-left:6px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.14); color:#9aa; cursor:pointer; padding:4px 9px; border-radius:5px; font-size:11px; font-weight:600; font-family:inherit; letter-spacing:0.3px; }
   .jrv-ac-refresh-one:hover { background: rgba(255,255,255,0.1); color:#ccd; }
   .jrv-ac-refresh-one:disabled { opacity:0.6; cursor:default; }
+  /* Colour-tier collapsible sections */
+  .jrv-ac-tier { margin-bottom:6px; }
+  .jrv-ac-tier-head { display:flex; align-items:center; gap:7px; padding:6px 8px; cursor:pointer; border-radius:6px; background:rgba(255,255,255,0.03); user-select:none; }
+  .jrv-ac-tier-head:hover { background:rgba(255,255,255,0.06); }
+  .jrv-ac-tier-chev { width:12px; color:#8b867c; font-size:10px; }
+  .jrv-ac-tier-label { font-size:11px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:#c7c1b4; }
+  .jrv-ac-tier-count { margin-left:auto; font-size:10.5px; font-weight:700; color:#8b867c; background:rgba(255,255,255,0.06); padding:1px 8px; border-radius:10px; }
+  .jrv-ac-tier.collapsed .jrv-ac-tier-body { display:none; }
+  .jrv-ac-tier-body { padding-top:2px; }
+  .jrv-ac-expand-btn { background:transparent; border:1px solid rgba(255,255,255,0.14); color:#9aa; cursor:pointer; border-radius:5px; width:26px; height:26px; font-size:13px; line-height:1; flex:none; }
+  .jrv-ac-expand-btn:hover { background:rgba(255,255,255,0.08); color:#ccd; }
+  /* Pop-out modal */
+  .jrv-acm-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.66); display:flex; align-items:center; justify-content:center; padding:26px; z-index:9998; }
+  .jrv-acm-modal { background:#141417; border:1px solid rgba(255,255,255,0.1); border-radius:16px; width:100%; max-width:820px; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 24px 70px rgba(0,0,0,0.6); }
+  .jrv-acm-head { display:flex; align-items:center; gap:10px; padding:16px 20px; border-bottom:1px solid rgba(255,255,255,0.08); }
+  .jrv-acm-title { font-size:15px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:var(--gold, #C8820A); }
+  .jrv-acm-count { font-size:12px; color:#8b867c; }
+  .jrv-acm-close { margin-left:auto; background:transparent; border:1px solid rgba(255,255,255,0.14); color:#9aa; cursor:pointer; border-radius:6px; width:30px; height:30px; font-size:14px; }
+  .jrv-acm-close:hover { background:rgba(255,255,255,0.08); color:#fff; }
+  .jrv-acm-body { padding:14px 18px; overflow-y:auto; }
+  .jrv-acm-body .jrv-ac-name { font-size:14px; }
+  .jrv-acm-body .jrv-ac-tier-label { font-size:12px; }
   .jrv-acd-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.62); display:flex; align-items:center; justify-content:center; padding:20px; z-index:9999; }
   .jrv-acd-modal { background:#161619; border:1px solid rgba(255,255,255,0.1); border-radius:14px; width:100%; max-width:560px; padding:20px; box-shadow:0 20px 60px rgba(0,0,0,0.5); }
   .jrv-acd-title { margin:0 0 3px; font-size:15px; color:var(--text, #e9e6df); }
@@ -1344,6 +1366,7 @@
                 <span class="jrv-ac-label">ACTIVE CLIENT</span>
                 <span class="jrv-ac-count" id="jrvAcCount">0</span>
               </button>
+              <button type="button" id="jrvAcExpandBtn" class="jrv-ac-expand-btn" title="Open a larger pop-out view of all active clients">⤢</button>
               <button type="button" id="jrvAcRefreshBtn" class="jrv-ac-refresh-btn" title="Refresh last-touch data" onclick="window.jrvLoadClientTouch && window.jrvLoadClientTouch()">↻</button>
             </div>
             <div class="jrv-ac-list" id="jrvAcList" hidden>
@@ -8241,45 +8264,83 @@ function jrvSetFeedBadge(live, count) {
         + '</div>';
     }
 
-    function render() {
-      count.textContent = clients.length;
+    // Tier sections the user has collapsed. Default: all open (nothing hidden).
+    const collapsedTiers = new Set();
+
+    // One client's card HTML (used in both the inline panel and the pop-out modal).
+    function clientBlockHtml(c) {
+      const t = touchBySlug[c.slug];
+      const effDays = acEffectiveDays(c, t);
+      const tier = tierFor(effDays);
+      const days = (typeof effDays === 'number') ? (effDays + 'd') : '—';
+      const lc = c.lastContact || {};
+      const tipName = (t && t.last_touch_person) || ((lc.firstName || '') + (lc.lastName ? ' ' + lc.lastName : ''));
+      const tipRole = lc.role || '';
+      const tipHow = (typeof effDays === 'number')
+        ? (channelVerb((t && t.last_touch_channel) || lc.channel) + ' ' + effDays + ' day' + (effDays === 1 ? '' : 's') + ' ago')
+        : 'no contact on record';
+      const itemHtml = '<a class="jrv-ac-item" href="' + esc(rcrmUrlFor(c.slug)) + '" target="_blank" rel="noopener" '
+        + 'data-tip-name="' + esc(tipName || 'Unknown contact') + '" '
+        + 'data-tip-role="' + esc(tipRole) + '" '
+        + 'data-tip-how="' + esc(tipHow) + '">'
+        + '<span class="jrv-ac-dot jrv-ac-dot-' + tier + '" aria-hidden="true"></span>'
+        + '<span class="jrv-ac-name">' + esc(c.name || 'Unknown company') + '</span>'
+        + '<span class="jrv-ac-days">' + esc(days) + '</span>'
+        + '</a>';
+      const hasTouch = t && (t.last_touch_at || t.summary);
+      const expanded = expandedSlugs.has(c.slug);
+      const blockClass = 'jrv-ac-block' + (hasTouch ? '' : ' no-touch') + (expanded ? ' is-expanded' : '');
+      return '<div class="' + blockClass + '" data-slug="' + esc(c.slug) + '">'
+        + itemHtml
+        + (hasTouch ? renderTouchSubline(c.slug, t) : '')
+        + '<div class="jrv-ac-actions"><button class="jrv-ac-draft-btn" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '">✎ Draft email</button>'
+        + '<button class="jrv-ac-refresh-one" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Scan this company\'s domain for your latest email (catches people not in RCRM)">↻ Refresh</button></div>'
+        + (hasTouch && expanded ? renderExpanded(t) : '')
+        + '</div>';
+    }
+
+    // Group clients by colour tier into collapsible sections: green, then yellow,
+    // then red, then a gray "no contact on record" bucket. Newest-first within each.
+    function groupedHtml() {
+      const buckets = { green: [], yellow: [], red: [], gray: [] };
       const sorted = clients.slice().sort((a, b) => {
         const da = acEffectiveDays(a, touchBySlug[a.slug]);
         const db = acEffectiveDays(b, touchBySlug[b.slug]);
         return (db == null ? -1 : db) - (da == null ? -1 : da);
       });
-      if (!sorted.length) { list.innerHTML = '<div class="jrv-ac-empty">No active clients.</div>'; return; }
-      list.innerHTML = sorted.map(c => {
-        const t = touchBySlug[c.slug];
-        const effDays = acEffectiveDays(c, t);
-        const tier = tierFor(effDays);
-        const days = (typeof effDays === 'number') ? (effDays + 'd') : '—';
-        const lc = c.lastContact || {};
-        const tipName = (t && t.last_touch_person) || ((lc.firstName || '') + (lc.lastName ? ' ' + lc.lastName : ''));
-        const tipRole = lc.role || '';
-        const tipHow = (typeof effDays === 'number')
-          ? (channelVerb((t && t.last_touch_channel) || lc.channel) + ' ' + effDays + ' day' + (effDays === 1 ? '' : 's') + ' ago')
-          : 'no contact on record';
-        const itemHtml = '<a class="jrv-ac-item" href="' + esc(rcrmUrlFor(c.slug)) + '" target="_blank" rel="noopener" '
-          + 'data-tip-name="' + esc(tipName || 'Unknown contact') + '" '
-          + 'data-tip-role="' + esc(tipRole) + '" '
-          + 'data-tip-how="' + esc(tipHow) + '">'
-          + '<span class="jrv-ac-dot jrv-ac-dot-' + tier + '" aria-hidden="true"></span>'
-          + '<span class="jrv-ac-name">' + esc(c.name || 'Unknown company') + '</span>'
-          + '<span class="jrv-ac-days">' + esc(days) + '</span>'
-          + '</a>';
-        // Decoration only when we have a touch record for this slug
-        const hasTouch = t && (t.last_touch_at || t.summary);
-        const expanded = expandedSlugs.has(c.slug);
-        const blockClass = 'jrv-ac-block' + (hasTouch ? '' : ' no-touch') + (expanded ? ' is-expanded' : '');
-        return '<div class="' + blockClass + '" data-slug="' + esc(c.slug) + '">'
-          + itemHtml
-          + (hasTouch ? renderTouchSubline(c.slug, t) : '')
-          + '<div class="jrv-ac-actions"><button class="jrv-ac-draft-btn" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '">✎ Draft email</button>'
-          + '<button class="jrv-ac-refresh-one" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Scan this company\'s domain for your latest email (catches people not in RCRM)">↻ Refresh</button></div>'
-          + (hasTouch && expanded ? renderExpanded(t) : '')
+      for (const c of sorted) {
+        const tier = tierFor(acEffectiveDays(c, touchBySlug[c.slug]));
+        (buckets[tier] || buckets.gray).push(c);
+      }
+      const order = [
+        ['green', 'Recently contacted', '1–7 days'],
+        ['yellow', 'Getting stale', '8–20 days'],
+        ['red', 'Overdue', '21+ days'],
+        ['gray', 'No contact on record', ''],
+      ];
+      return order.map(function (o) {
+        const tier = o[0], label = o[1];
+        const arr = buckets[tier];
+        if (!arr.length) return '';
+        const collapsed = collapsedTiers.has(tier);
+        return '<div class="jrv-ac-tier' + (collapsed ? ' collapsed' : '') + '" data-tier="' + tier + '">'
+          + '<div class="jrv-ac-tier-head" data-tier="' + tier + '" role="button" tabindex="0">'
+          + '<span class="jrv-ac-tier-chev">' + (collapsed ? '▸' : '▾') + '</span>'
+          + '<span class="jrv-ac-dot jrv-ac-dot-' + tier + '"></span>'
+          + '<span class="jrv-ac-tier-label">' + esc(label) + '</span>'
+          + '<span class="jrv-ac-tier-count">' + arr.length + '</span>'
+          + '</div>'
+          + '<div class="jrv-ac-tier-body">' + arr.map(clientBlockHtml).join('') + '</div>'
           + '</div>';
       }).join('');
+    }
+
+    function render() {
+      count.textContent = clients.length;
+      const html = clients.length ? groupedHtml() : '<div class="jrv-ac-empty">No active clients.</div>';
+      list.innerHTML = html;
+      const mb = document.getElementById('jrvAcModalBody');
+      if (mb) mb.innerHTML = html;
     }
 
     let open = false;
@@ -8320,17 +8381,26 @@ function jrvSetFeedBadge(live, count) {
     list.addEventListener('mouseout',  e => { const it = e.target.closest('.jrv-ac-item'); if (it && !it.contains(e.relatedTarget)) hideTooltip(); });
     list.addEventListener('scroll', hideTooltip, { passive: true });
 
-    // Click handler on the sub-line toggles expansion. We use closest() so clicks
-    // inside the chevron/text all work, but never the existing <a> link row.
-    list.addEventListener('click', e => {
+    // Delegated on DOCUMENT so it works in both the inline panel and the pop-out modal.
+    document.addEventListener('click', e => {
+      // Collapse / expand a whole colour-tier section (green/yellow/red/gray).
+      const th = e.target.closest('.jrv-ac-tier-head');
+      if (th) {
+        const tier = th.dataset.tier;
+        if (collapsedTiers.has(tier)) collapsedTiers.delete(tier); else collapsedTiers.add(tier);
+        render();
+        return;
+      }
+      // Expand a client's interaction detail (click the "Last:" sub-line).
       const sub = e.target.closest('.jrv-ac-subline');
-      if (!sub) return;
-      const block = sub.closest('.jrv-ac-block');
-      if (!block) return;
-      const slug = block.dataset.slug;
-      if (expandedSlugs.has(slug)) expandedSlugs.delete(slug);
-      else expandedSlugs.add(slug);
-      render();
+      if (sub) {
+        const block = sub.closest('.jrv-ac-block');
+        if (!block) return;
+        const slug = block.dataset.slug;
+        if (expandedSlugs.has(slug)) expandedSlugs.delete(slug);
+        else expandedSlugs.add(slug);
+        render();
+      }
     });
 
     // Fetch the per-client touch data and re-render with decoration.
@@ -8356,6 +8426,30 @@ function jrvSetFeedBadge(live, count) {
         .finally(() => { if (btn) btn.classList.remove('is-loading'); });
     }
     window.jrvLoadClientTouch = loadTouch;
+
+    // ── Pop-out (larger view) ─────────────────────────────────────────────────
+    // The ⤢ button opens a big modal with the SAME grouped list. render() also writes
+    // into #jrvAcModalBody, so draft/refresh/collapse update live in the pop-out too.
+    const acModal = document.createElement('div');
+    acModal.className = 'jrv-acm-overlay';
+    acModal.style.display = 'none';
+    acModal.innerHTML = '<div class="jrv-acm-modal">'
+      + '<div class="jrv-acm-head"><span class="jrv-acm-title">Active Clients</span>'
+      + '<span class="jrv-acm-count" id="jrvAcmCount"></span>'
+      + '<button class="jrv-acm-close" id="jrvAcmClose" title="Close">✕</button></div>'
+      + '<div class="jrv-acm-body" id="jrvAcModalBody"></div>'
+      + '</div>';
+    document.body.appendChild(acModal);
+    function acOpenModal() {
+      document.getElementById('jrvAcModalBody').innerHTML = clients.length ? groupedHtml() : '<div class="jrv-ac-empty">No active clients.</div>';
+      const cc = document.getElementById('jrvAcmCount'); if (cc) cc.textContent = clients.length + ' clients';
+      acModal.style.display = 'flex';
+    }
+    function acCloseModal() { acModal.style.display = 'none'; }
+    document.getElementById('jrvAcmClose').addEventListener('click', acCloseModal);
+    acModal.addEventListener('click', e => { if (e.target === acModal) acCloseModal(); });
+    const acExpandBtn = document.getElementById('jrvAcExpandBtn');
+    if (acExpandBtn) acExpandBtn.addEventListener('click', acOpenModal);
 
     // ── Account-care draft + send ─────────────────────────────────────────────
     // "Draft email" per client → Active Client Draft webhook (resolves the contact
@@ -8436,7 +8530,7 @@ function jrvSetFeedBadge(live, count) {
     });
 
     // Delegated click for the per-row Draft button (button sits outside the RCRM <a>).
-    list.addEventListener('click', e => {
+    document.addEventListener('click', e => {
       const db = e.target.closest('.jrv-ac-draft-btn');
       if (!db) return;
       e.preventDefault(); e.stopPropagation();
@@ -8445,7 +8539,7 @@ function jrvSetFeedBadge(live, count) {
 
     // Delegated click for the per-client Refresh — one domain mailbox scan on demand.
     const ACD_REFRESH_URL = (typeof JRV_CONFIG !== 'undefined' && JRV_CONFIG.ACTIVE_CLIENT_REFRESH_URL) || '';
-    list.addEventListener('click', async e => {
+    document.addEventListener('click', async e => {
       const rb = e.target.closest('.jrv-ac-refresh-one');
       if (!rb) return;
       e.preventDefault(); e.stopPropagation();
