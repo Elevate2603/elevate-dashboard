@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0710-E -->
+<!-- BUILD: ELEVATE-2026-0713-A-MANUALLEAD-RCRM-UPSERT -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -3230,6 +3230,15 @@ const JRV_CONFIG = {
   // pulls contacts straight from RCRM with their existing slug + resource_url.
   RCRM_COMPANY_CANDIDATES_URL: 'https://hook.us2.make.com/5cqk1rech2gv64c5q953xopxul7ig4rp',
   RCRM_COMPANY_CONTACTS_URL: 'https://hook.us2.make.com/0qcvedc6276yzt58r0c8u3ujv5oi8knk',
+  // Manual Lead → RCRM upsert trio (built+verified 2026-07-13). When Travis pulls
+  // a manual lead, the frontend orchestrates: Resolve Company (dedup by name, or
+  // short-circuit on a known slug) → Create Company if not found → Upsert each
+  // contact under the resolved slug (server-side dedup by email, never a dup).
+  // All three are linear sync webhooks (no ParseJSON/router — see the sync-response
+  // gotcha). Resolve/Create return {company_slug}; Upsert is fire-and-forget.
+  RESOLVE_COMPANY_URL: 'https://hook.us2.make.com/ij8jxrvu4yu10pxv6t9rjzg3h27rvijr',
+  CREATE_COMPANY_URL: 'https://hook.us2.make.com/djgqlcgpemyz23xl0j7b5evy89ve52ni',
+  UPSERT_CONTACT_URL: 'https://hook.us2.make.com/e544yq09p6hrl3ydrtnyl3poz6e1geqh',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -6068,6 +6077,9 @@ function jrvSkipCompanyPicker() {
   if (container) { container.style.display = 'none'; container.innerHTML = ''; }
   jrvManualLeadState = null;
   jrvCompanyContactsCache = {};
+  // Typing manually means no picked company — clear any stale slug so the submit
+  // resolves purely by the typed company name (never links to a prior company).
+  window.jrvManualCompany = null;
   const contactsEl = document.getElementById('jrvManualContacts');
   if (contactsEl) {
     contactsEl.value = '';
@@ -6115,12 +6127,14 @@ async function jrvPullSelectedContacts() {
   const cbs = document.querySelectorAll('.jrv-contact-pick-cb');
   const selectedRcrm = [];
   const selectedZiIds = [];
+  const selectedCoIdxs = new Set();
   cbs.forEach(cb => {
     if (!cb.checked) return;
     const coIdx = parseInt(cb.dataset.coIdx, 10);
     const cIdx = parseInt(cb.dataset.cIdx, 10);
     const contact = jrvCompanyContactsCache[coIdx] && jrvCompanyContactsCache[coIdx][cIdx];
     if (!contact) return;
+    selectedCoIdxs.add(coIdx);
     if (contact.source === 'rcrm') selectedRcrm.push(contact);
     else if (contact.id) selectedZiIds.push(contact.id);
   });
@@ -6128,6 +6142,22 @@ async function jrvPullSelectedContacts() {
     alert('Tick at least one contact to pull.');
     return;
   }
+  // Capture the picked company so jrvSubmitManualLead can resolve/create it in
+  // RCRM and link the pulled contacts (this was previously discarded — the whole
+  // reason manual leads never became RCRM contacts). One company per manual lead
+  // (the form has a single company field), so pick a primary: prefer an RCRM-source
+  // card (already carries a slug — no re-search); otherwise fall back to a ZI card's
+  // name/website/city for the create path.
+  const _cands = (jrvManualLeadState && jrvManualLeadState.candidates) || [];
+  const _picked = Array.from(selectedCoIdxs).map(i => _cands[i]).filter(Boolean);
+  const _rcrmCo = _picked.find(c => c.source === 'rcrm' && c.slug);
+  const _primaryCo = _rcrmCo || _picked[0] || null;
+  window.jrvManualCompany = _primaryCo ? {
+    slug: (_primaryCo.source === 'rcrm' ? (_primaryCo.slug || '') : ''),
+    name: _primaryCo.name || '',
+    website: _primaryCo.website || '',
+    city: _primaryCo.city || '',
+  } : null;
   const pullBtn = document.querySelector('.jrv-contact-pick-pull');
   if (pullBtn) { pullBtn.disabled = true; pullBtn.textContent = 'Pulling…'; }
   let enrichedZi = [];
@@ -7077,6 +7107,8 @@ function jrvOpenAddManualLead() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  // Drop any picked-company stash from a prior lead so RCRM linkage starts clean.
+  window.jrvManualCompany = null;
   // Fresh open → drop any prior voice context and hide the candidate picker so
   // nothing stale shows. The Search button repopulates it on demand.
   jrvManualLeadVoiceUi = null;
@@ -7184,6 +7216,61 @@ async function jrvSubmitManualLead() {
   }
   const btn = document.getElementById('jrvManualAddBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  // ── RCRM upsert: land the company + contacts in RCRM BEFORE queueing the card ──
+  // The whole point of a manual-lead pull is that the contact must exist in RCRM
+  // under the right company. Resolve the company (dedup by name, or short-circuit
+  // on the picked slug) → create it if it's ZI-only/new → upsert each contact
+  // under that slug (server-side dedup by email, never a duplicate). Non-fatal:
+  // any failure here still lets the manual lead queue as before.
+  try {
+    const stash = window.jrvManualCompany || {};
+    // Only trust a stashed slug when its name matches the form company — guards
+    // against a stale slug lingering from a previously pulled lead.
+    const stashName = (stash.name || '').trim().toLowerCase();
+    const formName = company.toLowerCase();
+    const trustSlug = !!stash.slug && !!stashName &&
+      (stashName === formName || stashName.includes(formName) || formName.includes(stashName));
+    let companySlug = '';
+    try {
+      const rr = await fetch(JRV_CONFIG.RESOLVE_COMPANY_URL, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_name: company, rcrm_company_slug: trustSlug ? stash.slug : '' }),
+      });
+      const rj = await rr.json().catch(() => ({}));
+      companySlug = (rj && rj.company_slug) || '';
+    } catch (_) {}
+    if (!companySlug) {
+      try {
+        const cr = await fetch(JRV_CONFIG.CREATE_COMPANY_URL, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company_name: company, website: stash.website || '', city: city || stash.city || '' }),
+        });
+        const cj = await cr.json().catch(() => ({}));
+        companySlug = (cj && cj.company_slug) || '';
+      } catch (_) {}
+    }
+    if (companySlug) {
+      contacts.forEach(c => {
+        c.rcrm_company_slug = companySlug; // link the queue card to the company
+        if (!c.email || !c.email.includes('@')) return;
+        const parts = (c.name || '').trim().split(/\s+/);
+        const firstName = parts.shift() || '';
+        const lastName = parts.join(' ');
+        // Fire-and-forget: the scenario searches by email and skips anyone already
+        // in RCRM, so re-pulling an existing contact never creates a duplicate.
+        fetch(JRV_CONFIG.UPSERT_CONTACT_URL, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rcrm_company_slug: companySlug,
+            first_name: firstName, last_name: lastName,
+            email: c.email, designation: c.title || '', contact_number: c.phone || '',
+          }),
+        }).catch(() => {});
+      });
+    }
+  } catch (e) {
+    console.warn('[Manual lead RCRM upsert] non-fatal failure:', e);
+  }
   try {
     const res = await fetch(JRV_CONFIG.MANUAL_LEAD_ADD_URL, {
       method: 'POST',
