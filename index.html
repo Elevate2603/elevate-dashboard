@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0713-B-INSEQ-GROUPBY-COMPANY -->
+<!-- BUILD: ELEVATE-2026-0713-C-INSEQ-DUP-MERGE -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -755,6 +755,18 @@
   .jrv-inseq-groupby-btn.active { background: var(--gold); color:#1a1a1a; font-weight:600; }
   .jrv-inseq-group-company .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(200,130,10,0.10), rgba(200,130,10,0.02)); border-left:3px solid var(--gold); }
   .jrv-inseq-group-company.is-multi .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(200,130,10,0.18), rgba(200,130,10,0.04)); }
+  /* Possible-duplicates review strip + merge */
+  .jrv-inseq-group-dup .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(250,204,21,0.14), rgba(250,204,21,0.04)); border-left:3px solid #facc15; }
+  .jrv-dup-card { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 10px; border:1px solid var(--border); border-radius:6px; margin-bottom:8px; background: var(--dark3); }
+  .jrv-dup-card-main { flex:1; min-width:0; }
+  .jrv-dup-name { font-size:13px; font-weight:600; color: var(--text); margin-bottom:4px; }
+  .jrv-dup-count { font-size:10px; color: var(--gold); text-transform:uppercase; letter-spacing:0.5px; margin-left:6px; }
+  .jrv-dup-member { font-size:11px; color: var(--text-muted); }
+  .jrv-dup-keep { color:#4ade80; font-size:10px; text-transform:uppercase; letter-spacing:0.4px; }
+  .jrv-dup-merge-btn { flex:none; background: var(--gold); color:#1a1a1a; border:none; border-radius:5px; padding:8px 14px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; }
+  .jrv-dup-merge-btn:hover { filter:brightness(1.08); }
+  .jrv-dup-merge-btn:disabled { opacity:0.6; cursor:default; }
+  .jrv-inseq-reengaged { background: rgba(200,130,10,0.18); color: var(--gold); border:1px solid rgba(200,130,10,0.5); border-radius:4px; padding:1px 7px; font-size:10px; font-weight:600; }
   /* Pipeline v2 — bulk action bar */
   .jrv-inseq-bulkbar { padding:10px 24px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; background: rgba(200,130,10,0.08); position:sticky; top:48px; z-index:2; }
   .jrv-inseq-bulk-label { font-size:12px; color: var(--gold); font-weight:600; letter-spacing:0.4px; }
@@ -3249,6 +3261,11 @@ const JRV_CONFIG = {
   RESOLVE_COMPANY_URL: 'https://hook.us2.make.com/ij8jxrvu4yu10pxv6t9rjzg3h27rvijr',
   CREATE_COMPANY_URL: 'https://hook.us2.make.com/djgqlcgpemyz23xl0j7b5evy89ve52ni',
   UPSERT_CONTACT_URL: 'https://hook.us2.make.com/e544yq09p6hrl3ydrtnyl3poz6e1geqh',
+  // Merge Duplicate Records (5650572) — folds a duplicate cluster's newest reason
+  // into the survivor (most history) via manual_lead_context with a [NEW LEAD
+  // OUTREACH] sentinel, and tombstones each loser (removed_from_sequence, datastore
+  // only — never un-enrolls RCRM). Called once per loser; survivor update is idempotent.
+  MERGE_RECORDS_URL: 'https://hook.us2.make.com/zog1froocutqbjbg0737dgnmagwilni5',
   // Same calendar-month check on the frontend cache so subsequent loads this month
   // paint instantly from localStorage without even hitting the webhook.
   VOICE_URL: '',  // Phase 5 — TTS endpoint. Empty = browser SpeechSynthesis fallback.
@@ -6988,7 +7005,7 @@ function jrvRenderStages() {
 // scope is granted on connection 8250656, verified 2026-06-09).
 // pipelineMode: 'in_sequence' or 'in_the_mix' — which fetch URL + filter to use.
 // selectedKeys: queue_keys checked for bulk send.
-let jrvInSeqState = { records: [], loading: false, searchTerm: '', pipelineMode: 'in_sequence', selectedKeys: new Set(), groupBy: 'recency' };
+let jrvInSeqState = { records: [], loading: false, searchTerm: '', pipelineMode: 'in_sequence', selectedKeys: new Set(), groupBy: 'recency', dupClusters: [] };
 
 // Session cache + throttle for RCRM slug resolution.
 // Tracks: emails resolved this session (slug present), and emails tried-and-empty.
@@ -7391,6 +7408,88 @@ function jrvDedupeByContact(records) {
   return passthrough.concat(Array.from(winners.values()));
 }
 
+// ── Duplicate detection + merge (Phase 2) ────────────────────────────────────
+// Exact-email dups are already collapsed by jrvDedupeByContact, so what remains
+// to surface is the FUZZY case: the same person across records with different or
+// missing emails. We cluster the displayed records by normalized name; any name
+// with 2+ records is a possible-duplicate cluster shown in a review strip. Merge
+// is always manual + confirmed, so a slightly loose match is fine — Travis judges.
+function jrvNormName(s) {
+  return (s || '').toString().toLowerCase().normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')   // strip combining accents so José === Jose
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function jrvFindDuplicateClusters(records) {
+  const byName = new Map();
+  for (const r of (records || [])) {
+    const nm = jrvNormName(r.contact_name || r.contact_email || '');
+    if (!nm) continue;
+    if (!byName.has(nm)) byName.set(nm, []);
+    byName.get(nm).push(r);
+  }
+  const clusters = [];
+  for (const recs of byName.values()) { if (recs.length >= 2) clusters.push(recs); }
+  return clusters;
+}
+// Marker written at the top of the survivor's manual_lead_context on merge (and on
+// backend re-trigger later). Drives the "New Lead Outreach" badge — read off an
+// already-emitted field, so no datastore/aggregator change is needed.
+const JRV_REENGAGE_MARK = '[NEW LEAD OUTREACH]';
+function jrvIsReengaged(r) {
+  return /^\s*\[NEW LEAD OUTREACH\]/.test((r && r.manual_lead_context) || '');
+}
+// Fold a duplicate cluster: survivor = most history (jrvDupScore), newest reason
+// floats to the top with the sentinel, older reasons kept below. Each loser is
+// tombstoned (datastore only). Optimistic: update survivor locally, drop losers,
+// re-render, and let the next real fetch reconcile from the datastore truth.
+async function jrvMergeCluster(idx, btn) {
+  const cluster = (jrvInSeqState.dupClusters || [])[idx];
+  if (!cluster || cluster.length < 2) return;
+  const sorted = cluster.slice().sort((a, b) => jrvDupScore(b) - jrvDupScore(a));
+  const survivor = sorted[0];
+  const losers = sorted.slice(1);
+  if (!survivor.key) { alert('Cannot merge — the surviving record has no key yet. Refresh and try again.'); return; }
+  const loserOk = losers.every(l => l.key);
+  if (!loserOk) { alert('Cannot merge — one of the duplicates has no key yet. Refresh and try again.'); return; }
+  // Build the merged context: newest reason (by add/sent time) on top, older below.
+  const timeOf = r => Date.parse(r.manual_lead_added_at || r.added_at || r.outlook_sent_at || '') || 0;
+  const byNew = cluster.slice().sort((a, b) => timeOf(b) - timeOf(a));
+  const strip = c => (c || '').toString().replace(/^\s*\[NEW LEAD OUTREACH\][^\n:]*:\s*/, '').trim();
+  const reasons = byNew.map(r => strip(r.manual_lead_context)).filter(Boolean);
+  const stamp = new Date().toISOString().slice(0, 10);
+  const newest = reasons[0] || '(re-surfaced as a duplicate — no new reason captured)';
+  const older = reasons.slice(1);
+  let merged = JRV_REENGAGE_MARK + ' (' + stamp + '): ' + newest;
+  if (older.length) merged += '\n\n----- earlier context -----\n' + older.join('\n---\n');
+  const co = (survivor.company_name || '').trim();
+  const msg = 'Merge ' + cluster.length + ' records for "' + (survivor.contact_name || survivor.contact_email) + '"'
+    + (co ? ' at ' + co : '') + '?\n\nThe one with the most history is kept and gets the newer reason on top; the other '
+    + losers.length + ' ' + (losers.length === 1 ? 'record is' : 'records are') + ' removed from the pipeline. RCRM is not touched.';
+  if (!confirm(msg)) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Merging…'; }
+  try {
+    for (const loser of losers) {
+      const res = await fetch(JRV_CONFIG.MERGE_RECORDS_URL, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ survivor_key: survivor.key, loser_key: loser.key, merged_context: merged }),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+    }
+    // Optimistic: survivor carries the merged context + badge; losers drop out.
+    survivor.manual_lead_context = merged;
+    const loserKeys = new Set(losers.map(l => l.key));
+    jrvInSeqState.records = (jrvInSeqState.records || []).filter(r => !loserKeys.has(r.key));
+    loserKeys.forEach(k => jrvInSeqState.selectedKeys.delete(k));
+    jrvCacheWrite(jrvInSeqCacheKey(), jrvInSeqState.records);
+    jrvCacheBust(JRV_CACHE_KEYS.queue); // pipeline counts change
+    jrvRenderInSeq();
+  } catch (e) {
+    console.error('[Merge duplicates] failed:', e);
+    alert('Merge failed: ' + (e.message || '') + '\nNothing was changed.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Merge →'; }
+  }
+}
+
 async function jrvFetchInSeq(force) {
   const body = document.getElementById('jrvInSeqBody');
   const countEl = document.getElementById('jrvInSeqCount');
@@ -7655,6 +7754,7 @@ function jrvRenderInSeq() {
             ${meta ? `<div class="jrv-inseq-meta">${escapeHtml(meta)}</div>` : ''}
             <div class="jrv-inseq-badges">
               ${extraBadgeHtml || ''}
+              ${jrvIsReengaged(r) ? `<span class="jrv-inseq-reengaged" title="${escapeAttr((r.manual_lead_context || '').trim())}">🔄 New Lead Outreach</span>` : ''}
               <span class="jrv-inseq-reach${reachCls}" title="Outbound emails to this contact (Outlook sent items + Emailed notes)">${reachLabel}</span>
               ${hasReplied ? `<span class="jrv-inseq-reply" title="Genuine human reply detected (auto-replies excluded)">Replied</span>` : ''}
               ${bounced ? `<span class="jrv-inseq-bounce" title="${escapeAttr(bounceReason || 'Hard bounce detected — auto-removed from sequence, RCRM note logged')}">⚠ Bounced</span>` : ''}
@@ -7791,9 +7891,51 @@ function jrvRenderInSeq() {
     }).join('');
   }
 
-  body.innerHTML = (jrvInSeqState.groupBy === 'company'
+  // ── Possible-duplicates review strip ─────────────────────────────────────
+  // Same person across records with a different/missing email (exact-email dups are
+  // already collapsed upstream). Pinned to the very top in BOTH grouping modes so a
+  // duplicate is never missed. Merge folds the newer reason into the record with the
+  // most history and removes the rest. Frontend-only detection — no cost.
+  const dupClusters = jrvFindDuplicateClusters(filtered);
+  jrvInSeqState.dupClusters = dupClusters;
+  let dupHtml = '';
+  if (dupClusters.length) {
+    const cardsHtml = dupClusters.map((cluster, idx) => {
+      const sorted = cluster.slice().sort((a, b) => jrvDupScore(b) - jrvDupScore(a));
+      const name = (sorted[0].contact_name || sorted[0].contact_email || 'Unknown').trim();
+      const members = sorted.map((r, i) => {
+        const co = (r.company_name || '').trim();
+        const em = (r.contact_email || 'no email').trim();
+        const rc = Number(r.reach_out_count || 0);
+        const keep = i === 0 ? ' <span class="jrv-dup-keep">keeps history</span>' : '';
+        return `<div class="jrv-dup-member">${escapeHtml([co, em].filter(Boolean).join(' · '))} · ${rc} reach-out${rc === 1 ? '' : 's'}${keep}</div>`;
+      }).join('');
+      return `
+        <div class="jrv-dup-card">
+          <div class="jrv-dup-card-main">
+            <div class="jrv-dup-name">${escapeHtml(name)} <span class="jrv-dup-count">${cluster.length} records</span></div>
+            ${members}
+          </div>
+          <button class="jrv-dup-merge-btn" onclick="jrvMergeCluster(${idx}, this)" title="Fold these into the record with the most history and remove the rest">Merge →</button>
+        </div>
+      `;
+    }).join('');
+    dupHtml = `
+      <div class="jrv-inseq-group jrv-inseq-group-dup">
+        <div class="jrv-inseq-group-head">
+          <span class="jrv-inseq-special-icon">⚠</span>
+          <span class="jrv-inseq-group-label">Possible duplicates</span>
+          <span class="jrv-inseq-group-count">${dupClusters.length}</span>
+          <span class="jrv-inseq-group-hint">Same name across records — merge folds newer info into the one with the most history</span>
+        </div>
+        ${cardsHtml}
+      </div>
+    `;
+  }
+
+  body.innerHTML = (dupHtml + (jrvInSeqState.groupBy === 'company'
     ? companyHtml
-    : (bouncedHtml + respondedHtml + manualLeadHtml + groupsHtml)
+    : (bouncedHtml + respondedHtml + manualLeadHtml + groupsHtml))
   ) || ('<div class="jrv-inseq-empty">' + emptyLabel + '</div>');
   jrvRenderBulkBar();
 }
