@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0713-C-INSEQ-DUP-MERGE -->
+<!-- BUILD: ELEVATE-2026-0713-D-MULTI-PHONE-PULL -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -6199,7 +6199,7 @@ async function jrvPullSelectedContacts() {
     const key = (c.email || '').toLowerCase();
     if (key && seenEmails.has(key)) return;
     if (key) seenEmails.add(key);
-    final.push({ name: c.name, email: c.email, title: c.title, city: c.city, linkedin: c.linkedin || '', phone: c.phone || '' });
+    final.push({ name: c.name, email: c.email, title: c.title, city: c.city, linkedin: c.linkedin || '', phone: c.phone || '', mobile: c.mobile || '' });
   });
   enrichedZi.forEach(c => {
     const key = (c.email || '').toLowerCase();
@@ -6209,11 +6209,11 @@ async function jrvPullSelectedContacts() {
   });
   const contactsEl = document.getElementById('jrvManualContacts');
   if (contactsEl) {
-    // Positional columns: Name | email | title | city | linkedin | phone.
+    // Positional columns: Name | email | title | city | linkedin | phone | mobile.
     // Trim only TRAILING empties so simple rows stay clean (Name | email | title)
-    // while phone/linkedin survive when present (was previously dropped here).
+    // while phone/mobile/linkedin survive when present (was previously dropped here).
     const lines = final.map(c => {
-      const cols = [c.name || '', c.email || '', c.title || '', c.city || '', c.linkedin || '', c.phone || ''];
+      const cols = [c.name || '', c.email || '', c.title || '', c.city || '', c.linkedin || '', c.phone || '', c.mobile || ''];
       let last = cols.length - 1;
       while (last > 2 && !cols[last]) last--;   // always keep at least name | email | title
       return cols.slice(0, last + 1).join(' | ');
@@ -6361,6 +6361,8 @@ async function jrvEnrichZIContacts(ids) {
                 email: (c.email || '').trim(),
                 title: (c.title || '').trim(),
                 city: (c.city || '').trim(),
+                phone: (c.phone || '').trim(),   // ZI direct/office line
+                mobile: (c.mobile || '').trim(), // ZI mobile — stored separately in RCRM
               }));
   } catch (e) {
     console.warn('[ZI enrich] failed:', e);
@@ -7205,7 +7207,7 @@ async function jrvSubmitManualLead() {
     // an empty contact_email makes the drafter abort with "Accepted"/no subject.
     const emailSniff = (line.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [''])[0];
     if (line.includes('|')) {
-      // Pipe format: Name | email | title | city | LinkedIn | phone
+      // Pipe format: Name | email | title | city | LinkedIn | phone | mobile
       const parts = line.split('|').map(p => p.trim());
       if (!parts[0]) return null;
       return {
@@ -7215,6 +7217,7 @@ async function jrvSubmitManualLead() {
         city: parts[3] || '',
         linkedin: parts[4] || '',
         phone: parts[5] || '',
+        mobile: parts[6] || '',
       };
     }
     // No pipes: pull the email out, then best-effort split the remainder into
@@ -7230,7 +7233,7 @@ async function jrvSubmitManualLead() {
       name = rest.slice(0, tm.index).trim();
     }
     if (!name) name = rest || emailSniff;
-    return { name, email: emailSniff, title, city: '', linkedin: '', phone: '' };
+    return { name, email: emailSniff, title, city: '', linkedin: '', phone: '', mobile: '' };
   }).filter(Boolean);
   if (!contacts.length) { alert('Could not parse any contacts. Format: Name | email | title (one per line).'); return; }
   // Don't silently re-add someone already in the pipeline (that's how the
@@ -7308,7 +7311,7 @@ async function jrvSubmitManualLead() {
           body: JSON.stringify({
             rcrm_company_slug: companySlug,
             first_name: firstName, last_name: lastName,
-            email: c.email, designation: c.title || '', contact_number: c.phone || '',
+            email: c.email, designation: c.title || '', contact_number: c.phone || '', mobile: c.mobile || '',
           }),
         }).catch(() => {});
       });
