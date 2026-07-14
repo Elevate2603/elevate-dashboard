@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0713-D-MULTI-PHONE-PULL -->
+<!-- BUILD: ELEVATE-2026-0714-A-ACTIVECLIENTS-POPOUT-COLOURS-FILTER -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -811,7 +811,14 @@
   .jrv-ac-expand-btn { background:transparent; border:1px solid rgba(255,255,255,0.14); color:#9aa; cursor:pointer; border-radius:5px; width:26px; height:26px; font-size:13px; line-height:1; flex:none; }
   .jrv-ac-expand-btn:hover { background:rgba(255,255,255,0.08); color:#ccd; }
   /* Pop-out modal */
-  .jrv-acm-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.66); display:flex; align-items:center; justify-content:center; padding:26px; z-index:9998; }
+  .jrv-acm-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.66); display:flex; align-items:center; justify-content:center; padding:26px; z-index:9998;
+    /* The pop-out is appended to <body>, outside .jrv-ac-root, so it must carry the
+       Active Client colour variables itself — otherwise green/yellow/red dots render dark. */
+    --jrv-ac-gold: #C8820A; --jrv-ac-gold-bright: #E8A234;
+    --jrv-ac-red: #ff4d4d; --jrv-ac-yellow: #f4c842; --jrv-ac-green: #4ade80;
+    --jrv-ac-bg: var(--dark3); --jrv-ac-bg-hover: #22222a; --jrv-ac-bg-list: #0f0f12;
+    --jrv-ac-border: var(--border); --jrv-ac-text: var(--text); --jrv-ac-dim: var(--text-muted);
+  }
   .jrv-acm-modal { background:#141417; border:1px solid rgba(255,255,255,0.1); border-radius:16px; width:100%; max-width:820px; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 24px 70px rgba(0,0,0,0.6); }
   .jrv-acm-head { display:flex; align-items:center; gap:10px; padding:16px 20px; border-bottom:1px solid rgba(255,255,255,0.08); }
   .jrv-acm-title { font-size:15px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:var(--gold, #C8820A); }
@@ -821,6 +828,12 @@
   .jrv-acm-body { padding:14px 18px; overflow-y:auto; }
   .jrv-acm-body .jrv-ac-name { font-size:14px; }
   .jrv-acm-body .jrv-ac-tier-label { font-size:12px; }
+  .jrv-acm-filter { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:10px 18px 4px; border-bottom:1px solid rgba(255,255,255,0.06); }
+  .jrv-acm-flabel { font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); margin-right:2px; }
+  .jrv-acm-fbtn { display:inline-flex; align-items:center; gap:6px; background:transparent; border:1px solid rgba(255,255,255,0.14); color:var(--text-muted); border-radius:14px; padding:4px 12px; font:inherit; font-size:12px; cursor:pointer; transition:all 0.15s; }
+  .jrv-acm-fbtn:hover { color:var(--text); border-color:rgba(255,255,255,0.3); }
+  .jrv-acm-fbtn.is-active { background:rgba(200,130,10,0.16); border-color:var(--jrv-ac-gold,#C8820A); color:#fff; }
+  .jrv-acm-fbtn .jrv-ac-dot { box-shadow:none; }
   /* Discovered contacts (not in RCRM) */
   .jrv-ac-disc-badge { margin-left:6px; background:rgba(200,130,10,0.18); color:#e8a53a; border:1px solid rgba(200,130,10,0.4); font-size:9.5px; font-weight:800; padding:1px 6px; border-radius:9px; }
   .jrv-ac-disc { margin:8px 0 4px; padding:8px 10px; background:rgba(200,130,10,0.06); border:1px solid rgba(200,130,10,0.2); border-radius:8px; }
@@ -8607,6 +8620,10 @@ function jrvSetFeedBadge(live, count) {
 
     // Tier sections the user has collapsed. Default: all open (nothing hidden).
     const collapsedTiers = new Set();
+    // Pop-out colour filter: 'all' | 'green' | 'yellow' | 'red' | 'gray'. Only the
+    // pop-out sets this; it resets to 'all' when the modal closes so the inline panel
+    // is never left filtered.
+    let acColourFilter = 'all';
 
     // One client's card HTML (used in both the inline panel and the pop-out modal).
     function clientBlockHtml(c) {
@@ -8663,6 +8680,7 @@ function jrvSetFeedBadge(live, count) {
       ];
       return order.map(function (o) {
         const tier = o[0], label = o[1];
+        if (acColourFilter !== 'all' && tier !== acColourFilter) return ''; // colour filter (pop-out)
         const arr = buckets[tier];
         if (!arr.length) return '';
         const collapsed = collapsedTiers.has(tier);
@@ -8675,7 +8693,7 @@ function jrvSetFeedBadge(live, count) {
           + '</div>'
           + '<div class="jrv-ac-tier-body">' + arr.map(clientBlockHtml).join('') + '</div>'
           + '</div>';
-      }).join('');
+      }).join('') || '<div class="jrv-ac-empty">No clients in this colour.</div>';
     }
 
     function render() {
@@ -8780,15 +8798,38 @@ function jrvSetFeedBadge(live, count) {
       + '<div class="jrv-acm-head"><span class="jrv-acm-title">Active Clients</span>'
       + '<span class="jrv-acm-count" id="jrvAcmCount"></span>'
       + '<button class="jrv-acm-close" id="jrvAcmClose" title="Close">✕</button></div>'
+      + '<div class="jrv-acm-filter" id="jrvAcmFilter">'
+      +   '<span class="jrv-acm-flabel">Filter</span>'
+      +   '<button class="jrv-acm-fbtn is-active" data-f="all">All</button>'
+      +   '<button class="jrv-acm-fbtn" data-f="green"><span class="jrv-ac-dot jrv-ac-dot-green"></span>Recent</button>'
+      +   '<button class="jrv-acm-fbtn" data-f="yellow"><span class="jrv-ac-dot jrv-ac-dot-yellow"></span>Stale</button>'
+      +   '<button class="jrv-acm-fbtn" data-f="red"><span class="jrv-ac-dot jrv-ac-dot-red"></span>Overdue</button>'
+      +   '<button class="jrv-acm-fbtn" data-f="gray"><span class="jrv-ac-dot jrv-ac-dot-gray"></span>No contact</button>'
+      + '</div>'
       + '<div class="jrv-acm-body" id="jrvAcModalBody"></div>'
       + '</div>';
     document.body.appendChild(acModal);
+    function acmSyncFilterBtns() {
+      acModal.querySelectorAll('.jrv-acm-fbtn').forEach(x => x.classList.toggle('is-active', x.dataset.f === acColourFilter));
+    }
+    function acmPaintBody() {
+      const mb = document.getElementById('jrvAcModalBody');
+      if (mb) mb.innerHTML = clients.length ? groupedHtml() : '<div class="jrv-ac-empty">No active clients.</div>';
+    }
     function acOpenModal() {
-      document.getElementById('jrvAcModalBody').innerHTML = clients.length ? groupedHtml() : '<div class="jrv-ac-empty">No active clients.</div>';
+      acColourFilter = 'all'; acmSyncFilterBtns();
+      acmPaintBody();
       const cc = document.getElementById('jrvAcmCount'); if (cc) cc.textContent = clients.length + ' clients';
       acModal.style.display = 'flex';
     }
-    function acCloseModal() { acModal.style.display = 'none'; }
+    function acCloseModal() { acModal.style.display = 'none'; acColourFilter = 'all'; render(); }
+    acModal.querySelector('#jrvAcmFilter').addEventListener('click', e => {
+      const b = e.target.closest('.jrv-acm-fbtn');
+      if (!b) return;
+      acColourFilter = b.dataset.f || 'all';
+      acmSyncFilterBtns();
+      acmPaintBody();
+    });
     document.getElementById('jrvAcmClose').addEventListener('click', acCloseModal);
     acModal.addEventListener('click', e => { if (e.target === acModal) acCloseModal(); });
     const acExpandBtn = document.getElementById('jrvAcExpandBtn');
