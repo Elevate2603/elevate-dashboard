@@ -214,7 +214,7 @@ Format: `ELEVATE-{year}-{month}{day}-{letter}` where letter increments per same-
 
 1. **Staging-to-Queue (4990696) enrichment gap** — Scenario doesn't enrich company data before writing to queue. 880 existing cards have empty website/address/LinkedIn/revenue. **Fix:** Add ZoomInfo company enrich module between GetRecord and AddRecord steps.
 
-2. **Netlify zip `elevate-zi-bridge.zip` deployment unverified** — signal-aggregator function. Auto-Enrich and Hiring Signals Auto Pull both call it; both have 1 execution / 1 error. Need to confirm the zip was ever dragged to Netlify.
+2. **`elevate-zi-bridge` site is DEAD — do not build on it.** Both `signal-aggregator` and `zi-search` return 404 (the site resolves; the functions were never deployed). Anything still pointing at it is legacy. The live replacements are `netlify/functions/signal-scan.js` on **elevate-sales-nav** (scan) and the native Make **ZoomInfo connection 8656304** (search/enrich). Legacy corpses left in place but inactive: Hiring Signals Auto Pull **4991665** (`isinvalid:true`, superseded by **5323960**).
 
 3. **ZoomInfo PKI connection unstable** — escalated to ZoomInfo support. Interim workflow is manual "process today's queue" trigger each morning.
 
@@ -222,7 +222,7 @@ Format: `ELEVATE-{year}-{month}{day}-{letter}` where letter increments per same-
 
 5. **Sales Intelligence tab non-functional** — Anthropic key was redacted from HTML at some prior point (live line 1482 = literal `ANTHROPIC_KEY_REMOVED`). Signal refresh button hits Anthropic with the placeholder and fails. Fix path: build `netlify/functions/anthropic-proxy.js`, set `ANTHROPIC_API_KEY` in Netlify env, swap dashboard call-site to proxy URL.
 
-6. **Signals subsystem error rates 46-88%** — Signals-Enrich Contacts, Email Drafter, Outlook Send, ZI Search Worker all bleeding errors. Needs systematic debug.
+6. **Signals subsystem error rates** — ✅ **Signals-Enrich Contacts (4957200) + ZI Search & Enrich Worker (4964850) FIXED 2026-07-15.** Root cause was the worker calling the dead `elevate-zi-bridge/zi-search` with `stopOnHttpError:true`, killing the chain on every run. Worker rebuilt on the native ZoomInfo connection (`makeAPICall` POST `/search/contact` — the native `searchContacts` module has NO location filter and must not be used here); enrich now writes queue cards only (RCRM create moved to approval, where the Approval Handler already does find-or-create). Still open: Email Drafter (4955815), Outlook Send & Log (4955828).
 
 7. **Make.com platform limitation:** `isinvalid:true` flag on scenarios only clears via manual Save in Make UI, never via API. `jsonStringBodyContent` with `{{variable}}` expressions triggers this. `scenarios_update` silently rejects identical blueprints. **Update 2026-05-21:** This rule may be partially superseded — see SCRIBE_EXPORT.md line 184. Round-tripping unchanged jsonStringBodyContent (and even modifying it) via `scenarios_update` did NOT trigger `isinvalid:true` across 8+ pushes in late session. Worth re-confirming periodically.
 
