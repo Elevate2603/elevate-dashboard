@@ -26,11 +26,15 @@ const MODEL = process.env.SIGNAL_SCAN_MODEL || "claude-haiku-4-5-20251001";
 // Job Bank Canada Ontario listings, last 7 days, sorted by date desc.
 // Each page returns ~25 postings with employer + title + city + date — perfect
 // for grouping by company to detect hiring surges.
+// Elevate staffs EVERY role type, so scan across blue- AND white-collar families,
+// not just production/warehouse. Score decides priority, not sector.
 const SOURCES = [
-  { name: "JobBank-Mgmt",       url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=manager&locationstring=Ontario&fage=7&sort=D" },
-  { name: "JobBank-Production", url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=production&locationstring=Ontario&fage=7&sort=D" },
-  { name: "JobBank-Trades",     url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=millwright+OR+electrician+OR+welder&locationstring=Ontario&fage=7&sort=D" },
-  { name: "JobBank-Warehouse",  url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=warehouse+OR+logistics&locationstring=Ontario&fage=7&sort=D" },
+  { name: "JobBank-Mgmt-Sup",     url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=manager+OR+supervisor+OR+director&locationstring=Ontario&fage=7&sort=D" },
+  { name: "JobBank-Production",   url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=production+OR+assembler+OR+operator&locationstring=Ontario&fage=7&sort=D" },
+  { name: "JobBank-Trades",       url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=millwright+OR+electrician+OR+welder+OR+maintenance&locationstring=Ontario&fage=7&sort=D" },
+  { name: "JobBank-Warehouse",    url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=warehouse+OR+logistics+OR+shipping&locationstring=Ontario&fage=7&sort=D" },
+  { name: "JobBank-Office-Admin", url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=administrative+OR+office+OR+clerk&locationstring=Ontario&fage=7&sort=D" },
+  { name: "JobBank-Sales-CSR",    url: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=customer+service+OR+sales+OR+account+manager&locationstring=Ontario&fage=7&sort=D" },
 ];
 
 exports.handler = async (event) => {
@@ -64,7 +68,7 @@ exports.handler = async (event) => {
       });
       if (!r.ok) return { name: s.name, text: "", error: `HTTP ${r.status}` };
       const html = await r.text();
-      return { name: s.name, text: stripHtml(html).slice(0, 18000) };
+      return { name: s.name, text: stripHtml(html).slice(0, 11000) };
     } catch (e) {
       return { name: s.name, text: "", error: String(e && e.message || e) };
     }
@@ -138,7 +142,8 @@ exports.handler = async (event) => {
         company_website: String(s.company_website || "").trim(),
         industry: String(s.industry || "").trim(),
         geography: String(s.geography || "Ontario").trim(),
-        target_titles_json: String(s.target_titles_json || s.target_titles || "Plant Manager OR Production Manager OR Operations Manager OR HR Manager OR Engineering Manager").trim(),
+        role_family: String(s.role_family || "").trim(),
+        target_titles_json: String(s.target_titles_json || s.target_titles || "Plant Manager OR Operations Manager OR General Manager OR HR Manager OR Office Manager").trim(),
         signal_tag: String(s.signal_tag || "").trim(),
         pitch_angle: String(s.pitch_angle || "").trim(),
         why_now: String(s.why_now || "").trim(),
@@ -151,7 +156,7 @@ exports.handler = async (event) => {
         contacts_retrieved: 0,
       };
     })
-    .slice(0, 10);
+    .slice(0, 12);
 
   const tokensUsed = (data.usage || {});
   return {
@@ -201,34 +206,34 @@ function buildPrompt(context) {
   const today = new Date().toISOString().slice(0, 10);
   return `You are a labour-market analyst for Elevate Recruitment, a Windsor ON staffing agency. Today is ${today}.
 
-Below are four pre-fetched Job Bank Canada Ontario listing pages from the last 7 days. Each lists ~25 currently-open postings with employer + title + city + date.
+Below are six pre-fetched Job Bank Canada Ontario listing pages from the last 7 days. Each lists ~25 currently-open postings with employer + title + city + date.
 
-YOUR JOB: Group the postings by EMPLOYER. Identify companies showing a "hiring surge" — 2+ open postings, or a single high-signal role at a target-sector company. Return up to 10 as JSON signals Elevate can pursue.
+YOUR JOB: Group the postings by EMPLOYER. Identify companies showing a "hiring surge" — 2+ open postings, or a single strong role — and return up to 12 as JSON signals Elevate can pursue.
 
-═══════════ SECTOR PRIORITY (include) ═══════════
-- Automotive Tier 1/2 (Magna, Martinrea, Linamar suppliers, etc.)
-- EV / battery manufacturing
-- Food & beverage processing
-- Industrial machinery / metal forming / plastics
-- Logistics, warehousing, distribution, 3PL, trucking
-- Aerospace
-- Waste management / recycling
-- Public sector if it's clearly labour-services (custodial, dietary, security, drivers)
+═══════════ WHAT ELEVATE STAFFS — ALL of it ═══════════
+Elevate fills EVERY role type, in ANY sector. Blue-collar AND white-collar:
+- Production, assembly, machine operators, general labour
+- Skilled trades (millwright, electrician, welder, maintenance)
+- Warehouse, logistics, shipping/receiving, drivers
+- Customer service reps, call centre, sales, account management
+- Administration, office, reception, clerical, data entry
+- Supervisors, managers, plant/ops/general managers, directors, C-suite (CEO/COO/CFO/VP)
+Our current sweet spot is production / warehouse / industrial / skilled trades, so weight those slightly higher — BUT DO NOT drop office, sales, customer service, professional, or leadership roles. A strong hiring surge in ANY of these is a real, valuable signal. Never discard a high-scoring company just because it isn't manufacturing.
 
-═══════════ GEOGRAPHY (priority) ═══════════
-Windsor-Essex, Brampton, Mississauga, Vaughan, Markham, Oakville, Bolton, Caledon, Halton Hills, Toronto, Hamilton, Kitchener-Waterloo-Cambridge, London, Niagara, Ottawa.
-SKIP far-north: Thunder Bay, Sudbury, North Bay, Smooth Rock Falls, Kenora, Timmins.
+═══════════ GEOGRAPHY (Ontario only) ═══════════
+Anywhere in Ontario. Preferred corridors: Windsor-Essex, Brampton, Mississauga, Vaughan, Markham, Oakville, Bolton, Caledon, Halton Hills, Toronto, Hamilton, Kitchener-Waterloo-Cambridge, London, Niagara, Ottawa. Far-north (Thunder Bay, Sudbury, North Bay, Kenora, Timmins) is lower priority but still allowed if the signal is strong.
 
-═══════════ HARD SKIPS ═══════════
-- Pure tech/SaaS, financial services, retail stores, healthcare clinics, professional services (legal/accounting/consulting), construction firms, mining, oil & gas
-- Staffing agencies themselves (don't recommend Randstad, Adecco, Aerotek, ASAP, Quantum etc. as targets — they're competitors)
-- Generic franchises (Tim Hortons, McDonald's, gas stations)
+═══════════ ONLY skip these ═══════════
+- Staffing agencies / recruiters (Randstad, Adecco, Aerotek, ASAP, Quantum, etc.) — they are competitors, never target them.
+- A single generic franchise shift job with no real surge (one Tim Hortons / McDonald's / gas-station posting).
+Everything else is fair game — including tech, finance, retail head offices, healthcare, professional services, public sector. INCLUDE them, especially with a strong surge. Let the SCORE reflect fit; do not exclude on sector.
 
-═══════════ SCORING (0-100) ═══════════
-- 80-100: 3+ open roles same employer, target sector, priority geography
-- 65-79: 2 open roles target sector, OR 1 senior role (Plant Mgr / Ops Mgr / Eng Mgr) at clear-fit company
-- 55-64: 1 production/skilled-trades role at clear-fit manufacturer
-- Below 55: skip
+═══════════ SCORING (0-100) — surge strength first, sector fit second ═══════════
+- 80-100: 3+ open roles at one employer (ANY sector), OR a senior/leadership role at a strong-fit company, in a priority corridor.
+- 65-79: 2 open roles at one employer, OR 1 senior role (manager / supervisor / director), any sector.
+- 55-64: 1 solid role at a clear employer, any sector (production, warehouse, CSR, sales, admin, office, etc.).
+- Core industrial / production / warehouse / trades fit: add a +5 to +10 bonus (our sweet spot) — but this is a bonus, NEVER the gate.
+- Below 55: skip.
 
 ═══════════ OUTPUT — JSON object only ═══════════
 
@@ -237,12 +242,13 @@ SKIP far-north: Thunder Bay, Sudbury, North Bay, Smooth Rock Falls, Kenora, Timm
     {
       "company_name": "exact employer name from listing",
       "company_website": "leave blank if not in listing",
-      "industry": "specific industry (e.g. 'Automotive Tier 1', 'Food Processing', 'Logistics 3PL')",
+      "industry": "specific industry (e.g. 'Automotive Tier 1', 'Food Processing', '3PL Logistics', 'Financial Services', 'Retail HQ')",
       "geography": "City, Ontario",
-      "target_titles_json": "Plant Manager OR Production Manager OR Operations Manager OR HR Manager OR Engineering Manager OR Maintenance Manager",
-      "signal_tag": "concise — e.g. 'Job Bank 3 open roles last 7d | Production + Maintenance + Logistics'",
-      "pitch_angle": "2-3 sentence pitch — what labour types Elevate fits, why now",
-      "why_now": "concrete one-sentence catalyst (e.g. '3 open roles posted last week including senior Plant Manager')",
+      "role_family": "one of: Production, Skilled Trades, Warehouse/Logistics, Customer Service, Sales, Administration/Office, Management, Executive, Other",
+      "target_titles_json": "who to EMAIL — the hiring decision-maker for that role family, joined with OR. Examples: production surge -> 'Plant Manager OR Production Manager OR Operations Manager'; customer-service surge -> 'Customer Service Manager OR Operations Manager OR HR Manager'; sales surge -> 'Sales Manager OR General Manager OR VP Sales'; office/admin -> 'Office Manager OR Operations Manager OR HR Manager'. NOT the posted role itself.",
+      "signal_tag": "concise — e.g. 'Job Bank 3 open roles last 7d | Customer Service + Sales'",
+      "pitch_angle": "2-3 sentence pitch — which roles Elevate fills for them, why now",
+      "why_now": "concrete one-sentence catalyst (e.g. '4 postings last week across CSR and sales')",
       "score": 75,
       "urgency": "immediate or watch",
       "action_deadline": "Within 14 days OR Within 30 days"
@@ -251,9 +257,9 @@ SKIP far-north: Thunder Bay, Sudbury, North Bay, Smooth Rock Falls, Kenora, Timm
 }
 
 ═══════════ RULES ═══════════
-- Return 5-10 signals — better to return 5 great ones than 10 mediocre ones, but DON'T return 0 unless the data is genuinely empty
-- Order by score descending
-- company_name must be the exact specific real employer from a listing (no "various manufacturers", no agencies/staffing firms)
+- Return 6-12 signals ordered by score descending. Include the strong non-industrial signals too — do NOT return an all-manufacturing list if the data has strong office/sales/service surges.
+- company_name must be the exact specific real employer from a listing (no "various", no agencies/staffing firms).
+- target_titles_json = the decision-maker to EMAIL for that function, NOT the posted role.
 - Already-active in pipeline (prefer NOT but include if fresh signal): Stellantis, Magna, Martinrea, Multimatic, NEXTSTAR, Vuteq, Litens, Almag, Kromet, Mevotech, Husky Injection, Cyclic Materials, Quarterhill, Reliance Home Comfort, IESO
 
 ========== JOB BANK LISTINGS ==========
