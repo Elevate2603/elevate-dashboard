@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0716-B-HS-BLOCK-BUTTON-APOSTROPHE-FIX -->
+<!-- BUILD: ELEVATE-2026-0716-C-HS-BULK-DRAFT-SEND -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -188,6 +188,18 @@
   .hs-decline-btn { background:transparent; border:1px solid var(--border); color:var(--text-muted); font-size:12px; font-weight:600; padding:8px 14px; border-radius:6px; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
   .hs-decline-btn:hover:not(:disabled) { border-color:var(--red); color:var(--red); }
   .hs-decline-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .hs-bulk-check { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:600; color:var(--text-muted); cursor:pointer; user-select:none; white-space:nowrap; }
+  .hs-bulk-check input { width:16px; height:16px; accent-color:var(--gold); cursor:pointer; }
+
+  /* Bulk draft+send bar (sticky above the queue list) */
+  .hs-bulk-bar { position:sticky; top:8px; z-index:30; display:flex; flex-wrap:wrap; align-items:center; gap:12px; background:var(--dark3); border:1px solid var(--gold); border-radius:10px; padding:12px 16px; margin-bottom:12px; box-shadow:0 6px 20px rgba(0,0,0,0.4); }
+  .hs-bulk-count { font-size:13px; font-weight:700; color:var(--gold-light); }
+  .hs-bulk-spacer { flex:1; }
+  .hs-bulk-send { background:var(--gold); color:#000; border:none; font-size:13px; font-weight:700; padding:9px 18px; border-radius:6px; cursor:pointer; transition:all 0.15s; }
+  .hs-bulk-send:hover:not(:disabled) { background:var(--gold-light); }
+  .hs-bulk-send:disabled { opacity:0.6; cursor:not-allowed; }
+  .hs-bulk-clear { background:transparent; border:1px solid var(--border); color:var(--text-muted); font-size:12px; font-weight:600; padding:8px 14px; border-radius:6px; cursor:pointer; }
+  .hs-bulk-clear:hover { border-color:var(--text-muted); color:var(--text); }
   .hs-draft-preview { display:none; width:100%; margin-top:10px; background:#1c1c1f; color:#e8e8e8; border:1px solid #f59e0b; border-radius:8px; padding:16px; box-shadow:0 4px 16px rgba(0,0,0,0.25); font-size:13px; line-height:1.55; }
   .hs-draft-preview.expanded { display:block; }
   .hs-draft-preview-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #333; }
@@ -1574,6 +1586,7 @@
         <button class="btn-submit" id="submitBtn" onclick="submitQueue()">Submit All Decisions</button>
       </div>
     </div>
+    <div id="hsBulkBar" class="hs-bulk-bar" style="display:none;"></div>
     <div id="queueList">
       <div class="queue-loading">Loading queue…</div>
     </div>
@@ -2374,6 +2387,97 @@ async function hsDecline(idx) {
   }
 }
 
+// ── Bulk draft + send for hiring-signal cards ──
+// Select multiple cards, then draft a v8h Claude email for each and send it via
+// Outlook in one action — instead of Draft+Send on every card. Same per-contact
+// pipeline as hsSendOutlook (draft -> Outlook -> RCRM with sequence suppressed),
+// run through a concurrency-capped pool (Outlook mailbox 429s on parallel sends).
+function hsToggleBulk(idx, checked) {
+  if (queueContacts[idx]) queueContacts[idx]._bulkSelected = checked;
+  hsUpdateBulkBar();
+}
+function hsSelectedBulk() {
+  return queueContacts.filter(c => c && c._bulkSelected
+    && (c.lead_source || '').toLowerCase() === 'hiring_signals'
+    && c.contact_email && String(c.contact_email).trim());
+}
+function hsUpdateBulkBar() {
+  const bar = document.getElementById('hsBulkBar');
+  if (!bar) return;
+  const sel = hsSelectedBulk();
+  if (!sel.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = `
+    <span class="hs-bulk-count">${sel.length} hiring-signal lead${sel.length > 1 ? 's' : ''} selected</span>
+    <span class="hs-bulk-spacer"></span>
+    <button class="hs-bulk-clear" onclick="hsBulkClear()">Clear</button>
+    <button class="hs-bulk-send" id="hsBulkSendBtn" onclick="hsBulkDraftAndSend()">✎ Draft &amp; Send All (${sel.length})</button>
+  `;
+}
+function hsBulkClear() {
+  queueContacts.forEach(c => { if (c) c._bulkSelected = false; });
+  renderQueue();
+  hsUpdateBulkBar();
+}
+// Concurrency-capped pool — Outlook throttles (429 ApplicationThrottled) on
+// parallel sends, so cap the fan-out. Never rejects; records per-item outcome.
+async function hsRunPool(items, worker, size) {
+  const results = new Array(items.length);
+  let i = 0;
+  async function next() {
+    while (i < items.length) {
+      const idx = i++;
+      try { await worker(items[idx], idx); results[idx] = { ok: true }; }
+      catch (e) { results[idx] = { ok: false, err: e }; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, next));
+  return results;
+}
+// One contact: draft (v8h persists to the queue record) -> send via Outlook
+// (reads the persisted draft) -> RCRM write via the Approval Handler with the
+// sequence suppressed. Mirrors hsSendOutlook, minus the UI/enrich steps.
+async function hsBulkSendOne(c) {
+  const dr = await fetch(HS_DRAFT_EMAIL + '?queue_key=' + encodeURIComponent(c.key || ''), { method: 'GET' });
+  if (!dr.ok) throw new Error('draft HTTP ' + dr.status);
+  const sr = await fetch(HS_SEND_OUTLOOK + '?queue_key=' + encodeURIComponent(c.key || ''), { method: 'GET' });
+  if (!sr.ok) throw new Error('outlook send HTTP ' + sr.status);
+  const payload = buildPayload(c);
+  payload.decision = 'approve';
+  payload.sequence_id = '';
+  payload.sequence_name = 'Outlook Direct - No Sequence';
+  payload.data_collection_source = payload.data_collection_source || 'Outlook Direct Send';
+  const rr = await fetch(APPROVAL_WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  if (!rr.ok) throw new Error('RCRM HTTP ' + rr.status);
+}
+async function hsBulkDraftAndSend() {
+  const sel = hsSelectedBulk();
+  if (!sel.length) return;
+  const names = sel.map(c => c.contact_name || c.contact_email).join('\n• ');
+  if (!confirm(`Draft a personalized Claude email for these ${sel.length} contact(s) and send them all via Outlook now?\n\n• ${names}\n\nEach is created in RCRM (no sequence) and the email goes out immediately.`)) return;
+  const btn = document.getElementById('hsBulkSendBtn');
+  const clearBtn = document.querySelector('#hsBulkBar .hs-bulk-clear');
+  if (btn) btn.disabled = true;
+  if (clearBtn) clearBtn.disabled = true;
+  let done = 0, failed = 0;
+  const total = sel.length;
+  const setProg = () => { if (btn) btn.textContent = `Sending… ${done + failed}/${total}${failed ? ` (${failed} failed)` : ''}`; };
+  setProg();
+  const results = await hsRunPool(sel, async (c) => {
+    await hsBulkSendOne(c);
+    done++; setProg();
+  }, 3);
+  results.forEach((r, i) => { if (r && !r.ok) { failed++; console.error('[HS Bulk] failed for', sel[i] && sel[i].contact_name, r.err); } });
+  // Graduate the ones that sent; leave failures in the queue to retry.
+  const goneKeys = new Set(sel.filter((c, i) => results[i] && results[i].ok).map(c => c.key || ''));
+  try { if (typeof jrvCacheBust === 'function' && typeof JRV_CACHE_KEYS !== 'undefined') jrvCacheBust(JRV_CACHE_KEYS.queue); } catch (e) {}
+  queueContacts = queueContacts.filter(c => !goneKeys.has(c.key || ''));
+  queueContacts.forEach(c => { if (c) c._bulkSelected = false; });
+  renderQueue();
+  hsUpdateBulkBar();
+  alert(`Bulk send complete: ${done} sent${failed ? `, ${failed} failed (left in the queue — retry).` : '.'}`);
+}
+
 async function initQueue() {
   const list = document.getElementById('queueList');
   const toolbar = document.getElementById('queueToolbar');
@@ -2492,6 +2596,7 @@ function renderQueue() {
           </div>
           <div class="toggle-wrap">
             ${isHiringSignal ? `
+              <label class="hs-bulk-check" title="Select for bulk draft + send"><input type="checkbox" ${c._bulkSelected ? 'checked' : ''} onchange="hsToggleBulk(${i}, this.checked)"> Bulk</label>
               <button class="hs-decline-btn" id="hsDeclineBtn${i}" onclick="hsDecline(${i})" title="Remove this lead from the queue">✕ Decline</button>
             ` : `
               <span class="toggle-label ${approved ? 'on' : 'off'}" id="togLbl${i}">${approved ? 'APPROVE' : 'DECLINE'}</span>
@@ -2534,6 +2639,7 @@ function renderQueue() {
       </div>`;
   }).join('');
   renderQueueStats(queueContacts);
+  if (typeof hsUpdateBulkBar === 'function') hsUpdateBulkBar();
 }
 
 function renderQueueStats(contacts) {
