@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0716-E-CONTEXT-BUTTON-ON-HS-CARDS -->
+<!-- BUILD: ELEVATE-2026-0716-F-CONTEXT-MIC-DICTATE -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -815,6 +815,11 @@
   .jrv-inseq-cleartag-btn { background: rgba(231,76,60,0.12); border:1px solid rgba(231,76,60,0.4); color:#e74c3c; cursor:pointer; padding:4px 9px; border-radius:4px; font-size:10.5px; font-weight:600; font-family: inherit; letter-spacing:0.2px; }
   .jrv-inseq-cleartag-btn:hover { background: rgba(231,76,60,0.22); }
   .jrv-inseq-cleartag-btn:disabled { opacity:0.6; cursor:wait; }
+  .jrv-ctx-mic { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.16); color:var(--text-muted); border-radius:6px; padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; display:inline-flex; align-items:center; gap:5px; transition:all 0.15s; }
+  .jrv-ctx-mic:hover { border-color:var(--gold); color:var(--gold-light); }
+  .jrv-ctx-mic.listening { background:rgba(231,76,60,0.18); border-color:#e74c3c; color:#e74c3c; }
+  @media (prefers-reduced-motion: no-preference) { .jrv-ctx-mic.listening { animation:jrvMicPulse 1.1s ease-in-out infinite; } }
+  @keyframes jrvMicPulse { 0%,100%{ box-shadow:0 0 0 0 rgba(231,76,60,0.55); } 50%{ box-shadow:0 0 0 5px rgba(231,76,60,0); } }
   .jrv-inseq-check:disabled { opacity:0.4; cursor:not-allowed; }
   /* Special sections at top: Responded Contact + Manual Lead */
   .jrv-inseq-group-responded .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(74,222,128,0.12), rgba(74,222,128,0.04)); border-left:3px solid #4ade80; }
@@ -8331,10 +8336,14 @@ function jrvOpenContextModal(queueKey) {
   if (ta) ta.value = (r && r.manual_lead_context) ? r.manual_lead_context : '';
   const saveBtn = document.getElementById('jrvContextSaveBtn');
   if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save context'; }
+  jrvContextMicStop();
+  const micBtn = document.getElementById('jrvContextMicBtn');
+  if (micBtn) micBtn.style.display = jrvContextMicSupported() ? 'inline-flex' : 'none';
   if (modal) modal.style.display = 'flex';
   if (ta) setTimeout(() => { ta.focus(); }, 50);
 }
 function jrvCloseContextModal() {
+  jrvContextMicStop();
   const modal = document.getElementById('jrvContextModal');
   if (modal) modal.style.display = 'none';
   jrvContextKey = null;
@@ -8364,6 +8373,54 @@ async function jrvSaveContext() {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Retry save'; }
     alert('Could not save context: ' + (e.message || ''));
   }
+}
+
+// Speech-to-text for the context box — browser Web Speech API (free, no backend;
+// Chrome/Edge/New Outlook webview). Dictated words append to whatever is typed.
+let jrvCtxRecog = null;
+let jrvCtxListening = false;
+function jrvContextMicSupported() {
+  return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+function jrvContextMicStop() {
+  try { if (jrvCtxRecog) jrvCtxRecog.stop(); } catch (e) {}
+  jrvCtxListening = false;
+  const btn = document.getElementById('jrvContextMicBtn');
+  if (btn) { btn.classList.remove('listening'); btn.textContent = '🎤 Dictate'; }
+}
+function jrvContextMicToggle() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = document.getElementById('jrvContextMicBtn');
+  const ta = document.getElementById('jrvContextText');
+  if (!SR) { alert('Voice-to-text is not supported in this browser. Use Chrome or Edge, or just type.'); return; }
+  if (jrvCtxListening) { jrvContextMicStop(); return; }
+  const recog = new SR();
+  jrvCtxRecog = recog;
+  recog.lang = 'en-CA';
+  recog.continuous = true;
+  recog.interimResults = true;
+  const baseText = ta ? ta.value : '';
+  const sep = (baseText && !/\s$/.test(baseText)) ? ' ' : '';
+  let dictatedFinal = '';
+  recog.onstart = () => { jrvCtxListening = true; if (btn) { btn.classList.add('listening'); btn.textContent = '● Listening… (click to stop)'; } };
+  recog.onend = () => { jrvContextMicStop(); };
+  recog.onerror = (e) => {
+    jrvContextMicStop();
+    if (e && (e.error === 'not-allowed' || e.error === 'service-not-allowed')) {
+      alert('Microphone access is blocked. Allow mic access for this site in your browser, then try again.');
+    }
+  };
+  recog.onresult = (event) => {
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const t = event.results[i][0].transcript;
+      if (event.results[i].isFinal) dictatedFinal += (dictatedFinal && !/\s$/.test(dictatedFinal) ? ' ' : '') + t.trim();
+      else interim += t;
+    }
+    const live = interim ? (dictatedFinal ? dictatedFinal + ' ' : '') + interim.trim() : dictatedFinal;
+    if (ta) ta.value = baseText + sep + live;
+  };
+  try { recog.start(); } catch (e) { console.error('[Context mic] start failed', e); jrvContextMicStop(); }
 }
 
 // ── Clear the warm/cold response tag ──
@@ -9498,6 +9555,10 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <div class="jrv-modal-body" style="padding:18px;">
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;">Extra context for <strong id="jrvContextWho" style="color:var(--gold-light);"></strong> that the AI drafter factors in <em>on top of</em> the live email thread it reads — a phone call, something you learned, or what to emphasize next. Save this <strong>before</strong> you draft.</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;">Context — type or dictate</span>
+        <button type="button" id="jrvContextMicBtn" onclick="jrvContextMicToggle()" class="jrv-ctx-mic" title="Dictate (speech to text)">🎤 Dictate</button>
+      </div>
       <textarea id="jrvContextText" style="width:100%;height:180px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);color:var(--text);border-radius:6px;padding:10px 12px;font-size:13px;font-family:inherit;line-height:1.5;resize:vertical;" placeholder="e.g. Had a call on 7/16 — they need 3 CSRs by September, prefers bilingual. Mention we can start interviews next week." spellcheck="true"></textarea>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
         <button onclick="jrvCloseContextModal()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:var(--text);border-radius:6px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px;">Cancel</button>
