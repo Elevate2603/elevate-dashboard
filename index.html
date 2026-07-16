@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0716-D-DRAFT-CONTEXT-AND-CLEAR-RESPONSE-TAG -->
+<!-- BUILD: ELEVATE-2026-0716-E-CONTEXT-BUTTON-ON-HS-CARDS -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -180,6 +180,7 @@
   .hs-queue-btn.sent { background:var(--green); color:#fff; }
   .hs-queue-btn.outline { background:var(--dark3); color:var(--gold-light); border:1px solid var(--border); }
   .hs-queue-btn.outline:hover:not(:disabled) { background:var(--dark4); border-color:var(--gold); }
+  .hs-queue-btn.outline.has-ctx { background:rgba(200,130,10,0.16); border-color:rgba(200,130,10,0.45); color:var(--gold-light); }
   .hs-queue-btn.locked { opacity:0.3; cursor:not-allowed; filter:grayscale(0.6); }
 
   /* Two-way choice on hiring-signal queue cards: CRM sequence OR manual draft */
@@ -2634,6 +2635,7 @@ function renderQueue() {
         <div class="hs-choose-row">
           <span class="hs-choose-label">Work this lead —</span>
           <button class="hs-queue-btn" id="hsCrmBtn${i}" onclick="hsChooseCrm(${i})" title="Enroll this contact in the RCRM sequence — RCRM sends the templated sequence emails automatically">→ Add to CRM Sequence</button>
+          <button class="hs-queue-btn outline hs-ctx-btn${(c.manual_lead_context || '').trim() ? ' has-ctx' : ''}" onclick="jrvOpenContextModal('${escapeJs(queueKey)}')" title="Add context for the draft — e.g. a phone call the drafter should factor in. Save before drafting.">✎ Context${(c.manual_lead_context || '').trim() ? ' ✓' : ''}</button>
           <button class="hs-queue-btn outline" id="hsManualBtn${i}" onclick="hsChooseManual(${i}, this.closest('.contact-card'))" title="Draft a personalized email with Claude and send it from Outlook — same as a manual lead">✎ Draft &amp; Send Manually</button>
         </div>
         <div class="hs-draft-preview"></div>` : ''}
@@ -8311,8 +8313,16 @@ function jrvCloseDraftModal() {
 // server-side on the next draft (on TOP of the live email thread it reads). Must be
 // saved BEFORE drafting so the drafter picks it up.
 let jrvContextKey = null;
+// The context modal serves both In Sequence rows (jrvInSeqState.records) AND the
+// Approval-Queue hiring-signal cards (queueContacts) — both draft via the same
+// manual_lead_context field. Find the record in whichever store it lives in.
+function jrvFindContextRecord(queueKey) {
+  let r = (jrvInSeqState.records || []).find(x => (x.key || '') === queueKey);
+  if (!r && typeof queueContacts !== 'undefined') r = (queueContacts || []).find(x => (x.key || '') === queueKey);
+  return r || null;
+}
 function jrvOpenContextModal(queueKey) {
-  const r = (jrvInSeqState.records || []).find(x => (x.key || '') === queueKey);
+  const r = jrvFindContextRecord(queueKey);
   jrvContextKey = queueKey;
   const modal = document.getElementById('jrvContextModal');
   const ta = document.getElementById('jrvContextText');
@@ -8342,11 +8352,13 @@ async function jrvSaveContext() {
       body: JSON.stringify({ queue_key: qk, context })
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    const r = (jrvInSeqState.records || []).find(x => (x.key || '') === qk);
+    const r = jrvFindContextRecord(qk);
     if (r) r.manual_lead_context = context;
-    try { if (typeof jrvCacheBust === 'function' && typeof JRV_CACHE_KEYS !== 'undefined') jrvCacheBust(JRV_CACHE_KEYS.inseq); } catch (e) {}
+    try { if (typeof jrvCacheBust === 'function' && typeof JRV_CACHE_KEYS !== 'undefined') { jrvCacheBust(JRV_CACHE_KEYS.inseq); jrvCacheBust(JRV_CACHE_KEYS.queue); } } catch (e) {}
     jrvCloseContextModal();
-    if (typeof jrvRenderInSeq === 'function') jrvRenderInSeq();
+    // Re-render whichever view is showing this record (both are cheap + idempotent).
+    try { if (typeof jrvRenderInSeq === 'function') jrvRenderInSeq(); } catch (e) {}
+    try { if (typeof renderQueue === 'function') renderQueue(); } catch (e) {}
   } catch (e) {
     console.error('[Context] save failed:', e);
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Retry save'; }
