@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0715-A-HS-DRAFT-BUTTON-TO-V8H -->
+<!-- BUILD: ELEVATE-2026-0716-A-QUEUE-DARK-RESTYLE-HS-CRM-OR-MANUAL-CHOICE -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -56,129 +56,138 @@
   .tab-content.active { display:block; }
 
   /* ═══════════════════════ APPROVAL QUEUE TAB ═══════════════════════ */
-  #tabQueue { background: var(--light-bg); min-height: calc(100vh - 112px); padding: 24px; }
+  #tabQueue { background: var(--dark); min-height: calc(100vh - 112px); padding: 24px; }
   .queue-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
-  .queue-header h2 { font-size:20px; color:var(--light-text); font-weight:700; }
+  .queue-header h2 { font-size:20px; color:var(--text); font-weight:700; }
   .queue-stats { display:flex; gap:10px; flex-wrap:wrap; }
-  .stat-pill { background:#fff; border:1px solid var(--light-border); border-radius:20px; padding:6px 16px; font-size:13px; color:var(--light-text); }
+  .stat-pill { background:var(--dark2); border:1px solid var(--border); border-radius:20px; padding:6px 16px; font-size:13px; color:var(--text); }
   .stat-pill span { font-weight:700; color:var(--gold); margin-left:4px; }
 
-  .queue-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; background:#fff; border:1px solid var(--light-border); border-radius:10px; padding:12px 16px; margin-bottom:16px; flex-wrap:wrap; }
+  .queue-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--dark2); border:1px solid var(--border); border-radius:10px; padding:12px 16px; margin-bottom:16px; flex-wrap:wrap; }
   .queue-toolbar-left { display:flex; gap:8px; flex-wrap:wrap; }
   .queue-toolbar-right { display:flex; gap:8px; align-items:center; }
-  .btn-bulk { background:#fff; border:1px solid var(--light-border); color:var(--light-text); border-radius:6px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.15s; }
-  .btn-bulk:hover { background:#f4f5f7; }
+  .btn-bulk { background:var(--dark3); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.15s; }
+  .btn-bulk:hover { background:var(--dark4); border-color:var(--gold); }
   .btn-bulk.approve-all { border-color:var(--green); color:var(--green); }
-  .btn-bulk.decline-all { border-color:#c0392b; color:#c0392b; }
+  .btn-bulk.decline-all { border-color:var(--red); color:var(--red); }
   .btn-submit { background:var(--gold); color:#000; border:none; border-radius:6px; padding:10px 22px; font-size:14px; font-weight:700; cursor:pointer; transition:all 0.15s; }
   .btn-submit:hover:not(:disabled) { background:var(--gold-light); }
   .btn-submit:disabled { opacity:0.5; cursor:not-allowed; }
-  .selection-count { font-size:13px; color:#666; font-weight:600; }
+  .selection-count { font-size:13px; color:var(--text-muted); font-weight:600; }
 
-  .contact-card { background:#fff; border:1px solid var(--light-border); border-radius:10px; padding:18px 20px; margin-bottom:10px; transition:all 0.15s; }
+  .contact-card { background:var(--dark2); border:1px solid var(--border); border-radius:10px; padding:18px 20px; margin-bottom:10px; transition:all 0.15s; }
+  .contact-card:hover { border-color:#3a3a40; }
   .contact-card.approved { border-left:4px solid var(--green); }
-  .contact-card.declined { border-left:4px solid #c0392b; opacity:0.65; }
-  .contact-card.is-client { background:#fff8e1; border-left:4px solid var(--gold); }
+  .contact-card.declined { border-left:4px solid var(--red); opacity:0.55; }
+  .contact-card.is-client { background:rgba(200,130,10,0.08); border-left:4px solid var(--gold); }
   .contact-card-row { display:flex; align-items:center; gap:16px; }
   .contact-avatar { width:44px; height:44px; border-radius:50%; background:var(--gold); display:flex; align-items:center; justify-content:center; font-weight:700; color:#000; font-size:16px; flex-shrink:0; }
   .contact-info { flex:1; min-width:0; }
-  .contact-name { font-weight:700; color:var(--light-text); font-size:15px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .contact-name { font-weight:700; color:var(--text); font-size:15px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .contact-client-badge { background:var(--gold); color:#000; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
-  .contact-new-badge { background:#10b981; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
-  .contact-rcrm-badge { background:#3b82f6; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
-  .contact-signal-high { background:#ef4444; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
-  .contact-signal-medium { background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
-  .contact-signal-low { background:#6b7280; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
-  .contact-info-badge { background:#e5e7eb; color:#374151; font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; letter-spacing:0.02em; }
-  .contact-sequence-badge { background:#7c3aed; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
-  .contact-title { font-size:13px; color:#666; margin-top:3px; }
+  .contact-new-badge { background:rgba(46,204,113,0.18); color:var(--green); border:1px solid rgba(46,204,113,0.4); font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-rcrm-badge { background:rgba(52,152,219,0.18); color:#5dade2; border:1px solid rgba(52,152,219,0.4); font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-signal-high { background:rgba(231,76,60,0.18); color:#e74c3c; border:1px solid rgba(231,76,60,0.45); font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-signal-medium { background:rgba(200,130,10,0.18); color:var(--gold-light); border:1px solid rgba(200,130,10,0.45); font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-signal-low { background:var(--dark4); color:var(--text-muted); border:1px solid var(--border); font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-info-badge { background:var(--dark4); color:var(--text-muted); font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; letter-spacing:0.02em; }
+  .contact-sequence-badge { background:rgba(124,58,237,0.2); color:#a78bfa; border:1px solid rgba(124,58,237,0.45); font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  .contact-title { font-size:13px; color:var(--text-muted); margin-top:3px; }
   .contact-company { font-size:13px; color:var(--gold); font-weight:600; margin-top:2px; }
 
   /* Toggle switch */
   .toggle-wrap { display:flex; align-items:center; gap:10px; flex-shrink:0; }
-  .toggle-label { font-size:12px; font-weight:600; color:#666; min-width:60px; text-align:right; }
+  .toggle-label { font-size:12px; font-weight:600; color:var(--text-muted); min-width:60px; text-align:right; }
   .toggle-label.on { color:var(--green); }
-  .toggle-label.off { color:#c0392b; }
+  .toggle-label.off { color:var(--red); }
   .tog { position:relative; display:inline-block; width:48px; height:26px; }
   .tog input { opacity:0; width:0; height:0; }
-  .tog-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#ccc; transition:0.2s; border-radius:26px; }
-  .tog-slider:before { position:absolute; content:""; height:20px; width:20px; left:3px; bottom:3px; background:white; transition:0.2s; border-radius:50%; }
-  input:checked + .tog-slider { background:var(--green); }
-  input:checked + .tog-slider:before { transform:translateX(22px); }
+  .tog-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:var(--dark4); border:1px solid var(--border); transition:0.2s; border-radius:26px; }
+  .tog-slider:before { position:absolute; content:""; height:20px; width:20px; left:3px; bottom:2px; background:#c8c8cc; transition:0.2s; border-radius:50%; }
+  input:checked + .tog-slider { background:var(--green); border-color:var(--green); }
+  input:checked + .tog-slider:before { transform:translateX(22px); background:#fff; }
 
-  .contact-meta-row { display:flex; gap:20px; margin-top:12px; padding-top:12px; border-top:1px solid #f0f0f0; font-size:12px; color:#666; flex-wrap:wrap; }
+  .contact-meta-row { display:flex; gap:20px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; color:var(--text-muted); flex-wrap:wrap; }
   .contact-meta-item { display:flex; gap:4px; }
-  .contact-meta-item strong { color:var(--light-text); font-weight:600; }
+  .contact-meta-item strong { color:var(--text); font-weight:600; }
   .contact-meta-item a { color:var(--gold); text-decoration:none; font-weight:600; }
   .contact-meta-item a:hover { text-decoration:underline; }
 
-  .empty-queue { text-align:center; padding:80px 20px; color:#aaa; background:#fff; border:1px solid var(--light-border); border-radius:10px; }
-  .empty-queue p { font-size:15px; margin-bottom:8px; color:var(--light-text); font-weight:600; }
-  .empty-queue small { font-size:13px; color:#888; }
+  .empty-queue { text-align:center; padding:80px 20px; color:var(--text-muted); background:var(--dark2); border:1px solid var(--border); border-radius:10px; }
+  .empty-queue p { font-size:15px; margin-bottom:8px; color:var(--text); font-weight:600; }
+  .empty-queue small { font-size:13px; color:var(--text-muted); }
   .queue-result { padding:14px 18px; border-radius:8px; margin-bottom:16px; font-size:14px; font-weight:600; display:none; }
-  .queue-result.ok { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
-  .queue-result.err { background:#ffebee; color:#c62828; border:1px solid #ef9a9a; }
-  .queue-loading { text-align:center; padding:60px 20px; color:#666; font-size:14px; }
+  .queue-result.ok { background:rgba(46,204,113,0.12); color:var(--green); border:1px solid rgba(46,204,113,0.4); }
+  .queue-result.err { background:rgba(231,76,60,0.12); color:var(--red); border:1px solid rgba(231,76,60,0.4); }
+  .queue-loading { text-align:center; padding:60px 20px; color:var(--text-muted); font-size:14px; }
 
   /* ═══════════════════════ HIRING SIGNALS ═══════════════════════ */
-  .hs-section { background:#fff; border:1px solid var(--light-border); border-left:4px solid #f59e0b; border-radius:10px; padding:14px 16px; margin-bottom:16px; transition:all 0.2s; }
+  .hs-section { background:var(--dark2); border:1px solid var(--border); border-left:4px solid var(--gold); border-radius:10px; padding:14px 16px; margin-bottom:16px; transition:all 0.2s; }
   .hs-header { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
   .hs-header-left { display:flex; align-items:center; gap:10px; }
-  .hs-title { font-size:14px; font-weight:700; color:var(--light-text); display:flex; align-items:center; gap:6px; }
-  .hs-title::before { content:'⚡'; color:#f59e0b; font-size:16px; }
-  .hs-sub { font-size:11px; color:#666; }
-  .hs-count { background:#fef3c7; color:#92400e; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; letter-spacing:0.05em; }
-  .hs-toggle-btn { background:#fff; border:1px solid #fde68a; color:#92400e; font-size:11px; font-weight:600; padding:5px 10px; border-radius:5px; cursor:pointer; }
-  .hs-toggle-btn:hover { background:#fef3c7; }
-  .hs-empty { padding:14px; text-align:center; color:#666; font-size:12px; background:#fafafa; border-radius:6px; }
+  .hs-title { font-size:14px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:6px; }
+  .hs-title::before { content:'⚡'; color:var(--gold); font-size:16px; }
+  .hs-sub { font-size:11px; color:var(--text-muted); }
+  .hs-count { background:rgba(200,130,10,0.15); color:var(--gold-light); border:1px solid rgba(200,130,10,0.4); font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; letter-spacing:0.05em; }
+  .hs-toggle-btn { background:var(--dark3); border:1px solid var(--border); color:var(--gold-light); font-size:11px; font-weight:600; padding:5px 10px; border-radius:5px; cursor:pointer; }
+  .hs-toggle-btn:hover { background:var(--dark4); border-color:var(--gold); }
+  .hs-empty { padding:14px; text-align:center; color:var(--text-muted); font-size:12px; background:var(--dark3); border-radius:6px; }
 
   /* Strip mode (default) — horizontal scroll, scrollbar always visible */
   .hs-strip { display:flex; gap:10px; overflow-x:scroll; overflow-y:hidden; padding-bottom:10px; scroll-snap-type:x mandatory; align-items:stretch; }
   .hs-strip::-webkit-scrollbar { height:10px; -webkit-appearance:none; }
-  .hs-strip::-webkit-scrollbar-track { background:#fef3c7; border-radius:5px; border:1px solid #fde68a; }
-  .hs-strip::-webkit-scrollbar-thumb { background:#f59e0b; border-radius:5px; border:1px solid #d97706; }
-  .hs-strip::-webkit-scrollbar-thumb:hover { background:#d97706; }
+  .hs-strip::-webkit-scrollbar-track { background:var(--dark3); border-radius:5px; border:1px solid var(--border); }
+  .hs-strip::-webkit-scrollbar-thumb { background:var(--gold); border-radius:5px; border:1px solid var(--gold-light); }
+  .hs-strip::-webkit-scrollbar-thumb:hover { background:var(--gold-light); }
   /* Firefox */
-  .hs-strip { scrollbar-width:auto; scrollbar-color:#f59e0b #fef3c7; }
+  .hs-strip { scrollbar-width:auto; scrollbar-color:var(--gold) var(--dark3); }
   .hs-strip .hs-card { flex:0 0 300px; scroll-snap-align:start; }
 
   /* Expanded mode — grid */
   .hs-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:10px; align-items:stretch; }
 
   /* Card */
-  .hs-card { background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px 14px; transition:all 0.15s; display:flex; flex-direction:column; }
-  .hs-card:hover { border-color:#f59e0b; box-shadow:0 2px 8px rgba(245,158,11,0.18); }
+  .hs-card { background:var(--dark3); border:1px solid var(--border); border-radius:8px; padding:12px 14px; transition:all 0.15s; display:flex; flex-direction:column; }
+  .hs-card:hover { border-color:var(--gold); box-shadow:0 2px 10px rgba(200,130,10,0.15); }
   .hs-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:6px; }
-  .hs-company { font-weight:700; color:var(--light-text); font-size:13px; line-height:1.3; }
-  .hs-score { background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:3px 8px; border-radius:10px; flex-shrink:0; white-space:nowrap; }
+  .hs-company { font-weight:700; color:var(--text); font-size:13px; line-height:1.3; }
+  .hs-score { background:var(--gold); color:#000; font-size:10px; font-weight:700; padding:3px 8px; border-radius:10px; flex-shrink:0; white-space:nowrap; }
   .hs-tag-row { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:6px; }
-  .hs-tag { background:#fff; border:1px solid #fde68a; color:#92400e; font-size:10px; font-weight:600; padding:2px 7px; border-radius:9px; }
-  .hs-tag.urgent { background:#fee2e2; border-color:#fecaca; color:#991b1b; }
-  .hs-tag.manual-prospect { background:#c0392b; border-color:#7f1d1d; color:#fff; font-weight:700; letter-spacing:0.05em; }
-  .hs-card.manual-prospect { border-left:4px solid #c0392b; background:#1a0c0c; }
-  .hs-pitch { font-size:11px; color:#444; line-height:1.4; margin-bottom:6px; font-style:italic; }
-  .hs-meta { font-size:10px; color:#666; margin-bottom:8px; line-height:1.4; flex:1; }
-  .hs-meta strong { color:#444; font-weight:600; }
-  .hs-actions { display:flex; gap:6px; padding-top:8px; border-top:1px solid #fde68a; margin-top:auto; }
-  .hs-btn { background:#f59e0b; color:#fff; border:none; font-size:11px; font-weight:600; padding:7px 10px; border-radius:5px; cursor:pointer; transition:all 0.15s; flex:1; text-align:center; }
-  .hs-btn:hover:not(:disabled) { background:#d97706; }
+  .hs-tag { background:var(--dark4); border:1px solid var(--border); color:var(--gold-light); font-size:10px; font-weight:600; padding:2px 7px; border-radius:9px; }
+  .hs-tag.urgent { background:rgba(231,76,60,0.15); border-color:rgba(231,76,60,0.4); color:#e74c3c; }
+  .hs-tag.manual-prospect { background:var(--red); border-color:#c0392b; color:#fff; font-weight:700; letter-spacing:0.05em; }
+  .hs-card.manual-prospect { border-left:4px solid var(--red); background:#1a0c0c; }
+  .hs-pitch { font-size:11px; color:var(--text-muted); line-height:1.4; margin-bottom:6px; font-style:italic; }
+  .hs-meta { font-size:10px; color:var(--text-muted); margin-bottom:8px; line-height:1.4; flex:1; }
+  .hs-meta strong { color:var(--text); font-weight:600; }
+  .hs-actions { display:flex; gap:6px; padding-top:8px; border-top:1px solid var(--border); margin-top:auto; }
+  .hs-btn { background:var(--gold); color:#000; border:none; font-size:11px; font-weight:600; padding:7px 10px; border-radius:5px; cursor:pointer; transition:all 0.15s; flex:1; text-align:center; }
+  .hs-btn:hover:not(:disabled) { background:var(--gold-light); }
   .hs-btn:disabled { opacity:0.6; cursor:not-allowed; }
-  .hs-btn.secondary { background:#fff; color:#991b1b; border:1px solid #fecaca; flex:0 0 auto; padding:7px 12px; }
-  .hs-btn.secondary:hover:not(:disabled) { background:#fee2e2; }
-  .hs-btn.enriched { background:#10b981; }
+  .hs-btn.secondary { background:var(--dark4); color:#e74c3c; border:1px solid rgba(231,76,60,0.4); flex:0 0 auto; padding:7px 12px; }
+  .hs-btn.secondary:hover:not(:disabled) { background:rgba(231,76,60,0.15); }
+  .hs-btn.enriched { background:var(--green); color:#fff; }
 
-  /* Amber theme on queue cards (for hiring_signals lead_source) */
-  .hs-amber-card { background:#fffbeb !important; border:1px solid #fde68a !important; border-left:4px solid #f59e0b !important; }
-  .hs-source-badge { background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  /* Gold-accent theme on queue cards (for hiring_signals lead_source) */
+  .hs-amber-card { background:var(--dark2) !important; border:1px solid var(--border) !important; border-left:4px solid var(--gold) !important; }
+  .hs-source-badge { background:var(--gold); color:#000; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
 
   /* Draft email — inline expanded preview (click to open) */
-  .hs-queue-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid #fde68a; }
-  .hs-queue-btn { background:#f59e0b; color:#fff; border:none; font-size:12px; font-weight:600; padding:8px 14px; border-radius:5px; cursor:pointer; flex:1; min-width:140px; transition:all 0.15s; }
-  .hs-queue-btn:hover:not(:disabled) { background:#d97706; }
+  .hs-queue-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
+  .hs-queue-btn { background:var(--gold); color:#000; border:none; font-size:12px; font-weight:600; padding:8px 14px; border-radius:5px; cursor:pointer; flex:1; min-width:140px; transition:all 0.15s; }
+  .hs-queue-btn:hover:not(:disabled) { background:var(--gold-light); }
   .hs-queue-btn:disabled { opacity:0.6; cursor:not-allowed; }
-  .hs-queue-btn.sent { background:#10b981; }
-  .hs-queue-btn.outline { background:#fff; color:#92400e; border:1px solid #fde68a; }
-  .hs-queue-btn.outline:hover:not(:disabled) { background:#fef3c7; }
+  .hs-queue-btn.sent { background:var(--green); color:#fff; }
+  .hs-queue-btn.outline { background:var(--dark3); color:var(--gold-light); border:1px solid var(--border); }
+  .hs-queue-btn.outline:hover:not(:disabled) { background:var(--dark4); border-color:var(--gold); }
+  .hs-queue-btn.locked { opacity:0.3; cursor:not-allowed; filter:grayscale(0.6); }
+
+  /* Two-way choice on hiring-signal queue cards: CRM sequence OR manual draft */
+  .hs-choose-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
+  .hs-choose-label { font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-right:2px; }
+  .hs-decline-btn { background:transparent; border:1px solid var(--border); color:var(--text-muted); font-size:12px; font-weight:600; padding:8px 14px; border-radius:6px; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+  .hs-decline-btn:hover:not(:disabled) { border-color:var(--red); color:var(--red); }
+  .hs-decline-btn:disabled { opacity:0.5; cursor:not-allowed; }
   .hs-draft-preview { display:none; width:100%; margin-top:10px; background:#1c1c1f; color:#e8e8e8; border:1px solid #f59e0b; border-radius:8px; padding:16px; box-shadow:0 4px 16px rgba(0,0,0,0.25); font-size:13px; line-height:1.55; }
   .hs-draft-preview.expanded { display:block; }
   .hs-draft-preview-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #333; }
@@ -2284,6 +2293,80 @@ async function hsSendOutlook(queueKey, btn) {
   btn.classList.add('sent');
   c.email_status = 'sent';
   c.outlook_status = 'sent';
+  // Graduate: the manual choice is committed, so drop the card from the approval
+  // queue. It now tracks in the In Sequence panel (outlook_status=sent). Refresh the
+  // In Sequence cache so it shows there on next open.
+  try { if (typeof jrvCacheBust === 'function' && typeof JRV_CACHE_KEYS !== 'undefined') jrvCacheBust(JRV_CACHE_KEYS.queue); } catch (e) {}
+  const goneKey = c.key || '';
+  setTimeout(() => { queueContacts = queueContacts.filter(x => (x.key || '') !== goneKey); renderQueue(); }, 1000);
+}
+
+// ── Hiring-signal per-lead decision: CRM sequence OR manual draft (mutually exclusive) ──
+// Choosing one locks the other. On commit the card leaves the approval queue and
+// tracks in the In Sequence panel (dashboard sequencing).
+async function hsChooseCrm(idx) {
+  const c = queueContacts[idx];
+  if (!c) return;
+  const crmBtn = document.getElementById('hsCrmBtn' + idx);
+  const manualBtn = document.getElementById('hsManualBtn' + idx);
+  if (!crmBtn || crmBtn.disabled) return;
+  const persona = c.persona || derivePersona(c.contact_title);
+  const seqName = (PERSONA_SEQUENCE[persona] || PERSONA_SEQUENCE['General']).name;
+  if (!confirm('Enroll ' + (c.contact_name || 'this contact') + ' in the RCRM sequence "' + seqName + '"?\n\nRCRM sends the templated sequence emails automatically. The manual draft option will be disabled for this lead.')) return;
+  // Lock the other choice
+  if (manualBtn) { manualBtn.disabled = true; manualBtn.classList.add('locked'); }
+  crmBtn.disabled = true;
+  crmBtn.textContent = 'Enrolling…';
+  // Approve WITH sequence enrollment (buildPayload populates sequence_id from persona)
+  c._approved = true;
+  const payload = buildPayload(c);
+  payload.decision = 'approve';
+  try {
+    const resp = await fetch(APPROVAL_WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const bodyText = await resp.text();
+    console.log('[HS CRM] ' + (c.contact_name || '') + ' -> HTTP ' + resp.status + ' | ' + bodyText.slice(0, 200));
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    crmBtn.textContent = '✓ In CRM Sequence';
+    crmBtn.classList.add('sent');
+    try { if (typeof jrvCacheBust === 'function' && typeof JRV_CACHE_KEYS !== 'undefined') jrvCacheBust(JRV_CACHE_KEYS.queue); } catch (e) {}
+    const goneKey = c.key || '';
+    setTimeout(() => { queueContacts = queueContacts.filter(x => (x.key || '') !== goneKey); renderQueue(); }, 1000);
+  } catch (e) {
+    console.error('[HS CRM] enroll failed:', e);
+    crmBtn.textContent = '✕ Failed — retry';
+    crmBtn.disabled = false;
+    if (manualBtn) { manualBtn.disabled = false; manualBtn.classList.remove('locked'); }
+  }
+}
+
+function hsChooseManual(idx, cardEl) {
+  const c = queueContacts[idx];
+  if (!c || !cardEl) return;
+  const crmBtn = document.getElementById('hsCrmBtn' + idx);
+  const manualBtn = document.getElementById('hsManualBtn' + idx);
+  // Choosing manual locks the CRM option for this lead
+  if (crmBtn) { crmBtn.disabled = true; crmBtn.classList.add('locked'); }
+  // Open the v8h Claude draft; the draft's "Send via Outlook" (hsSendOutlook) commits
+  // it and graduates the card. Reuses the exact manual-lead drafter + send path.
+  hsDraftEmail(c.key, manualBtn, cardEl);
+}
+
+async function hsDecline(idx) {
+  const c = queueContacts[idx];
+  if (!c) return;
+  const btn = document.getElementById('hsDeclineBtn' + idx);
+  if (btn && btn.disabled) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Removing…'; }
+  try {
+    const resp = await fetch(QUEUE_DECLINE_URL + '?queue_key=' + encodeURIComponent(c.key || ''), { method: 'GET' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const goneKey = c.key || '';
+    queueContacts = queueContacts.filter(x => (x.key || '') !== goneKey);
+    renderQueue();
+  } catch (e) {
+    console.error('[HS Decline] failed:', e);
+    if (btn) { btn.disabled = false; btn.textContent = '✕ Decline'; }
+  }
 }
 
 async function initQueue() {
@@ -2403,12 +2486,16 @@ function renderQueue() {
             <div class="contact-company">${escapeHtml(company)}${industry ? ' · ' + escapeHtml(industry) : ''}</div>
           </div>
           <div class="toggle-wrap">
-            <span class="toggle-label ${approved ? 'on' : 'off'}" id="togLbl${i}">${approved ? 'APPROVE' : 'DECLINE'}</span>
-            <label class="tog">
-              <input type="checkbox" ${approved ? 'checked' : ''} onchange="toggleContact(${i}, this.checked)">
-              <span class="tog-slider"></span>
-            </label>
-            <button class="btn-card-send" id="sendBtn${i}" onclick="submitOne(${i})" title="Submit this one decision now (1 operation)">Submit Individually</button>
+            ${isHiringSignal ? `
+              <button class="hs-decline-btn" id="hsDeclineBtn${i}" onclick="hsDecline(${i})" title="Remove this lead from the queue">✕ Decline</button>
+            ` : `
+              <span class="toggle-label ${approved ? 'on' : 'off'}" id="togLbl${i}">${approved ? 'APPROVE' : 'DECLINE'}</span>
+              <label class="tog">
+                <input type="checkbox" ${approved ? 'checked' : ''} onchange="toggleContact(${i}, this.checked)">
+                <span class="tog-slider"></span>
+              </label>
+              <button class="btn-card-send" id="sendBtn${i}" onclick="submitOne(${i})" title="Submit this one decision now (1 operation)">Submit Individually</button>
+            `}
           </div>
         </div>
         <div class="contact-meta-row">
@@ -2424,15 +2511,16 @@ function renderQueue() {
           ${(inRCRM || isClient) && c.rcrm_owner ? `<div class="contact-meta-item"><strong>Owner:</strong> ${escapeHtml(c.rcrm_owner)}</div>` : ''}
           ${(inRCRM || isClient) && !c.last_communication ? `<div class="contact-meta-item" style="color:#f59e0b;"><strong>In RCRM</strong> — No prior contact logged</div>` : ''}
           ${inSequence && activeSequenceName ? `<div class="contact-meta-item" style="color:#7c3aed;"><strong>Active Sequence:</strong> ${escapeHtml(activeSequenceName)}</div>` : ''}
-          ${isHiringSignal && c.signal_tag ? `<div class="contact-meta-item" style="color:#92400e;"><strong>Signal:</strong> ${escapeHtml(c.signal_tag)}</div>` : ''}
-          ${isHiringSignal && c.pitch_angle ? `<div class="contact-meta-item" style="color:#92400e;"><strong>Pitch:</strong> ${escapeHtml(c.pitch_angle)}</div>` : ''}
+          ${isHiringSignal && c.signal_tag ? `<div class="contact-meta-item" style="color:var(--gold-light);"><strong style="color:var(--gold-light);">Signal:</strong> ${escapeHtml(c.signal_tag)}</div>` : ''}
+          ${isHiringSignal && c.pitch_angle ? `<div class="contact-meta-item" style="color:var(--gold-light);"><strong style="color:var(--gold-light);">Pitch:</strong> ${escapeHtml(c.pitch_angle)}</div>` : ''}
         </div>
         ${isHiringSignal ? `
-        <div class="hs-queue-actions">
-          <button class="hs-queue-btn outline" onclick="hsDraftEmail('${escapeAttr(queueKey)}', this, this.closest('.contact-card'))">${c.email_draft_body ? '✉ Show Draft' : '✉ Draft Email'}</button>
-          ${emailSent ? `<button class="hs-queue-btn sent" disabled>✓ Sent</button>` : ''}
-          <div class="hs-draft-preview"></div>
-        </div>` : ''}
+        <div class="hs-choose-row">
+          <span class="hs-choose-label">Work this lead —</span>
+          <button class="hs-queue-btn" id="hsCrmBtn${i}" onclick="hsChooseCrm(${i})" title="Enroll this contact in the RCRM sequence — RCRM sends the templated sequence emails automatically">→ Add to CRM Sequence</button>
+          <button class="hs-queue-btn outline" id="hsManualBtn${i}" onclick="hsChooseManual(${i}, this.closest('.contact-card'))" title="Draft a personalized email with Claude and send it from Outlook — same as a manual lead">✎ Draft &amp; Send Manually</button>
+        </div>
+        <div class="hs-draft-preview"></div>` : ''}
         ${c.about_company ? `<div class="about-company-box">📋 ${escapeHtml(c.about_company)}</div>` : `
         <div class="about-company-missing">
           <span style="flex:1">No company info yet (Send via Outlook will enrich automatically)</span>
@@ -2558,6 +2646,9 @@ function buildPayload(c) {
   const persona = c.persona || derivePersona(c.contact_title);
   const seqMap = PERSONA_SEQUENCE[persona] || PERSONA_SEQUENCE['General'];
   const hasEmail = !!(c.contact_email && String(c.contact_email).trim());
+  // sequence_id populated = enroll in the RCRM sequence (the "CRM Sequence" choice).
+  // The "Draft & Send Manually" choice (hsSendOutlook) overrides this to "" after
+  // calling buildPayload, which suppresses enrollment via the Wave-8 filter.
   const sequence_id = c.sequence_id || (hasEmail ? seqMap.id : '');
   const sequence_name = c.sequence_name || (hasEmail ? seqMap.name : 'No Email - Manually Prospect');
   return {
