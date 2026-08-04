@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0804-A-REMOVE-SOURCING-SHORTLIST -->
+<!-- BUILD: ELEVATE-2026-0804-B-MANUALLEAD-OPTIMISTIC -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -7453,15 +7453,47 @@ async function jrvSubmitManualLead() {
       body: JSON.stringify({ company_name: company, company_city: city, target_role: targetRole, context, contacts }),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    jrvCacheBust(JRV_CACHE_KEYS.queue); // new lead enters the pipeline counts
-    jrvCacheBust(JRV_CACHE_KEYS.inseq); // new lead carries a backend-generated key
+    // The add webhook returns the backend-generated keys (comma-separated, in the same
+    // order as the contacts we posted). Use them to splice the new manual-lead record(s)
+    // straight into the open panel instead of re-pulling the whole list — so a manual
+    // add costs ONE Make operation (the add itself), not a second full In Sequence fetch
+    // + slug-resolution sweep. The daily refresh (or the ⟳ Refresh button) reconciles
+    // from datastore truth later.
+    let addedKeys = [];
+    try { const rj = await res.json(); addedKeys = String((rj && rj.keys) || '').split(',').map(s => s.trim()).filter(Boolean); } catch (_) {}
+    jrvCacheBust(JRV_CACHE_KEYS.queue); // pipeline counts reconcile on the next natural load
+    const _mkKey = (nm) => 'manual-' + String(company).toLowerCase().replace(/ /g, '-') + '-' + String(nm || '').toLowerCase().replace(/ /g, '-');
+    const _nowIso = new Date().toISOString();
+    const optimistic = contacts.map((c, i) => ({
+      key: addedKeys[i] || _mkKey(c.name),
+      decision: 'approved', outlook_status: 'sent', pipeline_stage: 'manual_lead',
+      lead_source: 'manual', in_sequence: 'true', is_client: 'false',
+      removed_from_sequence: 'false', bounced: 'false', has_replied: 'false',
+      response_state: '', reach_out_count: 0,
+      company_name: company, company_city: city || '',
+      contact_name: c.name || '', contact_email: c.email || '', contact_title: c.title || '',
+      contact_city: c.city || city || '', contact_phone: c.phone || '', contact_mobile: c.mobile || '',
+      contact_linkedin: c.linkedin || '', rcrm_contact_id: c.rcrm_contact_id || '',
+      rcrm_company_slug: c.rcrm_company_slug || '',
+      manual_lead_context: context || '', manual_lead_added_at: _nowIso,
+      added_at: _nowIso, approved_at: _nowIso,
+    }));
     jrvCloseAddManualLead();
-    // Manual add is infrequent and the later draft/send need the backend-generated
-    // queue key, so this is the ONE action that forces a single fresh pull (when the
-    // modal is open) rather than fabricating a local record.
-    const seqModal = document.getElementById('jrvInSeqModal');
-    if (seqModal && seqModal.style.display !== 'none') {
-      jrvFetchInSeq(true);
+    if (jrvInSeqState.pipelineMode === 'in_the_mix') {
+      // The Add form lives in the In Sequence panel; if we're somehow in In-the-Mix
+      // mode, just clear the In Sequence cache so its next open pulls the new leads.
+      jrvCacheBust(JRV_CACHE_KEYS.inseq);
+    } else {
+      // Replace any existing same-email rows (a confirmed re-add resets that entry),
+      // then merge + dedupe, update the cache so a reopen needs no fetch, and repaint.
+      const _newEmails = new Set(optimistic.map(r => (r.contact_email || '').trim().toLowerCase()).filter(Boolean));
+      const _base = (jrvInSeqState.records || []).filter(r => {
+        const e = (r.contact_email || '').trim().toLowerCase();
+        return !(e && _newEmails.has(e));
+      });
+      jrvInSeqState.records = jrvDedupeByContact(_base.concat(optimistic));
+      try { jrvCacheWrite(JRV_CACHE_KEYS.inseq, jrvInSeqState.records); } catch (_) {}
+      if (typeof jrvRenderInSeq === 'function') jrvRenderInSeq();
     }
   } catch (e) {
     console.error('[Manual lead add] failed:', e);
