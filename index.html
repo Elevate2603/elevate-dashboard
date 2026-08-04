@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0804-B-MANUALLEAD-OPTIMISTIC -->
+<!-- BUILD: ELEVATE-2026-0804-C-MANUALLEAD-WEBSITE-SEARCH -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -5878,18 +5878,31 @@ function jrvShowManualLeadPrefill(ui) {
 // company/city/context fields (so Travis can correct a JARVIS mishear first),
 // then runs the same RCRM + ZI lookup the voice path used to auto-run. Nothing
 // searches until this button is clicked — no wasted ZI lookups on a wrong name.
+// Normalize a user-typed website into the http://domain form ZoomInfo's
+// companyWebsite filter expects. Accepts bare domains ("multimatic.com"),
+// full URLs, or blank.
+function jrvNormalizeWebsite(raw) {
+  let s = (raw || '').toString().trim().replace(/\s+/g, '');
+  if (!s) return '';
+  if (!/^https?:\/\//i.test(s)) s = 'http://' + s;
+  return s;
+}
+
 async function jrvManualLeadSearch() {
   const companyEl = document.getElementById('jrvManualCompany');
   const cityEl = document.getElementById('jrvManualCity');
+  const websiteEl = document.getElementById('jrvManualWebsite');
   const contextEl = document.getElementById('jrvManualContext');
   const btn = document.getElementById('jrvManualSearchBtn');
   const cont = document.getElementById('jrvManualCandidates');
   const company = ((companyEl && companyEl.value) || '').trim();
   const city = ((cityEl && cityEl.value) || '').trim();
-  if (!company) { alert('Enter a company name to search.'); if (companyEl) companyEl.focus(); return; }
-  // Already pulled this exact company/city this session → don't re-spend ops.
-  // Just re-show the existing picker. Editing the name changes the key below.
-  const q = (company + '|' + city).toLowerCase();
+  // Website is an alternative / precision key: ZoomInfo matches on domain, which
+  // pinpoints the exact company when the name is common or the city is unknown.
+  const website = jrvNormalizeWebsite((websiteEl && websiteEl.value) || '');
+  if (!company && !website) { alert('Enter a company name or a company website to search.'); if (companyEl) companyEl.focus(); return; }
+  // Already pulled this exact company/city/website this session → don't re-spend ops.
+  const q = (company + '|' + city + '|' + website).toLowerCase();
   if (jrvManualLeadState && q === jrvManualLeadLastQuery) {
     if (cont) cont.style.display = 'block';
     return;
@@ -5901,17 +5914,18 @@ async function jrvManualLeadSearch() {
   const personas = (jrvManualLeadVoiceUi && Array.isArray(jrvManualLeadVoiceUi.target_personas))
     ? jrvManualLeadVoiceUi.target_personas : [];
   const ui = { company_name: company, company_city: city, role_being_hired: role, target_personas: personas };
+  const searchLabel = company || website;
   if (btn) { btn.disabled = true; btn.textContent = 'Searching…'; }
-  if (cont) { cont.style.display = 'block'; cont.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">Searching RCRM + ZoomInfo for "' + escapeHtml(company) + '"…</div>'; }
+  if (cont) { cont.style.display = 'block'; cont.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">Searching RCRM + ZoomInfo for "' + escapeHtml(searchLabel) + '"…</div>'; }
   try {
     const [rcrmCandidates, ziCandidates] = await Promise.all([
       jrvFetchRCRMCompanyCandidates(company),
-      jrvFetchZICompanyCandidates(company, city),
+      jrvFetchZICompanyCandidates(company, city, website),
     ]);
     jrvLastRcrmCompanyCandidates = rcrmCandidates || [];
     const merged = [...(rcrmCandidates || []), ...(ziCandidates || [])];
     if (!merged.length) {
-      if (cont) cont.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">No RCRM or ZoomInfo match for "' + escapeHtml(company) + '". Check the spelling/city above and search again, or paste contacts manually below.</div>';
+      if (cont) cont.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">No RCRM or ZoomInfo match for "' + escapeHtml(searchLabel) + '". Check the spelling / city / website above and search again, or paste contacts manually below.</div>';
       return;
     }
     jrvManualLeadLastQuery = q; // remember this company/city so a repeat click won't re-search
@@ -6046,23 +6060,25 @@ async function jrvFetchRCRMCompanyContacts(companySlug, targetPersonas, targetRo
 // ZI Company Candidates — search ZoomInfo for company variants of what Travis said.
 // Retries with a shortened name (drops trailing "Canada", "Inc.", "Ltd.", etc.) when
 // the verbatim query returns nothing. Returns array of candidate companies.
-async function jrvFetchZICompanyCandidates(query, cityHint) {
-  if (!query || !JRV_CONFIG.ZI_COMPANY_CANDIDATES_URL) return [];
+async function jrvFetchZICompanyCandidates(query, cityHint, website) {
+  if (!JRV_CONFIG.ZI_COMPANY_CANDIDATES_URL) return [];
+  if (!query && !website) return [];
   const tryQuery = async (q) => {
     const res = await fetch(JRV_CONFIG.ZI_COMPANY_CANDIDATES_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company_name: q, company_city: cityHint || '' }),
+      body: JSON.stringify({ company_name: q || '', company_city: cityHint || '', company_website: website || '' }),
     });
     if (!res.ok) return [];
     const json = await res.json();
     const raw = Array.isArray(json.candidates) ? json.candidates : [];
     return raw.map(r => (r && r.aggregate) ? r.aggregate : r).filter(c => c && c.id && c.name);
   };
-  // First try: verbatim
-  let candidates = await tryQuery(query);
-  if (candidates.length) return candidates;
-  // Retry with trailing geographic / corporate-suffix words stripped
+  // First try: verbatim name + website (if any). A website pins the exact company
+  // by domain, so if one was given we trust the result and skip the name-strip retry.
+  let candidates = await tryQuery(query || '');
+  if (candidates.length || website) return candidates;
+  // No website and a name miss — retry with trailing geographic / corporate-suffix words stripped.
   const stripped = query.replace(/\b(canada|usa|america|inc\.?|ltd\.?|llc|llp|corp\.?|corporation|company|co\.?|the|group|holdings|enterprises?)\b/gi, '').replace(/\s+/g, ' ').trim();
   if (stripped && stripped.toLowerCase() !== query.toLowerCase()) {
     candidates = await tryQuery(stripped);
@@ -6312,6 +6328,14 @@ async function jrvPullSelectedContacts() {
     website: _primaryCo.website || '',
     city: _primaryCo.city || '',
   } : null;
+  // Reflect the picked company back into the form so a website-only search still
+  // carries a company name into submit (and the website field shows what matched).
+  if (_primaryCo) {
+    const _cIn = document.getElementById('jrvManualCompany');
+    if (_cIn && _primaryCo.name) _cIn.value = _primaryCo.name;
+    const _wIn = document.getElementById('jrvManualWebsite');
+    if (_wIn && !((_wIn.value || '').trim()) && _primaryCo.website) _wIn.value = _primaryCo.website;
+  }
   const pullBtn = document.querySelector('.jrv-contact-pick-pull');
   if (pullBtn) { pullBtn.disabled = true; pullBtn.textContent = 'Pulling…'; }
   let enrichedZi = [];
@@ -7277,7 +7301,7 @@ function jrvOpenAddManualLead() {
   const modal = document.getElementById('jrvAddManualModal');
   if (!modal) return;
   // Clear fields each open
-  ['jrvManualCompany','jrvManualCity','jrvManualContext','jrvManualPersonal','jrvManualContacts'].forEach(id => {
+  ['jrvManualCompany','jrvManualCity','jrvManualWebsite','jrvManualContext','jrvManualPersonal','jrvManualContacts'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -7418,7 +7442,7 @@ async function jrvSubmitManualLead() {
       try {
         const cr = await fetch(JRV_CONFIG.CREATE_COMPANY_URL, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ company_name: company, website: stash.website || '', city: city || stash.city || '' }),
+          body: JSON.stringify({ company_name: company, website: stash.website || ((document.getElementById('jrvManualWebsite') || {}).value || '').trim(), city: city || stash.city || '' }),
         });
         const cj = await cr.json().catch(() => ({}));
         companySlug = (cj && cj.company_slug) || '';
@@ -9369,9 +9393,13 @@ document.addEventListener('DOMContentLoaded', function() {
           <input type="text" id="jrvManualCity" placeholder="e.g. Markham" class="jrv-manual-input">
         </div>
       </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Company website <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal;">&mdash; optional, use to pinpoint the exact company when the name or city is unclear</span></label>
+        <input type="text" id="jrvManualWebsite" placeholder="e.g. multimatic.com" class="jrv-manual-input">
+      </div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
         <button type="button" id="jrvManualSearchBtn" onclick="jrvManualLeadSearch()" style="background:rgba(200,130,10,0.18);border:1px solid rgba(200,130,10,0.5);color:var(--gold);border-radius:6px;padding:8px 16px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;letter-spacing:0.4px;">🔍 Search company</button>
-        <span style="font-size:11px;color:var(--text-muted);">Fix the company / city above if JARVIS misheard, then search ZoomInfo + RCRM.</span>
+        <span style="font-size:11px;color:var(--text-muted);">Fix the company / city / website above if JARVIS misheard, then search ZoomInfo + RCRM. Have the website but not the exact name? Enter it above.</span>
       </div>
       <div style="margin-bottom:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
