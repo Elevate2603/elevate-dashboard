@@ -121,9 +121,16 @@ exports.handler = async (event) => {
     if (firstBrace !== -1 && lastBrace > firstBrace) cleaned = cleaned.slice(firstBrace, lastBrace + 1);
     decision = JSON.parse(cleaned);
   } catch {
-    // Fallback: Claude didn't comply with the JSON contract. Speak a clean retry rather
-    // than reading raw JSON/markdown/backslashes literally.
-    decision = { agent: "jarvis", speak: "Hmm, give me that again — I lost the thread.", action: null };
+    // Claude answered in plain prose instead of the JSON envelope — common for the intel
+    // insight prompts (Top 5 Hot Spots / Hot Hiring Positions), which ask for a plain-prose
+    // briefing. That prose IS the answer, so speak it directly instead of the generic retry
+    // line. Only fall back to the retry when there's genuinely nothing usable.
+    const raw = (text || "").replace(/```json|```/g, "").trim();
+    if (raw && raw.length > 15 && !/^[\[{]/.test(raw)) {
+      decision = { agent: "intel", speak: raw, action: null };
+    } else {
+      decision = { agent: "jarvis", speak: "Hmm, give me that again — I lost the thread.", action: null };
+    }
   }
 
   // Sanitize the speak field before sending to the client — TTS will read any leftover
