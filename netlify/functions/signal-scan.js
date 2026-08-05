@@ -23,6 +23,18 @@ const CORS = {
 
 const MODEL = process.env.SIGNAL_SCAN_MODEL || "claude-haiku-4-5-20251001";
 
+// Wall-time budget. A healthy run is ~22s end to end (6 pages ~2s + Haiku
+// ~19s), so there is very little headroom before a caller gives up. Bound
+// each leg explicitly rather than letting a slow dependency run unbounded.
+const PAGE_TIMEOUT_MS = 8000;
+const ANTHROPIC_TIMEOUT_MS = 60000;
+
+// Job Bank's locationstring=Ontario filter leaks the occasional out-of-province
+// employer (a Quebec company surfaced on 2026-08-05). Elevate is Ontario-only,
+// so drop anything that explicitly names another province. Blank geography is
+// kept — only an unambiguous other-province match is discarded.
+const NON_ONTARIO = /\b(quebec|québec|alberta|british columbia|manitoba|saskatchewan|nova scotia|new brunswick|newfoundland|labrador|prince edward island|yukon|nunavut|northwest territories)\b|,\s*(QC|AB|BC|MB|SK|NS|NB|NL|PE|YT|NU|NT)\b/i;
+
 // Job Bank Canada Ontario listings, last 7 days, sorted by date desc.
 // Each page returns ~25 postings with employer + title + city + date — perfect
 // for grouping by company to detect hiring surges.
@@ -61,11 +73,17 @@ exports.handler = async (event) => {
 
   // Pre-fetch all source pages in parallel; strip to text; cap each page at
   // 18KB to keep total prompt under ~80KB.
+  //
+  // Each page gets its own 8s abort. Without it one stalled Job Bank page
+  // blocks Promise.all with no ceiling, and the whole run blows past the
+  // caller's timeout — that is what killed the 2026-08-03 scan (Make gave up
+  // at 30s and auto-deactivated scenario 5323960). A page that aborts just
+  // comes back empty and is reported in pages_failed, same as an HTTP error.
   const fetched = await Promise.all(SOURCES.map(async (s) => {
     try {
-      const r = await fetch(s.url, {
+      const r = await fetchWithTimeout(s.url, {
         headers: { "User-Agent": "Mozilla/5.0 (Elevate signal-scan)" },
-      });
+      }, PAGE_TIMEOUT_MS);
       if (!r.ok) return { name: s.name, text: "", error: `HTTP ${r.status}` };
       const html = await r.text();
       return { name: s.name, text: stripHtml(html).slice(0, 11000) };
@@ -87,7 +105,7 @@ exports.handler = async (event) => {
 
   let resp;
   try {
-    resp = await fetch("https://api.anthropic.com/v1/messages", {
+    resp = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "x-api-key": process.env.ANTHROPIC_API_KEY,
@@ -99,7 +117,7 @@ exports.handler = async (event) => {
         max_tokens: 3500,
         messages: [{ role: "user", content: prompt }],
       }),
-    });
+    }, ANTHROPIC_TIMEOUT_MS);
   } catch (e) {
     return jsonError(502, `Anthropic API unreachable: ${e && e.message || e}`);
   }
@@ -130,6 +148,7 @@ exports.handler = async (event) => {
 
   const signals = parsed.signals
     .filter(s => s && s.company_name)
+    .filter(s => !NON_ONTARIO.test(String(s.geography || "")))
     .map(s => {
       const slug = String(s.company_name || "")
         .toLowerCase()
@@ -176,6 +195,18 @@ exports.handler = async (event) => {
     }),
   };
 };
+
+// fetch with a hard abort. Node 18+ on Netlify has AbortSignal available;
+// the timer is always cleared so the lambda can't be held open by it.
+async function fetchWithTimeout(url, options, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function jsonError(status, error, extra) {
   return {
