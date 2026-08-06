@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0806-A-QUEUE-LOCATION-AGENCY-FILTER -->
+<!-- BUILD: ELEVATE-2026-0806-B-SELECTALL-NOTE-CONTEXT -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -735,6 +735,9 @@
   .jrv-inseq-dot.red { background:#ef4444; color:#ef4444; }
   .jrv-inseq-group-label { font-family:'Consolas', monospace; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color: var(--text-muted); flex:1; }
   .jrv-inseq-group-count { font-family:'Consolas', monospace; font-size:11px; color: var(--text-muted); padding:2px 8px; background: var(--dark3); border-radius:10px; }
+  /* Pushed to the right edge of the group header so it reads as a group action. */
+  .jrv-inseq-selectall { margin-left:auto; background:transparent; color:var(--gold); border:1px solid rgba(200,130,10,0.45); font-size:11px; font-weight:700; padding:3px 10px; border-radius:6px; cursor:pointer; white-space:nowrap; letter-spacing:0.02em; transition:background 0.15s, color 0.15s; }
+  .jrv-inseq-selectall:hover { background:var(--gold); color:#1a1a1a; }
   .jrv-inseq-group-action { background: rgba(200,130,10,0.12); border:1px solid rgba(200,130,10,0.4); color: var(--gold); font-size:10px; font-family:'Consolas', monospace; padding:5px 10px; border-radius:4px; cursor:pointer; letter-spacing:0.06em; }
   .jrv-inseq-group-action:hover:not(:disabled) { background: rgba(200,130,10,0.2); }
   .jrv-inseq-group-action:disabled { opacity:0.4; cursor:not-allowed; }
@@ -2847,7 +2850,14 @@ function buildPayload(c) {
     sequence_name: sequence_name,
     data_collection_source: c.data_collection_source || '',
     buying_signal: c.buying_signal || '',
-    about_company: c.about_company || ''
+    about_company: c.about_company || '',
+    // The "reason for outreach" the RCRM note is built from. Without these the
+    // note generator had only a title and headcount to work with and would
+    // invent the rest — including the channel (it logged "left voicemail" on an
+    // email on 2026-08-06). Approval Handler modules 5/45/205 read these.
+    signal_tag: c.signal_tag || '',
+    pitch_angle: c.pitch_angle || '',
+    lead_source: c.lead_source || ''
   };
 }
 
@@ -8035,12 +8045,13 @@ function jrvRenderInSeq() {
       return buildRow(r, isWarm ? 'green' : 'yellow', 'Responded ' + (r.responded_at ? new Date(r.responded_at).toLocaleDateString() : 'recently'), badge);
     }).join('');
     respondedHtml = `
-      <div class="jrv-inseq-group jrv-inseq-group-responded">
+      <div class="jrv-inseq-group jrv-inseq-group-responded" id="jrv-inseq-grp-responded">
         <div class="jrv-inseq-group-head">
           <span class="jrv-inseq-special-icon">📬</span>
           <span class="jrv-inseq-group-label">Responded Contact</span>
           <span class="jrv-inseq-group-count">${respondedRecords.length}</span>
           <span class="jrv-inseq-group-hint">Warm replies first — these need eyes on them</span>
+          <button type="button" class="jrv-inseq-selectall" onclick="jrvSelectAllInGroup('jrv-inseq-grp-responded')" title="Select every contact in this group for bulk send (skips anyone already emailed today)">☑ Select all</button>
         </div>
         ${rowsHtml}
       </div>
@@ -8058,12 +8069,13 @@ function jrvRenderInSeq() {
       return buildRow(r, 'green', whenLabel, badge);
     }).join('');
     manualLeadHtml = `
-      <div class="jrv-inseq-group jrv-inseq-group-manual">
+      <div class="jrv-inseq-group jrv-inseq-group-manual" id="jrv-inseq-grp-manual">
         <div class="jrv-inseq-group-head">
           <span class="jrv-inseq-special-icon">✋</span>
           <span class="jrv-inseq-group-label">Manual Lead</span>
           <span class="jrv-inseq-group-count">${manualLeadRecords.length}</span>
           <span class="jrv-inseq-group-hint">Graduates to In Sequence on first send</span>
+          <button type="button" class="jrv-inseq-selectall" onclick="jrvSelectAllInGroup('jrv-inseq-grp-manual')" title="Select every contact in this group for bulk send (skips anyone already emailed today)">☑ Select all</button>
         </div>
         ${rowsHtml}
       </div>
@@ -8074,12 +8086,14 @@ function jrvRenderInSeq() {
     const items = buckets[g.color];
     if (!items.length) return '';
     const rowsHtml = items.map(({ r, rec }) => buildRow(r, g.color, 'Last contact ' + rec.label, '')).join('');
+    const gid = 'jrv-inseq-grp-' + g.color;
     return `
-      <div class="jrv-inseq-group">
+      <div class="jrv-inseq-group" id="${gid}">
         <div class="jrv-inseq-group-head">
           <span class="jrv-inseq-dot ${g.color}"></span>
           <span class="jrv-inseq-group-label">${escapeHtml(g.label)}</span>
           <span class="jrv-inseq-group-count">${items.length}</span>
+          <button type="button" class="jrv-inseq-selectall" onclick="jrvSelectAllInGroup('${gid}')" title="Select every contact in this group for bulk send (skips anyone already emailed today)">☑ Select all</button>
         </div>
         ${rowsHtml}
       </div>
@@ -8206,6 +8220,28 @@ function jrvRenderBulkBar() {
   bar.style.display = 'flex';
   const countEl = document.getElementById('jrvInSeqBulkCount');
   if (countEl) countEl.textContent = String(n);
+}
+
+// Select / deselect every sendable row in one colour band, so a whole recency
+// group can be mass-emailed without ticking rows one at a time.
+//
+// Rows already sent today render their checkbox disabled — those are skipped,
+// which is what stops a "select all" from re-emailing someone twice in a day.
+// The button toggles: if everything selectable is already on, it clears.
+function jrvSelectAllInGroup(groupId) {
+  const grp = document.getElementById(groupId);
+  if (!grp) return;
+  const boxes = Array.from(grp.querySelectorAll('.jrv-inseq-check:not(:disabled)'));
+  if (!boxes.length) return;
+  const turnOn = !boxes.every(cb => cb.checked);
+  boxes.forEach(cb => {
+    cb.checked = turnOn;
+    const qk = cb.getAttribute('data-key');
+    if (!qk) return;
+    if (turnOn) jrvInSeqState.selectedKeys.add(qk);
+    else jrvInSeqState.selectedKeys.delete(qk);
+  });
+  jrvRenderBulkBar();
 }
 
 function jrvToggleSelect(qk, checked) {
