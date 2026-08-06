@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0804-C-MANUALLEAD-WEBSITE-SEARCH -->
+<!-- BUILD: ELEVATE-2026-0806-A-QUEUE-LOCATION-AGENCY-FILTER -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -94,6 +94,13 @@
   .contact-sequence-badge { background:rgba(124,58,237,0.2); color:#a78bfa; border:1px solid rgba(124,58,237,0.45); font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   .contact-title { font-size:13px; color:var(--text-muted); margin-top:3px; }
   .contact-company { font-size:13px; color:var(--gold); font-weight:600; margin-top:2px; }
+  /* Location sits directly under the name so it reads before the title/company. */
+  .contact-location { font-size:14px; font-weight:700; color:#e8e8e8; margin-top:4px; letter-spacing:0.01em; }
+  .contact-location.is-unknown { color:var(--text-muted); font-weight:600; font-style:italic; }
+  .contact-location.is-outside-on { color:#f59e0b; }
+  .contact-location-src { font-size:11px; font-weight:600; color:var(--text-muted); }
+  .contact-location-warn { background:rgba(245,158,11,0.18); border:1px solid rgba(245,158,11,0.5); color:#f59e0b; font-size:10px; font-weight:800; padding:1px 7px; border-radius:10px; letter-spacing:0.06em; margin-left:4px; vertical-align:middle; }
+  .agency-filter-note { margin-top:12px; padding:8px 12px; border:1px dashed rgba(255,255,255,0.14); border-radius:8px; color:var(--text-muted); font-size:12px; cursor:help; }
 
   /* Toggle switch */
   .toggle-wrap { display:flex; align-items:center; gap:10px; flex-shrink:0; }
@@ -1910,6 +1917,7 @@ function showTab(name, btn) {
 const APPROVAL_WEBHOOK = 'https://hook.us2.make.com/aq8yfoqv8itfhrewo1k6iib7u6rq4gm1';
 const ENRICH_WEBHOOK = 'https://hook.us2.make.com/9et4dubq18kst3vibqkiunmhjrt4ngxl';
 let queueContacts = [];
+let queueAgenciesFiltered = [];
 
 // ═══════════════════════════════════════════
 // HIRING SIGNALS
@@ -1970,6 +1978,9 @@ function hsRender() {
 
   const visible = hsRecords.filter(r => {
     if ((r.urgency || '').toLowerCase() !== 'immediate') return false;
+    // Never surface competitor staffing firms — cheaper to drop them here than
+    // to spend a ZoomInfo credit enriching one and decline it in the queue.
+    if (isRecruitmentAgency(r)) return false;
     const status = (r.status || 'pending').toLowerCase();
     if (status === 'enriched') return false;
     if (status === 'blocked') return false;
@@ -2468,6 +2479,42 @@ async function hsBulkDraftAndSend() {
   alert(`Bulk send complete: ${done} sent${failed ? `, ${failed} failed (left in the queue — retry).` : '.'}`);
 }
 
+// ── Recruitment-agency screen ──────────────────────────────────────────────
+// We do not sell staffing services to other staffing firms, so agency leads are
+// filtered out of both the Hiring Signals panel and the Approval Queue rather
+// than shown and manually declined every time.
+//
+// Two passes. Brand names are exact-matched because several read as ordinary
+// words ("Adecco" is safe, but "Drake"/"Vaco" alone are not, so those carry a
+// qualifier). The generic pattern is deliberately tight — bare "resources",
+// "personnel" and "solutions" are NOT matched, since real manufacturers and
+// logistics firms use them ("Cyclic Materials", "Workforce Furniture").
+const AGENCY_BRAND_RE = /\b(randstad|adecco|aerotek|robert half|kelly services|manpower(group)?|hays|michael page|express employment|peopleready|labour ready|drake international|the bagg group|design group staffing|altis (recruitment|technology)|vaco|insight global|teksystems|roevin|spherion|talentcor|agilus|quantum recruit|asap staffing|stevens resource group|hunt personnel|lock search|goodwill staffing)\b/i;
+
+const AGENCY_GENERIC_RE = /\b(staffing|recruit(ing|ment|er|ers)?|headhunt(ing|er)?|executive search|employment agency|employment services|temp(orary)? agency|temporary staffing|workforce solutions|placement (agency|services)|talent (solutions|acquisition|partners)|hr outsourcing|payroll services|manpower)\b/i;
+
+// Industry strings ZoomInfo/RCRM use for the sector.
+const AGENCY_INDUSTRY_RE = /staffing|recruit|employment services|human resources/i;
+
+function isRecruitmentAgency(c) {
+  if (!c) return false;
+  const name = String(c.company_name || c.company || '');
+  const industry = String(c.company_industry || c.industry || '');
+  if (AGENCY_BRAND_RE.test(name)) return true;
+  if (AGENCY_GENERIC_RE.test(name)) return true;
+  if (AGENCY_INDUSTRY_RE.test(industry)) return true;
+  return false;
+}
+
+// Renders the muted "N filtered out" line. Hiding leads silently is how a false
+// positive becomes invisible forever, so always say what was removed — the
+// names are in the tooltip.
+function agencyFilterNote(removed) {
+  if (!removed.length) return '';
+  const names = removed.map(c => c.company_name || c.company || '?').join(', ');
+  return `<div class="agency-filter-note" title="${escapeAttr(names)}">🚫 ${removed.length} recruitment ${removed.length === 1 ? 'agency' : 'agencies'} filtered out — hover to see which</div>`;
+}
+
 async function initQueue() {
   const list = document.getElementById('queueList');
   const toolbar = document.getElementById('queueToolbar');
@@ -2507,16 +2554,25 @@ async function initQueue() {
       return decision === 'pending' || decision === '';
     });
 
-    console.log('[Queue Fetch] contacts extracted:', contacts.length);
+    // Screen out competitor staffing firms before anything renders.
+    const agencies = contacts.filter(isRecruitmentAgency);
+    const keep = contacts.filter(c => !isRecruitmentAgency(c));
+    queueAgenciesFiltered = agencies;
+    if (agencies.length) {
+      console.log('[Queue Fetch] recruitment agencies filtered:', agencies.map(a => a.company_name));
+    }
 
-    if (!contacts.length) {
-      list.innerHTML = '<div class="empty-queue"><p>Queue is empty.</p><small>Click Enrich on a Hiring Signal above to populate.</small></div>';
+    console.log('[Queue Fetch] contacts extracted:', keep.length);
+
+    if (!keep.length) {
+      list.innerHTML = '<div class="empty-queue"><p>Queue is empty.</p><small>Click Enrich on a Hiring Signal above to populate.</small></div>'
+        + agencyFilterNote(agencies);
       if (toolbar) toolbar.style.display = 'flex';
       return;
     }
 
     // Default: approve non-clients, decline clients (clients shouldn't be re-contacted)
-    queueContacts = contacts.map(c => ({ ...c, _approved: !c.is_client }));
+    queueContacts = keep.map(c => ({ ...c, _approved: !c.is_client }));
     renderQueue();
     if (toolbar) toolbar.style.display = 'flex';
     // Lazy slug resolution — only for queue contacts visible right now.
@@ -2549,7 +2605,17 @@ function renderQueue() {
     const industry = c.company_industry || '';
     const persona = c.persona || '';
     const employees = c.employee_count || '';
-    const location = [c.contact_city, c.contact_state].filter(Boolean).join(', ');
+    // Location gets its own prominent line — enrichment sometimes returns
+    // out-of-province contacts (a Bolton ON signal came back with three BC
+    // execs on 2026-08-05), and that has to be obvious before drafting, since
+    // the local-angle rule depends on where the person actually sits.
+    // Fall back to the company HQ when the contact's own city/state is blank.
+    const contactLoc = [c.contact_city, c.contact_state].filter(Boolean).join(', ');
+    const companyLoc = [c.company_city, c.company_state].filter(Boolean).join(', ');
+    const location = contactLoc || companyLoc;
+    const locIsCompany = !contactLoc && !!companyLoc;
+    const locCountry = (c.contact_country || c.company_country || '').trim();
+    const locOutsideON = location && !/\b(ontario|ON)\b/i.test(location);
     const linkedin = c.contact_linkedin || '';
     const sequence = c.sequence_name || '';
     const isClient = c.is_client === true || c.is_client === 'true';
@@ -2579,8 +2645,8 @@ function renderQueue() {
               ${inSequence ? `<span class="contact-sequence-badge">⚡ IN SEQUENCE</span>` : ''}
               ${signalLabel ? `<span class="${signalClass}">${signalLabel}</span>` : ''}
               ${employees ? `<span class="contact-info-badge">👥 ${escapeHtml(employees)}</span>` : ''}
-              ${location ? `<span class="contact-info-badge">📍 ${escapeHtml(location)}</span>` : ''}
             </div>
+            ${location ? `<div class="contact-location${locOutsideON ? ' is-outside-on' : ''}">📍 ${escapeHtml(location)}${locCountry && !/canada/i.test(locCountry) ? ', ' + escapeHtml(locCountry) : ''}${locIsCompany ? ' <span class="contact-location-src">(company HQ)</span>' : ''}${locOutsideON ? ' <span class="contact-location-warn">OUTSIDE ONTARIO</span>' : ''}</div>` : '<div class="contact-location is-unknown">📍 Location unknown</div>'}
             <div class="contact-title">${escapeHtml(title)}</div>
             <div class="contact-company">${escapeHtml(company)}${industry ? ' · ' + escapeHtml(industry) : ''}</div>
           </div>
@@ -2628,7 +2694,7 @@ function renderQueue() {
           <button class="btn-enrich" id="enrichBtn${i}" onclick="enrichContact(${i})" title="Optional: enrich now before deciding. Sending via Outlook also triggers enrichment automatically.">⚡ Enrich Now (optional)</button>
         </div>`}
       </div>`;
-  }).join('');
+  }).join('') + agencyFilterNote(queueAgenciesFiltered);
   renderQueueStats(queueContacts);
   if (typeof hsUpdateBulkBar === 'function') hsUpdateBulkBar();
 }
