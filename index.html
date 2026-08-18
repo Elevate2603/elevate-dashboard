@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0806-B-SELECTALL-NOTE-CONTEXT -->
+<!-- BUILD: ELEVATE-2026-0818-A-AC-BULKDRAFT -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -887,6 +887,46 @@
   .jrv-acd-send { background:#C8820A; border:1px solid #C8820A; color:#1a1205; font-weight:700; padding:9px 16px; border-radius:6px; font-family:inherit; font-size:12.5px; cursor:pointer; }
   .jrv-acd-send:disabled { opacity:0.6; cursor:default; }
   .jrv-acd-cancel { background:transparent; border:1px solid rgba(255,255,255,0.12); color:#8b867c; padding:9px 16px; border-radius:6px; font-family:inherit; font-size:12.5px; cursor:pointer; }
+  /* ── Bulk account-care drafting: per-row select, per-section select all, queue modal ── */
+  .jrv-ac-sel { accent-color:#C8820A; width:13px; height:13px; margin-right:7px; cursor:pointer; vertical-align:-2px; }
+  .jrv-ac-selall { margin-left:auto; margin-right:8px; background:rgba(200,130,10,0.12); border:1px solid rgba(200,130,10,0.35); color:#e8a53a; cursor:pointer; padding:2px 9px; border-radius:10px; font-size:10px; font-weight:700; font-family:inherit; letter-spacing:0.04em; text-transform:uppercase; }
+  .jrv-ac-selall:hover { background:rgba(200,130,10,0.26); }
+  .jrv-ac-tier-head .jrv-ac-tier-count { margin-left:0; }
+  .jrv-acb-bar { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:10px; margin:0 0 8px; padding:8px 10px; background:linear-gradient(90deg, rgba(200,130,10,0.18), rgba(200,130,10,0.06)); border:1px solid rgba(200,130,10,0.4); border-radius:8px; }
+  .jrv-acb-bar-label { font-size:11.5px; font-weight:700; color:#e8a53a; letter-spacing:0.03em; }
+  .jrv-acb-bar-btn { background:#C8820A; border:1px solid #C8820A; color:#1a1205; font-weight:700; padding:5px 12px; border-radius:5px; font-family:inherit; font-size:11.5px; cursor:pointer; }
+  .jrv-acb-bar-btn:hover { background:#E8A234; }
+  .jrv-acb-bar-clear { margin-left:auto; background:transparent; border:1px solid rgba(255,255,255,0.14); color:#9aa; padding:5px 11px; border-radius:5px; font-family:inherit; font-size:11.5px; cursor:pointer; }
+  .jrv-acb-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.68); display:flex; align-items:center; justify-content:center; padding:24px; z-index:10000; }
+  .jrv-acb-modal { background:#141417; border:1px solid rgba(255,255,255,0.1); border-radius:14px; width:100%; max-width:860px; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 24px 70px rgba(0,0,0,0.6); }
+  .jrv-acb-head { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid rgba(255,255,255,0.07); }
+  .jrv-acb-title { font-size:15px; font-weight:700; color:var(--text, #e9e6df); margin:0; }
+  .jrv-acb-sub { font-size:11.5px; color:#8b867c; }
+  .jrv-acb-close { margin-left:auto; background:transparent; border:1px solid rgba(255,255,255,0.14); color:#9aa; border-radius:5px; width:26px; height:26px; font-size:13px; line-height:1; cursor:pointer; }
+  .jrv-acb-body { overflow-y:auto; padding:14px 20px 18px; }
+  .jrv-acb-foot { display:flex; align-items:center; gap:10px; padding:12px 20px; border-top:1px solid rgba(255,255,255,0.07); }
+  .jrv-acb-foot-note { font-size:11.5px; color:#8b867c; }
+  .jrv-acb-sendall { margin-left:auto; background:#C8820A; border:1px solid #C8820A; color:#1a1205; font-weight:700; padding:9px 16px; border-radius:6px; font-family:inherit; font-size:12.5px; cursor:pointer; }
+  .jrv-acb-sendall:disabled { opacity:0.55; cursor:default; }
+  .jrv-acb-card { border:1px solid rgba(255,255,255,0.09); border-radius:10px; padding:12px 14px; margin-bottom:12px; background:rgba(255,255,255,0.02); }
+  .jrv-acb-card.is-sent { border-color:rgba(74,222,128,0.4); background:rgba(74,222,128,0.05); }
+  .jrv-acb-card.is-failed { border-color:rgba(255,77,77,0.45); background:rgba(255,77,77,0.05); }
+  .jrv-acb-card.is-skipped { opacity:0.45; }
+  .jrv-acb-crow { display:flex; align-items:center; gap:9px; margin-bottom:8px; }
+  .jrv-acb-cname { font-size:13px; font-weight:700; color:var(--text, #e9e6df); }
+  .jrv-acb-cstatus { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; padding:2px 8px; border-radius:9px; background:rgba(255,255,255,0.06); color:#9aa; }
+  .jrv-acb-cstatus.st-ready { background:rgba(200,130,10,0.16); color:#e8a53a; }
+  .jrv-acb-cstatus.st-sent { background:rgba(74,222,128,0.16); color:#4ade80; }
+  .jrv-acb-cstatus.st-failed { background:rgba(255,77,77,0.16); color:#ff8080; }
+  .jrv-acb-cbtns { margin-left:auto; display:flex; gap:6px; }
+  .jrv-acb-cbtn { background:rgba(200,130,10,0.16); border:1px solid rgba(200,130,10,0.45); color:#e8a53a; cursor:pointer; padding:4px 11px; border-radius:5px; font-size:11px; font-weight:600; font-family:inherit; }
+  .jrv-acb-cbtn:hover { background:rgba(200,130,10,0.3); }
+  .jrv-acb-cbtn:disabled { opacity:0.5; cursor:default; }
+  .jrv-acb-cbtn.ghost { background:transparent; border-color:rgba(255,255,255,0.14); color:#9aa; }
+  .jrv-acb-cfields { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .jrv-acb-in { width:100%; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); color:var(--text, #e9e6df); border-radius:6px; padding:7px 10px; font-size:12.5px; font-family:inherit; }
+  .jrv-acb-in:focus { outline:none; border-color:#C8820A; }
+  .jrv-acb-ta { grid-column:1 / -1; height:132px; resize:vertical; line-height:1.55; }
   .jrv-inseq-special-icon { font-size:14px; }
   .jrv-inseq-group-hint { font-size:11px; color: var(--text-muted); font-style:italic; margin-left:6px; }
   .jrv-inseq-response-pill { padding:3px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.3px; text-transform:uppercase; }
@@ -9028,6 +9068,10 @@ function jrvSetFeedBadge(live, count) {
 
     // Tier sections the user has collapsed. Default: all open (nothing hidden).
     const collapsedTiers = new Set();
+    // Slugs ticked for a bulk account-care draft run. Survives re-renders (render()
+    // rebuilds the HTML, so the checkbox state is read back out of this Set).
+    const selectedSlugs = new Set();
+    const clientNameBySlug = {};
     // Pop-out colour filter: 'all' | 'green' | 'yellow' | 'red' | 'gray'. Only the
     // pop-out sets this; it resets to 'all' when the modal closes so the inline panel
     // is never left filtered.
@@ -9035,6 +9079,7 @@ function jrvSetFeedBadge(live, count) {
 
     // One client's card HTML (used in both the inline panel and the pop-out modal).
     function clientBlockHtml(c) {
+      clientNameBySlug[c.slug] = c.name || '';
       const t = touchBySlug[c.slug];
       const discN = discoveredCount(t);
       const effDays = acEffectiveDays(c, t);
@@ -9061,7 +9106,9 @@ function jrvSetFeedBadge(live, count) {
       return '<div class="' + blockClass + '" data-slug="' + esc(c.slug) + '">'
         + itemHtml
         + (hasTouch ? renderTouchSubline(c.slug, t) : '')
-        + '<div class="jrv-ac-actions"><button class="jrv-ac-draft-btn" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '">✎ Draft email</button>'
+        + '<div class="jrv-ac-actions">'
+        + '<input type="checkbox" class="jrv-ac-sel" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Select for bulk draft"' + (selectedSlugs.has(c.slug) ? ' checked' : '') + '>'
+        + '<button class="jrv-ac-draft-btn" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '">✎ Draft email</button>'
         + '<button class="jrv-ac-refresh-one" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Scan this company\'s domain for your latest email (catches people not in RCRM)">↻ Refresh</button></div>'
         + (hasTouch && expanded ? renderExpanded(c.slug, t) : '')
         + '</div>';
@@ -9086,22 +9133,37 @@ function jrvSetFeedBadge(live, count) {
         ['red', 'Overdue', '21+ days'],
         ['gray', 'No contact on record', ''],
       ];
-      return order.map(function (o) {
+      const sections = order.map(function (o) {
         const tier = o[0], label = o[1];
         if (acColourFilter !== 'all' && tier !== acColourFilter) return ''; // colour filter (pop-out)
         const arr = buckets[tier];
         if (!arr.length) return '';
         const collapsed = collapsedTiers.has(tier);
+        // A section is "all selected" only if every client in it is ticked — the
+        // button then flips to Clear so one click undoes a whole section.
+        const allSel = arr.every(c => selectedSlugs.has(c.slug));
         return '<div class="jrv-ac-tier' + (collapsed ? ' collapsed' : '') + '" data-tier="' + tier + '">'
           + '<div class="jrv-ac-tier-head" data-tier="' + tier + '" role="button" tabindex="0">'
           + '<span class="jrv-ac-tier-chev">' + (collapsed ? '▸' : '▾') + '</span>'
           + '<span class="jrv-ac-dot jrv-ac-dot-' + tier + '"></span>'
           + '<span class="jrv-ac-tier-label">' + esc(label) + '</span>'
+          + '<button class="jrv-ac-selall" data-tier="' + tier + '" data-all="' + (allSel ? '1' : '0') + '">'
+          + (allSel ? 'Clear' : 'Select all') + '</button>'
           + '<span class="jrv-ac-tier-count">' + arr.length + '</span>'
           + '</div>'
           + '<div class="jrv-ac-tier-body">' + arr.map(clientBlockHtml).join('') + '</div>'
           + '</div>';
-      }).join('') || '<div class="jrv-ac-empty">No clients in this colour.</div>';
+      }).join('');
+      if (!sections) return '<div class="jrv-ac-empty">No clients in this colour.</div>';
+      const n = selectedSlugs.size;
+      const bar = n
+        ? '<div class="jrv-acb-bar">'
+          + '<span class="jrv-acb-bar-label">' + n + ' selected</span>'
+          + '<button class="jrv-acb-bar-btn">✎ Draft ' + n + ' email' + (n === 1 ? '' : 's') + '</button>'
+          + '<button class="jrv-acb-bar-clear">Clear</button>'
+          + '</div>'
+        : '';
+      return bar + sections;
     }
 
     function render() {
@@ -9152,6 +9214,9 @@ function jrvSetFeedBadge(live, count) {
 
     // Delegated on DOCUMENT so it works in both the inline panel and the pop-out modal.
     document.addEventListener('click', e => {
+      // The section's "Select all" button lives inside the tier head — let its own
+      // handler take it, or the click would collapse the section instead.
+      if (e.target.closest('.jrv-ac-selall')) return;
       // Collapse / expand a whole colour-tier section (green/yellow/red/gray).
       const th = e.target.closest('.jrv-ac-tier-head');
       if (th) {
@@ -9269,6 +9334,22 @@ function jrvSetFeedBadge(live, count) {
     acdQ('#jrvAcdCancel').addEventListener('click', acdClose);
     acd.addEventListener('click', e => { if (e.target === acd) acdClose(); });
 
+    // Draft webhook answers in plain text: "TO: email|name\nSUBJECT: ..\nBODY: .."
+    // (plain text on purpose — it sidesteps Make's JSON-escaping pain). Shared by the
+    // single-client popup and the bulk queue so both parse it identically.
+    function acdParseDraft(text) {
+      const toM = String(text || '').match(/^TO:\s*([^\n]*)/);
+      let to = '', toName = '';
+      if (toM) { const p = toM[1].split('|'); to = (p[0] || '').trim(); toName = (p[1] || '').trim(); }
+      const subjM = String(text || '').match(/SUBJECT:\s*([^\n]*)/);
+      const bodyIdx = String(text || '').indexOf('BODY:');
+      return {
+        to: to, toName: toName,
+        subject: subjM ? subjM[1].trim() : '',
+        body: bodyIdx >= 0 ? String(text).slice(bodyIdx + 5).trim() : String(text || '').trim(),
+      };
+    }
+
     async function acdOpen(slug, name) {
       if (!ACD_DRAFT_URL) { alert('Active Client drafting is not configured.'); return; }
       acdSlug = slug; acdName = name || ''; acdToName = '';
@@ -9279,16 +9360,11 @@ function jrvSetFeedBadge(live, count) {
       try {
         const url = ACD_DRAFT_URL + '?rcrm_company_slug=' + encodeURIComponent(slug) + '&company_name=' + encodeURIComponent(name || '');
         const res = await fetch(url);
-        const text = await res.text();
-        // Response: "TO: email|name\nSUBJECT: ..\nBODY: .." (plain text, no JSON escaping)
-        const toM = text.match(/^TO:\s*([^\n]*)/);
-        let toEmail = '';
-        if (toM) { const p = toM[1].split('|'); toEmail = (p[0] || '').trim(); acdToName = (p[1] || '').trim(); }
-        const subjM = text.match(/SUBJECT:\s*([^\n]*)/);
-        const bodyIdx = text.indexOf('BODY:');
-        acdQ('#jrvAcdTo').value = toEmail;
-        acdQ('#jrvAcdSubj').value = subjM ? subjM[1].trim() : '';
-        acdQ('#jrvAcdBody').value = bodyIdx >= 0 ? text.slice(bodyIdx + 5).trim() : text.trim();
+        const d = acdParseDraft(await res.text());
+        acdToName = d.toName;
+        acdQ('#jrvAcdTo').value = d.to;
+        acdQ('#jrvAcdSubj').value = d.subject;
+        acdQ('#jrvAcdBody').value = d.body;
         acdQ('#jrvAcdCtx').textContent = 'Account care, friend to friend. Edit anything, then send.' + (acdToName ? ' Recipient: ' + acdToName : '');
       } catch (e) {
         acdQ('#jrvAcdBody').value = '';
@@ -9327,6 +9403,187 @@ function jrvSetFeedBadge(live, count) {
       if (!db) return;
       e.preventDefault(); e.stopPropagation();
       acdOpen(db.dataset.slug, db.dataset.name);
+    });
+
+    // ── Bulk account care: select clients (or a whole colour section) → draft them
+    // all in one pass → review/edit each → send. Reuses the SAME draft and send
+    // webhooks as the single-client loop, so there is one drafting path, not two.
+    function acbTierOf(c) { return tierFor(acEffectiveDays(c, touchBySlug[c.slug])); }
+    function acbClientsInTier(tier) { return clients.filter(c => acbTierOf(c) === tier); }
+
+    document.addEventListener('change', e => {
+      const cb = e.target.closest('.jrv-ac-sel');
+      if (!cb) return;
+      if (cb.checked) selectedSlugs.add(cb.dataset.slug); else selectedSlugs.delete(cb.dataset.slug);
+      render();
+    });
+
+    document.addEventListener('click', e => {
+      const sa = e.target.closest('.jrv-ac-selall');
+      if (sa) {
+        e.preventDefault(); e.stopPropagation();
+        const arr = acbClientsInTier(sa.dataset.tier);
+        if (sa.dataset.all === '1') arr.forEach(c => selectedSlugs.delete(c.slug));
+        else arr.forEach(c => selectedSlugs.add(c.slug));
+        render();
+        return;
+      }
+      if (e.target.closest('.jrv-acb-bar-clear')) { e.preventDefault(); selectedSlugs.clear(); render(); return; }
+      if (e.target.closest('.jrv-acb-bar-btn')) { e.preventDefault(); acbStart(); }
+    });
+
+    // Review queue modal (single instance, ids are safe here).
+    let acbItems = [];
+    const acbOv = document.createElement('div');
+    acbOv.className = 'jrv-acb-overlay';
+    acbOv.style.display = 'none';
+    acbOv.innerHTML = '<div class="jrv-acb-modal">'
+      + '<div class="jrv-acb-head"><h3 class="jrv-acb-title">Bulk account care</h3>'
+      +   '<span class="jrv-acb-sub" id="jrvAcbSub"></span>'
+      +   '<button class="jrv-acb-close" id="jrvAcbClose" title="Close">✕</button></div>'
+      + '<div class="jrv-acb-body" id="jrvAcbBody"></div>'
+      + '<div class="jrv-acb-foot"><span class="jrv-acb-foot-note" id="jrvAcbFoot"></span>'
+      +   '<button class="jrv-acb-sendall" id="jrvAcbSendAll" disabled>Send all ready</button></div>'
+      + '</div>';
+    document.body.appendChild(acbOv);
+
+    const acbCard = i => acbOv.querySelector('.jrv-acb-card[data-i="' + i + '"]');
+    const acbFieldVal = (card, role) => { const el = card && card.querySelector('[data-role="' + role + '"]'); return el ? el.value.trim() : ''; };
+    function acbSetStatus(i, status, note) {
+      const it = acbItems[i]; if (!it) return;
+      it.status = status;
+      const card = acbCard(i); if (!card) return;
+      const pill = card.querySelector('[data-role="status"]');
+      const label = { queued:'queued', drafting:'drafting…', ready:'ready', sending:'sending…', sent:'sent', failed:(note || 'failed'), skipped:'skipped' }[status] || status;
+      if (pill) { pill.textContent = label; pill.className = 'jrv-acb-cstatus' + (status === 'ready' ? ' st-ready' : status === 'sent' ? ' st-sent' : status === 'failed' ? ' st-failed' : ''); }
+      card.classList.toggle('is-sent', status === 'sent');
+      card.classList.toggle('is-failed', status === 'failed');
+      card.classList.toggle('is-skipped', status === 'skipped');
+      const sendBtn = card.querySelector('[data-act="send"]');
+      const redraftBtn = card.querySelector('[data-act="redraft"]');
+      if (sendBtn) { sendBtn.disabled = !(status === 'ready'); sendBtn.textContent = status === 'sent' ? 'Sent' : 'Send'; }
+      if (redraftBtn) redraftBtn.disabled = !(status === 'ready' || status === 'failed');
+      acbUpdateFoot();
+    }
+    function acbUpdateFoot() {
+      const ready = acbItems.filter(x => x.status === 'ready').length;
+      const sent = acbItems.filter(x => x.status === 'sent').length;
+      const failed = acbItems.filter(x => x.status === 'failed').length;
+      const busy = acbItems.filter(x => x.status === 'drafting' || x.status === 'queued').length;
+      const foot = document.getElementById('jrvAcbFoot');
+      if (foot) foot.textContent = [busy ? busy + ' drafting' : '', ready + ' ready', sent ? sent + ' sent' : '', failed ? failed + ' failed' : ''].filter(Boolean).join(' · ');
+      const sa = document.getElementById('jrvAcbSendAll');
+      if (sa) { sa.disabled = !ready; sa.textContent = ready ? ('Send all ready (' + ready + ')') : 'Send all ready'; }
+    }
+    function acbCardHtml(it, i) {
+      return '<div class="jrv-acb-card" data-i="' + i + '">'
+        + '<div class="jrv-acb-crow">'
+        +   '<span class="jrv-acb-cname">' + esc(it.name || it.slug) + '</span>'
+        +   '<span class="jrv-acb-cstatus" data-role="status">queued</span>'
+        +   '<span class="jrv-acb-cbtns">'
+        +     '<button class="jrv-acb-cbtn" data-act="send" disabled>Send</button>'
+        +     '<button class="jrv-acb-cbtn ghost" data-act="redraft" disabled>Redraft</button>'
+        +     '<button class="jrv-acb-cbtn ghost" data-act="skip">Skip</button>'
+        +   '</span>'
+        + '</div>'
+        + '<div class="jrv-acb-cfields">'
+        +   '<input class="jrv-acb-in" data-role="to" placeholder="To" autocomplete="off">'
+        +   '<input class="jrv-acb-in" data-role="subject" placeholder="Subject" autocomplete="off">'
+        +   '<textarea class="jrv-acb-in jrv-acb-ta" data-role="body" placeholder="Drafting…"></textarea>'
+        + '</div></div>';
+    }
+    // Run `worker` over indices with a small concurrency cap. Bulk sends are capped
+    // at 3 because parallel Outlook sends hit 429 ApplicationThrottled.
+    async function acbPool(indices, limit, worker) {
+      let next = 0;
+      const runners = Array.from({ length: Math.min(limit, indices.length) }, async () => {
+        while (next < indices.length) { const my = indices[next++]; await worker(my); }
+      });
+      await Promise.all(runners);
+    }
+    async function acbDraftOne(i) {
+      const it = acbItems[i]; if (!it || it.status === 'skipped') return;
+      acbSetStatus(i, 'drafting');
+      try {
+        // variant nudges the drafter to vary structure so a batch doesn't read as one template
+        const url = ACD_DRAFT_URL + '?rcrm_company_slug=' + encodeURIComponent(it.slug)
+          + '&company_name=' + encodeURIComponent(it.name || '') + '&variant=' + ((i % 6) + 1);
+        const res = await fetch(url);
+        const d = acdParseDraft(await res.text());
+        if (!d.to) throw new Error('no contact with an email');
+        it.to = d.to; it.toName = d.toName; it.subject = d.subject; it.body = d.body;
+        const card = acbCard(i);
+        if (card) {
+          card.querySelector('[data-role="to"]').value = d.to;
+          card.querySelector('[data-role="subject"]').value = d.subject;
+          card.querySelector('[data-role="body"]').value = d.body;
+        }
+        acbSetStatus(i, 'ready');
+      } catch (err) {
+        console.warn('[AC bulk draft]', it.slug, err && err.message);
+        acbSetStatus(i, 'failed', (err && err.message) || 'draft failed');
+      }
+    }
+    async function acbSendOne(i) {
+      const it = acbItems[i], card = acbCard(i);
+      if (!it || !card || it.status === 'sent' || it.status === 'skipped') return;
+      const to = acbFieldVal(card, 'to'), subject = acbFieldVal(card, 'subject'), body = acbFieldVal(card, 'body');
+      if (!to || !subject || !body) { acbSetStatus(i, 'failed', 'needs to/subject/body'); return; }
+      acbSetStatus(i, 'sending');
+      try {
+        const res = await fetch(ACD_SEND_URL, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: to, subject: subject, body: body, contact_name: it.toName || to, rcrm_company_slug: it.slug, company_name: it.name || '' }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        acbSetStatus(i, 'sent');
+        // Optimistic flip so the dot goes green today, same as the single-send path.
+        touchBySlug[it.slug] = Object.assign({}, touchBySlug[it.slug] || {}, {
+          rcrm_company_slug: it.slug, last_touch_at: new Date().toISOString(),
+          last_touch_channel: 'email', last_touch_person: it.toName || to,
+        });
+        selectedSlugs.delete(it.slug);
+        render();
+      } catch (err) {
+        acbSetStatus(i, 'failed', (err && err.message) || 'send failed');
+      }
+    }
+    async function acbStart() {
+      if (!ACD_DRAFT_URL) { alert('Active Client drafting is not configured.'); return; }
+      const slugs = Array.from(selectedSlugs);
+      if (!slugs.length) return;
+      if (slugs.length > 12 && !confirm('Draft ' + slugs.length + ' emails? Each one scans that client\'s mail for context and runs an AI draft.')) return;
+      acbItems = slugs.map(s => ({ slug: s, name: clientNameBySlug[s] || s, status: 'queued', to: '', toName: '', subject: '', body: '' }));
+      document.getElementById('jrvAcbBody').innerHTML = acbItems.map(acbCardHtml).join('');
+      document.getElementById('jrvAcbSub').textContent = acbItems.length + ' client' + (acbItems.length === 1 ? '' : 's') + ' — edit anything before sending';
+      acbOv.style.display = 'flex';
+      acbUpdateFoot();
+      await acbPool(acbItems.map((_, i) => i), 3, acbDraftOne);
+    }
+
+    acbOv.addEventListener('click', async e => {
+      if (e.target === acbOv) { acbTryClose(); return; }
+      const btn = e.target.closest('.jrv-acb-cbtn');
+      if (!btn) return;
+      const card = btn.closest('.jrv-acb-card');
+      const i = parseInt(card.dataset.i, 10);
+      const act = btn.dataset.act;
+      if (act === 'skip') { acbSetStatus(i, 'skipped'); return; }
+      if (act === 'redraft') { acbDraftOne(i); return; }
+      if (act === 'send') { btn.disabled = true; await acbSendOne(i); }
+    });
+    function acbTryClose() {
+      const pending = acbItems.filter(x => x.status === 'ready').length;
+      if (pending && !confirm(pending + ' drafted email' + (pending === 1 ? '' : 's') + ' not sent yet. Close anyway?')) return;
+      acbOv.style.display = 'none';
+    }
+    document.getElementById('jrvAcbClose').addEventListener('click', acbTryClose);
+    document.getElementById('jrvAcbSendAll').addEventListener('click', async () => {
+      const sa = document.getElementById('jrvAcbSendAll');
+      sa.disabled = true; sa.textContent = 'Sending…';
+      const idx = acbItems.map((x, i) => (x.status === 'ready' ? i : -1)).filter(i => i >= 0);
+      await acbPool(idx, 3, acbSendOne);   // Outlook throttles above ~3 parallel sends
+      acbUpdateFoot();
     });
 
     // Delegated click for the per-client Refresh — one domain mailbox scan on demand.
