@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0820-D-AC-PEOPLE-ON-EXPAND -->
+<!-- BUILD: ELEVATE-2026-0820-E-AC-CARDS -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -822,15 +822,18 @@
   .jrv-inseq-group-manual .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(96,165,250,0.12), rgba(96,165,250,0.04)); border-left:3px solid #60a5fa; }
   .jrv-inseq-group-bounced .jrv-inseq-group-head { background: linear-gradient(90deg, rgba(220,38,38,0.18), rgba(220,38,38,0.05)); border-left:3px solid #dc2626; }
   /* Active Client account-care draft button + popup */
-  .jrv-ac-actions { padding: 4px 0 2px 22px; }
+  .jrv-ac-actions { padding:6px 10px 6px 18px; border-top:1px solid rgba(255,255,255,0.05); background:rgba(0,0,0,0.12); }
   .jrv-ac-draft-btn { background: rgba(200,130,10,0.16); border:1px solid rgba(200,130,10,0.45); color:#e8a53a; cursor:pointer; padding:4px 10px; border-radius:5px; font-size:11px; font-weight:600; font-family:inherit; letter-spacing:0.3px; }
   .jrv-ac-draft-btn:hover { background: rgba(200,130,10,0.3); }
   .jrv-ac-refresh-one { margin-left:6px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.14); color:#9aa; cursor:pointer; padding:4px 9px; border-radius:5px; font-size:11px; font-weight:600; font-family:inherit; letter-spacing:0.3px; }
   .jrv-ac-refresh-one:hover { background: rgba(255,255,255,0.1); color:#ccd; }
   .jrv-ac-refresh-one:disabled { opacity:0.6; cursor:default; }
   /* Colour-tier collapsible sections */
-  .jrv-ac-tier { margin-bottom:6px; }
-  .jrv-ac-tier-head { display:flex; align-items:center; gap:7px; padding:6px 8px; cursor:pointer; border-radius:6px; background:rgba(255,255,255,0.03); user-select:none; }
+  .jrv-ac-tier { margin-bottom:16px; }
+  .jrv-ac-tier:last-child { margin-bottom:4px; }
+  .jrv-ac-tier-head { position:sticky; top:0; z-index:4; display:flex; align-items:center; gap:7px; margin:0 0 8px; padding:7px 10px; cursor:pointer;
+    border-radius:0; border-top:1px solid rgba(255,255,255,0.10); border-bottom:1px solid rgba(255,255,255,0.10);
+    background:#141418; user-select:none; }
   .jrv-ac-tier-head:hover { background:rgba(255,255,255,0.06); }
   .jrv-ac-tier-chev { width:12px; color:#8b867c; font-size:10px; }
   .jrv-ac-tier-label { font-size:11px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:#c7c1b4; }
@@ -905,8 +908,11 @@
   .jrv-acb-bar-sub { display:block; font-size:10px; font-weight:600; color:#9c8b6a; letter-spacing:0.03em; }
   .jrv-acb-bar-btn:disabled { opacity:0.5; cursor:default; }
   /* People picked for a ticked client — visible and adjustable before drafting */
-  .jrv-acp-strip { display:flex; flex-wrap:wrap; gap:5px; padding:2px 0 6px 22px; }
+  .jrv-acp-strip { display:flex; flex-wrap:wrap; align-items:center; gap:5px; padding:7px 10px 8px 18px;
+    border-top:1px dashed rgba(255,255,255,0.10); background:rgba(255,255,255,0.02); }
+  .jrv-acp-strip::before { content:'WRITING TO'; font-size:8.5px; font-weight:800; letter-spacing:0.09em; color:#7d7669; margin-right:3px; }
   .jrv-acp-note { font-size:11px; color:#8b867c; font-style:italic; }
+  .jrv-acp-note-wrap::before { content:none; }
   .jrv-acp-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 4px 3px 7px; border-radius:12px; cursor:pointer;
     background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); font-size:11px; color:#9aa; user-select:none; }
   .jrv-acp-chip:hover { background:rgba(255,255,255,0.08); }
@@ -1126,7 +1132,7 @@
   .jrv-ac-row.jrv-ac-open .jrv-ac-caret { transform: rotate(90deg); }
   .jrv-ac-label { flex:1; }
   .jrv-ac-count { color: var(--jrv-ac-gold); font-weight:700; font-size:13px; }
-  .jrv-ac-list { background: var(--jrv-ac-bg-list); border-top:1px solid var(--jrv-ac-border); max-height:320px; overflow-y:auto; }
+  .jrv-ac-list { background: var(--jrv-ac-bg-list); border-top:1px solid var(--jrv-ac-border); max-height:440px; overflow-y:auto; padding-bottom:4px; }
   .jrv-ac-list[hidden] { display:none; }
   .jrv-ac-empty { padding:14px; color: var(--jrv-ac-dim); font-size:11px; font-style:italic; text-align:center; }
   .jrv-ac-item { display:flex; align-items:center; gap:10px; padding:9px 12px 9px 22px; border-bottom:1px solid #1a1a20; cursor:pointer; font-size:11.5px; letter-spacing:0.02em; color: var(--jrv-ac-text); text-decoration:none; transition: background 0.12s; }
@@ -1150,14 +1156,31 @@
   .jrv-ac-tooltip-meta { display:block; color: var(--jrv-ac-dim); font-size:10.5px; margin-top:2px; }
   /* Active Client touch decoration — additive; existing .jrv-ac-item rendering above stays exactly as is.
      The block wraps the existing row + a sub-line (last contact summary) + an expandable panel (AI summary + 5 interactions). */
-  .jrv-ac-block { display:flex; flex-direction:column; }
-  .jrv-ac-block .jrv-ac-item { border-radius: 6px 6px 0 0; border-bottom-color: transparent; }
-  .jrv-ac-block.no-touch .jrv-ac-item { border-radius:6px; border-bottom-color: var(--border); }
+  /* Each client is ONE card: row + last-contact line + actions + people + expanded panel
+     all live inside a single bordered box with a tier-coloured spine, so it is obvious
+     where one client ends and the next begins. */
+  .jrv-ac-block {
+    display:flex; flex-direction:column;
+    margin:0 8px 9px; border:1px solid rgba(255,255,255,0.09); border-left-width:3px;
+    border-radius:8px; background:rgba(255,255,255,0.015); overflow:hidden;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  .jrv-ac-block.tier-green  { border-left-color: rgba(74,222,128,0.55); }
+  .jrv-ac-block.tier-yellow { border-left-color: rgba(244,200,66,0.55); }
+  .jrv-ac-block.tier-red    { border-left-color: rgba(255,77,77,0.55); }
+  .jrv-ac-block.tier-gray   { border-left-color: rgba(255,255,255,0.16); }
+  .jrv-ac-block:hover { border-color: rgba(255,255,255,0.16); }
+  .jrv-ac-block.is-selected { background: rgba(200,130,10,0.06); border-color: rgba(200,130,10,0.4); }
+  .jrv-ac-block.is-expanded {
+    border-color: rgba(200,130,10,0.45); background: rgba(200,130,10,0.04);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom:16px;
+  }
+  .jrv-ac-block .jrv-ac-item { border-radius:0; border-bottom:1px solid rgba(255,255,255,0.06); padding-left:12px; }
+  .jrv-ac-block.no-touch .jrv-ac-item { border-radius:0; border-bottom-color:transparent; }
   .jrv-ac-subline {
     display:flex; align-items:center; gap:8px; flex-wrap:wrap;
-    background: rgba(0,0,0,0.18); border:1px solid var(--border); border-top:0;
-    border-radius: 0 0 6px 6px; margin-top:-1px;
-    padding:6px 10px 6px 28px;
+    background: rgba(0,0,0,0.22); border:0; border-radius:0; margin-top:0;
+    padding:6px 10px 6px 18px;
     cursor:pointer; font-size:10.5px; color: var(--text-muted);
     transition: background .12s;
   }
@@ -1173,9 +1196,9 @@
   .jrv-ac-sub-meta { color: var(--text); }
   .jrv-ac-expanded {
     display:none;
-    background: rgba(0,0,0,0.25); border:1px solid var(--border); border-top:0;
-    border-radius: 0 0 6px 6px; margin-top:-1px;
-    padding:10px 12px 12px;
+    background: rgba(0,0,0,0.28); border:0; border-top:1px solid rgba(255,255,255,0.07);
+    border-radius:0; margin-top:0;
+    padding:10px 12px 12px 18px;
   }
   .jrv-ac-block.is-expanded .jrv-ac-subline { border-radius:0; border-bottom-color:transparent; }
   .jrv-ac-block.is-expanded .jrv-ac-expanded { display:block; }
@@ -9134,7 +9157,8 @@ function jrvSetFeedBadge(live, count) {
         + '</a>';
       const hasTouch = t && (t.last_touch_at || t.summary);
       const expanded = expandedSlugs.has(c.slug);
-      const blockClass = 'jrv-ac-block' + (hasTouch ? '' : ' no-touch') + (expanded ? ' is-expanded' : '');
+      const blockClass = 'jrv-ac-block tier-' + tier + (hasTouch ? '' : ' no-touch')
+        + (expanded ? ' is-expanded' : '') + (selectedSlugs.has(c.slug) ? ' is-selected' : '');
       return '<div class="' + blockClass + '" data-slug="' + esc(c.slug) + '">'
         + itemHtml
         + (hasTouch ? renderTouchSubline(c.slug, t) : '')
@@ -9152,12 +9176,12 @@ function jrvSetFeedBadge(live, count) {
     // acbPerAccount; "show all" reveals everyone on file at that account.
     function renderPeopleStrip(slug) {
       if (peopleLoading.has(slug)) {
-        return '<div class="jrv-acp-strip"><span class="jrv-acp-note">Finding your people there…</span></div>';
+        return '<div class="jrv-acp-strip jrv-acp-note-wrap"><span class="jrv-acp-note">Finding your people there…</span></div>';
       }
       const list = peopleBySlug[slug];
       if (!list) return '';
       if (!list.length) {
-        return '<div class="jrv-acp-strip"><span class="jrv-acp-note">No contact with an email on file. Add one in RCRM, or use Refresh to find who you are emailing there.</span></div>';
+        return '<div class="jrv-acp-strip jrv-acp-note-wrap"><span class="jrv-acp-note">No contact with an email on file. Add one in RCRM, or use Refresh to find who you are emailing there.</span></div>';
       }
       const chosen = selectedPeople[slug] || new Set();
       const showAll = peopleShowAll.has(slug);
