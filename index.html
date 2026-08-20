@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0820-E-AC-CARDS -->
+<!-- BUILD: ELEVATE-2026-0820-F-AC-PEOPLE-BUTTON -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -828,6 +828,9 @@
   .jrv-ac-refresh-one { margin-left:6px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.14); color:#9aa; cursor:pointer; padding:4px 9px; border-radius:5px; font-size:11px; font-weight:600; font-family:inherit; letter-spacing:0.3px; }
   .jrv-ac-refresh-one:hover { background: rgba(255,255,255,0.1); color:#ccd; }
   .jrv-ac-refresh-one:disabled { opacity:0.6; cursor:default; }
+  .jrv-ac-people-btn { margin-left:6px; background:rgba(96,165,250,0.14); border:1px solid rgba(96,165,250,0.4); color:#8ab4f8; cursor:pointer; padding:4px 9px; border-radius:5px; font-size:11px; font-weight:600; font-family:inherit; letter-spacing:0.3px; }
+  .jrv-ac-people-btn:hover { background:rgba(96,165,250,0.28); }
+  .jrv-ac-people-btn.is-on { background:rgba(96,165,250,0.32); color:#dbeafe; border-color:rgba(96,165,250,0.7); }
   /* Colour-tier collapsible sections */
   .jrv-ac-tier { margin-bottom:16px; }
   .jrv-ac-tier:last-child { margin-bottom:4px; }
@@ -9126,6 +9129,8 @@ function jrvSetFeedBadge(live, count) {
     const peopleBySlug = {};        // slug -> ranked contact list (cached fetch)
     const peopleLoading = new Set(); // slugs with a contacts fetch in flight
     const peopleShowAll = new Set(); // slugs expanded past the top N
+    const peopleOpen = new Set();    // slugs whose People button is toggled on
+    const peopleError = {};          // slug -> why the lookup failed, shown in the strip
     const selectedPeople = {};      // slug -> Set of chosen emails (lowercased)
     // Pop-out colour filter: 'all' | 'green' | 'yellow' | 'red' | 'gray'. Only the
     // pop-out sets this; it resets to 'all' when the modal closes so the inline panel
@@ -9165,8 +9170,10 @@ function jrvSetFeedBadge(live, count) {
         + '<div class="jrv-ac-actions">'
         + '<input type="checkbox" class="jrv-ac-sel" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Select for bulk draft"' + (selectedSlugs.has(c.slug) ? ' checked' : '') + '>'
         + '<button class="jrv-ac-draft-btn" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '">✎ Draft email</button>'
-        + '<button class="jrv-ac-refresh-one" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Scan this company\'s domain for your latest email (catches people not in RCRM)">↻ Refresh</button></div>'
-        + (selectedSlugs.has(c.slug) || expanded ? renderPeopleStrip(c.slug) : '')
+        + '<button class="jrv-ac-refresh-one" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Scan this company\'s domain for your latest email (catches people not in RCRM)">↻ Refresh</button>'
+        + '<button class="jrv-ac-people-btn' + (peopleOpen.has(c.slug) ? ' is-on' : '') + '" data-slug="' + esc(c.slug) + '" title="Show the people at this account">👥 People'
+        + (peopleBySlug[c.slug] && peopleBySlug[c.slug].length ? ' (' + peopleBySlug[c.slug].length + ')' : '') + '</button></div>'
+        + (selectedSlugs.has(c.slug) || expanded || peopleOpen.has(c.slug) ? renderPeopleStrip(c.slug) : '')
         + (hasTouch && expanded ? renderExpanded(c.slug, t) : '')
         + '</div>';
     }
@@ -9181,7 +9188,10 @@ function jrvSetFeedBadge(live, count) {
       const list = peopleBySlug[slug];
       if (!list) return '';
       if (!list.length) {
-        return '<div class="jrv-acp-strip jrv-acp-note-wrap"><span class="jrv-acp-note">No contact with an email on file. Add one in RCRM, or use Refresh to find who you are emailing there.</span></div>';
+        const why = peopleError[slug]
+          ? 'Could not reach the contact lookup (' + esc(peopleError[slug]) + '). Try again in a moment.'
+          : 'RCRM has no contact with an email address for this company. Add one in RCRM, or use ↻ Refresh to find who you are emailing there.';
+        return '<div class="jrv-acp-strip jrv-acp-note-wrap"><span class="jrv-acp-note">' + why + '</span></div>';
       }
       const chosen = selectedPeople[slug] || new Set();
       const showAll = peopleShowAll.has(slug);
@@ -9218,6 +9228,7 @@ function jrvSetFeedBadge(live, count) {
       } catch (err) {
         console.warn('[AC people]', slug, err && err.message);
         peopleBySlug[slug] = [];
+        peopleError[slug] = (err && err.message) || 'lookup failed';
       } finally {
         peopleLoading.delete(slug);
         render();
@@ -9678,6 +9689,17 @@ function jrvSetFeedBadge(live, count) {
         // Picking a person on a row that is only expanded (not ticked) puts that
         // account into the run — otherwise the chip would look chosen but count for nothing.
         if (set.size) selectedSlugs.add(slug); else selectedSlugs.delete(slug);
+        render();
+        return;
+      }
+      // 👥 People — the explicit way to see who is at an account, independent of
+      // the checkbox and the Last-contact line.
+      const peopleBtn = e.target.closest('.jrv-ac-people-btn');
+      if (peopleBtn) {
+        e.preventDefault(); e.stopPropagation();
+        const slug = peopleBtn.dataset.slug;
+        if (peopleOpen.has(slug)) peopleOpen.delete(slug);
+        else { peopleOpen.add(slug); acbEnsurePeople(slug); }
         render();
         return;
       }
