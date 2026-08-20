@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0820-A-AC-MULTICONTACT -->
+<!-- BUILD: ELEVATE-2026-0820-B-AC-PARSE -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -9352,7 +9352,15 @@ function jrvSetFeedBadge(live, count) {
       const toM = String(text || '').match(/^TO:\s*([^\n]*)/);
       let to = '', toName = '';
       if (toM) { const p = toM[1].split('|'); to = (p[0] || '').trim(); toName = (p[1] || '').trim(); }
-      const s = String(text || '');
+      let s = String(text || '');
+      // The model very occasionally writes a draft, catches itself, and writes a second
+      // corrected SUBJECT/BODY block. Keep the LAST block so the correction wins and the
+      // commentary between them never reaches the editor.
+      const blocks = s.split(/(?=SUBJECT:)/);
+      if (blocks.length > 2) {
+        const last = blocks[blocks.length - 1];
+        if (last.indexOf('BODY:') >= 0) s = s.slice(0, s.indexOf('TO:') >= 0 ? s.indexOf('\n') + 1 : 0) + last;
+      }
       const subjM = s.match(/SUBJECT:\s*([^\n]*)/);
       const bodyIdx = s.indexOf('BODY:');
       let body;
