@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0820-B-AC-PARSE -->
+<!-- BUILD: ELEVATE-2026-0820-C-AC-PEOPLEPICK -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -902,6 +902,23 @@
   .jrv-acb-per { background:transparent; border:1px solid rgba(255,255,255,0.16); color:#9aa; width:22px; height:22px; border-radius:5px; font-family:inherit; font-size:11.5px; font-weight:700; cursor:pointer; padding:0; }
   .jrv-acb-per.is-active { background:rgba(200,130,10,0.28); border-color:#C8820A; color:#f0d9a8; }
   .jrv-acb-cperson { font-size:11.5px; color:#8b867c; }
+  .jrv-acb-bar-sub { display:block; font-size:10px; font-weight:600; color:#9c8b6a; letter-spacing:0.03em; }
+  .jrv-acb-bar-btn:disabled { opacity:0.5; cursor:default; }
+  /* People picked for a ticked client — visible and adjustable before drafting */
+  .jrv-acp-strip { display:flex; flex-wrap:wrap; gap:5px; padding:2px 0 6px 22px; }
+  .jrv-acp-note { font-size:11px; color:#8b867c; font-style:italic; }
+  .jrv-acp-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 4px 3px 7px; border-radius:12px; cursor:pointer;
+    background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); font-size:11px; color:#9aa; user-select:none; }
+  .jrv-acp-chip:hover { background:rgba(255,255,255,0.08); }
+  .jrv-acp-chip.is-on { background:rgba(200,130,10,0.16); border-color:rgba(200,130,10,0.5); color:#f0d9a8; }
+  .jrv-acp-tick { font-size:10px; font-weight:800; width:10px; text-align:center; opacity:0.8; }
+  .jrv-acp-name { font-weight:600; }
+  .jrv-acp-title { color:#8b867c; font-size:10px; }
+  .jrv-acp-chip.is-on .jrv-acp-title { color:#b39a6d; }
+  .jrv-acp-one { background:transparent; border:none; color:inherit; opacity:0.55; cursor:pointer; font-family:inherit; font-size:11px; padding:0 3px; border-radius:4px; }
+  .jrv-acp-one:hover { opacity:1; background:rgba(255,255,255,0.12); }
+  .jrv-acp-more { background:transparent; border:1px dashed rgba(255,255,255,0.18); color:#8b867c; cursor:pointer; font-family:inherit; font-size:10.5px; padding:3px 9px; border-radius:12px; }
+  .jrv-acp-more:hover { color:#ccd; border-color:rgba(255,255,255,0.32); }
   .jrv-acb-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.68); display:flex; align-items:center; justify-content:center; padding:24px; z-index:10000; }
   .jrv-acb-modal { background:#141417; border:1px solid rgba(255,255,255,0.1); border-radius:14px; width:100%; max-width:860px; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 24px 70px rgba(0,0,0,0.6); }
   .jrv-acb-head { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid rgba(255,255,255,0.07); }
@@ -9081,6 +9098,12 @@ function jrvSetFeedBadge(live, count) {
     // rebuilds the HTML, so the checkbox state is read back out of this Set).
     const selectedSlugs = new Set();
     const clientNameBySlug = {};
+    // Ticking a client resolves its people immediately and shows them under the row,
+    // so the exact recipients are visible and adjustable BEFORE any drafting spend.
+    const peopleBySlug = {};        // slug -> ranked contact list (cached fetch)
+    const peopleLoading = new Set(); // slugs with a contacts fetch in flight
+    const peopleShowAll = new Set(); // slugs expanded past the top N
+    const selectedPeople = {};      // slug -> Set of chosen emails (lowercased)
     // Pop-out colour filter: 'all' | 'green' | 'yellow' | 'red' | 'gray'. Only the
     // pop-out sets this; it resets to 'all' when the modal closes so the inline panel
     // is never left filtered.
@@ -9119,8 +9142,71 @@ function jrvSetFeedBadge(live, count) {
         + '<input type="checkbox" class="jrv-ac-sel" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Select for bulk draft"' + (selectedSlugs.has(c.slug) ? ' checked' : '') + '>'
         + '<button class="jrv-ac-draft-btn" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '">✎ Draft email</button>'
         + '<button class="jrv-ac-refresh-one" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Scan this company\'s domain for your latest email (catches people not in RCRM)">↻ Refresh</button></div>'
+        + (selectedSlugs.has(c.slug) ? renderPeopleStrip(c.slug) : '')
         + (hasTouch && expanded ? renderExpanded(c.slug, t) : '')
         + '</div>';
+    }
+
+    // The people picked for a ticked client. Chips are toggleable, so Travis can swap
+    // who gets written to before spending a single draft. Defaults to the top ranked
+    // acbPerAccount; "show all" reveals everyone on file at that account.
+    function renderPeopleStrip(slug) {
+      if (peopleLoading.has(slug)) {
+        return '<div class="jrv-acp-strip"><span class="jrv-acp-note">Finding your people there…</span></div>';
+      }
+      const list = peopleBySlug[slug];
+      if (!list) return '';
+      if (!list.length) {
+        return '<div class="jrv-acp-strip"><span class="jrv-acp-note">No contact with an email on file. Add one in RCRM, or use Refresh to find who you are emailing there.</span></div>';
+      }
+      const chosen = selectedPeople[slug] || new Set();
+      const showAll = peopleShowAll.has(slug);
+      const shown = showAll ? list : list.slice(0, Math.max(acbPerAccount, chosen.size));
+      const chips = shown.map(p => {
+        const key = (p.email || '').toLowerCase();
+        const on = chosen.has(key);
+        const nm = ((p.first || '') + (p.last ? ' ' + p.last : '')).trim() || p.email;
+        const meta = [p.title, p.discovered ? 'not in RCRM' : ''].filter(Boolean).join(' · ');
+        return '<span class="jrv-acp-chip' + (on ? ' is-on' : '') + '" data-slug="' + esc(slug) + '" data-email="' + esc(p.email) + '" title="' + esc(p.email) + '">'
+          + '<span class="jrv-acp-tick">' + (on ? '✓' : '+') + '</span>'
+          + '<span class="jrv-acp-name">' + esc(nm) + '</span>'
+          + (meta ? '<span class="jrv-acp-title">' + esc(meta) + '</span>' : '')
+          + '<button class="jrv-acp-one" data-slug="' + esc(slug) + '" data-email="' + esc(p.email) + '" title="Draft to this person now">✎</button>'
+          + '</span>';
+      }).join('');
+      const more = list.length > shown.length
+        ? '<button class="jrv-acp-more" data-slug="' + esc(slug) + '">show all ' + list.length + '</button>'
+        : (showAll && list.length > acbPerAccount ? '<button class="jrv-acp-more" data-slug="' + esc(slug) + '">show fewer</button>' : '');
+      return '<div class="jrv-acp-strip">' + chips + more + '</div>';
+    }
+    // Resolve + rank a client's people once, then default-select the top acbPerAccount.
+    async function acbEnsurePeople(slug, force) {
+      if (peopleLoading.has(slug)) return;
+      if (peopleBySlug[slug] && !force) return;
+      peopleLoading.add(slug);
+      render();
+      try {
+        const ranked = acbRankContacts(slug, await acbFetchContacts(slug));
+        peopleBySlug[slug] = ranked;
+        if (!selectedPeople[slug] || force) {
+          selectedPeople[slug] = new Set(ranked.slice(0, acbPerAccount).map(p => (p.email || '').toLowerCase()));
+        }
+      } catch (err) {
+        console.warn('[AC people]', slug, err && err.message);
+        peopleBySlug[slug] = [];
+      } finally {
+        peopleLoading.delete(slug);
+        render();
+      }
+    }
+    function acbEnsurePeopleMany(slugs) {
+      // Small pool so a Select all on a 20-client section does not fire 20 at once.
+      acbPool(slugs.map((_, i) => i), 3, async i => { await acbEnsurePeople(slugs[i]); });
+    }
+    function acbSelectedPeopleCount() {
+      let n = 0;
+      selectedSlugs.forEach(s => { n += (selectedPeople[s] ? selectedPeople[s].size : 0); });
+      return n;
     }
 
     // Group clients by colour tier into collapsible sections: green, then yellow,
@@ -9165,12 +9251,14 @@ function jrvSetFeedBadge(live, count) {
       }).join('');
       if (!sections) return '<div class="jrv-ac-empty">No clients in this colour.</div>';
       const n = selectedSlugs.size;
+      const people = acbSelectedPeopleCount();
       const perOpts = [1, 2, 3].map(v => '<button class="jrv-acb-per' + (v === acbPerAccount ? ' is-active' : '') + '" data-per="' + v + '">' + v + '</button>').join('');
       const bar = n
         ? '<div class="jrv-acb-bar">'
-          + '<span class="jrv-acb-bar-label">' + n + ' account' + (n === 1 ? '' : 's') + '</span>'
+          + '<span class="jrv-acb-bar-label">' + n + ' account' + (n === 1 ? '' : 's')
+          + '<span class="jrv-acb-bar-sub">' + people + ' ' + (people === 1 ? 'person' : 'people') + '</span></span>'
           + '<span class="jrv-acb-per-wrap"><span class="jrv-acb-per-label">people each</span>' + perOpts + '</span>'
-          + '<button class="jrv-acb-bar-btn">✎ Draft</button>'
+          + '<button class="jrv-acb-bar-btn"' + (people ? '' : ' disabled') + '>✎ Draft ' + (people || '') + '</button>'
           + '<button class="jrv-acb-bar-clear">Clear</button>'
           + '</div>'
         : '';
@@ -9375,11 +9463,14 @@ function jrvSetFeedBadge(live, count) {
       return { to: to, toName: toName, subject: subjM ? subjM[1].trim() : '', body: body };
     }
 
-    async function acdOpen(slug, name) {
+    // person (optional) pins the draft to one specific contact — used by the ✎ on each
+    // person chip. Without it, the best-ranked person at the account is picked.
+    async function acdOpen(slug, name, person) {
       if (!ACD_DRAFT_URL) { alert('Active Client drafting is not configured.'); return; }
       acdSlug = slug; acdName = name || ''; acdToName = '';
-      acdQ('#jrvAcdTitle').textContent = 'Draft email — ' + (name || 'client');
-      acdQ('#jrvAcdCtx').textContent = 'Reading your prior emails with ' + (name || 'this client') + ' for context…';
+      const who = person ? (((person.first || '') + (person.last ? ' ' + person.last : '')).trim() || person.email) : '';
+      acdQ('#jrvAcdTitle').textContent = 'Draft email — ' + (who ? who + ' · ' + (name || 'client') : (name || 'client'));
+      acdQ('#jrvAcdCtx').textContent = 'Reading your prior emails with ' + (who || name || 'this client') + ' for context…';
       acdQ('#jrvAcdTo').value = ''; acdQ('#jrvAcdSubj').value = ''; acdQ('#jrvAcdBody').value = 'Drafting…';
       acd.style.display = 'flex';
       try {
@@ -9387,7 +9478,7 @@ function jrvSetFeedBadge(live, count) {
         // happens to return first (some accounts have 30+ contacts).
         let pin = '';
         try {
-          const top = acbRankContacts(slug, await acbFetchContacts(slug))[0];
+          const top = person || acbRankContacts(slug, await acbFetchContacts(slug))[0];
           if (top && top.email) {
             pin = '&contact_email=' + encodeURIComponent(top.email)
               + '&first_name=' + encodeURIComponent(top.first || '')
@@ -9525,7 +9616,9 @@ function jrvSetFeedBadge(live, count) {
     document.addEventListener('change', e => {
       const cb = e.target.closest('.jrv-ac-sel');
       if (!cb) return;
-      if (cb.checked) selectedSlugs.add(cb.dataset.slug); else selectedSlugs.delete(cb.dataset.slug);
+      const slug = cb.dataset.slug;
+      if (cb.checked) { selectedSlugs.add(slug); acbEnsurePeople(slug); }
+      else { selectedSlugs.delete(slug); peopleShowAll.delete(slug); }
       render();
     });
 
@@ -9534,14 +9627,54 @@ function jrvSetFeedBadge(live, count) {
       if (sa) {
         e.preventDefault(); e.stopPropagation();
         const arr = acbClientsInTier(sa.dataset.tier);
-        if (sa.dataset.all === '1') arr.forEach(c => selectedSlugs.delete(c.slug));
-        else arr.forEach(c => selectedSlugs.add(c.slug));
+        if (sa.dataset.all === '1') { arr.forEach(c => { selectedSlugs.delete(c.slug); peopleShowAll.delete(c.slug); }); }
+        else { arr.forEach(c => selectedSlugs.add(c.slug)); acbEnsurePeopleMany(arr.map(c => c.slug)); }
         render();
         return;
       }
-      if (e.target.closest('.jrv-acb-bar-clear')) { e.preventDefault(); selectedSlugs.clear(); render(); return; }
+      // Toggle one person in or out of the run.
+      const chipOne = e.target.closest('.jrv-acp-one');
+      if (chipOne) {
+        e.preventDefault(); e.stopPropagation();
+        const slug = chipOne.dataset.slug, email = (chipOne.dataset.email || '').toLowerCase();
+        const p = (peopleBySlug[slug] || []).find(x => (x.email || '').toLowerCase() === email);
+        acdOpen(slug, clientNameBySlug[slug] || '', p || null);
+        return;
+      }
+      const chip = e.target.closest('.jrv-acp-chip');
+      if (chip) {
+        e.preventDefault(); e.stopPropagation();
+        const slug = chip.dataset.slug, email = (chip.dataset.email || '').toLowerCase();
+        const set = selectedPeople[slug] || (selectedPeople[slug] = new Set());
+        if (set.has(email)) set.delete(email); else set.add(email);
+        render();
+        return;
+      }
+      const moreBtn = e.target.closest('.jrv-acp-more');
+      if (moreBtn) {
+        e.preventDefault(); e.stopPropagation();
+        const slug = moreBtn.dataset.slug;
+        if (peopleShowAll.has(slug)) peopleShowAll.delete(slug); else peopleShowAll.add(slug);
+        render();
+        return;
+      }
+      if (e.target.closest('.jrv-acb-bar-clear')) {
+        e.preventDefault();
+        selectedSlugs.forEach(s => { delete selectedPeople[s]; peopleShowAll.delete(s); });
+        selectedSlugs.clear(); render(); return;
+      }
       const per = e.target.closest('.jrv-acb-per');
-      if (per) { e.preventDefault(); acbPerAccount = parseInt(per.dataset.per, 10) || 2; render(); return; }
+      if (per) {
+        e.preventDefault();
+        acbPerAccount = parseInt(per.dataset.per, 10) || 2;
+        // Re-default every ticked account to the new top N (this discards manual picks,
+        // which is the predictable behaviour when you change the number itself).
+        selectedSlugs.forEach(s => {
+          const ranked = peopleBySlug[s];
+          if (ranked) selectedPeople[s] = new Set(ranked.slice(0, acbPerAccount).map(p => (p.email || '').toLowerCase()));
+        });
+        render(); return;
+      }
       if (e.target.closest('.jrv-acb-bar-btn')) { e.preventDefault(); acbStart(); }
     });
 
@@ -9675,11 +9808,14 @@ function jrvSetFeedBadge(live, count) {
       if (!slugs.length) return;
       const barBtn = document.querySelector('.jrv-acb-bar-btn');
       if (barBtn) { barBtn.disabled = true; barBtn.textContent = 'Finding people…'; }
-      // Resolve the people first, so the count in the confirm is the real email count.
+      // Anything not resolved yet (rare: Draft clicked before a fetch landed) gets
+      // resolved now; everything else uses the people already shown under the rows.
+      const missing = slugs.filter(s => !peopleBySlug[s]);
+      if (missing.length) await acbPool(missing.map((_, i) => i), 3, async i => { await acbEnsurePeople(missing[i]); });
       const picked = {};
-      await acbPool(slugs.map((_, i) => i), 3, async i => {
-        const slug = slugs[i];
-        picked[slug] = acbRankContacts(slug, await acbFetchContacts(slug)).slice(0, acbPerAccount);
+      slugs.forEach(slug => {
+        const chosen = selectedPeople[slug] || new Set();
+        picked[slug] = (peopleBySlug[slug] || []).filter(p => chosen.has((p.email || '').toLowerCase()));
       });
       const seen = {}, items = [];
       slugs.forEach(slug => {
@@ -9695,7 +9831,7 @@ function jrvSetFeedBadge(live, count) {
         });
       });
       const emptyAccounts = slugs.filter(s => !(picked[s] || []).length).length;
-      if (!items.length) { alert('No contacts with an email address on the selected account' + (slugs.length === 1 ? '' : 's') + '.'); render(); return; }
+      if (!items.length) { alert('No people picked. Tick at least one person under a selected account.'); render(); return; }
       if (items.length > 12 && !confirm('Draft ' + items.length + ' emails to people across ' + slugs.length + ' account' + (slugs.length === 1 ? '' : 's') + '? Each one reads that person\'s own mail history and runs an AI draft.')) { render(); return; }
       acbItems = items;
       document.getElementById('jrvAcbBody').innerHTML = acbItems.map(acbCardHtml).join('');
