@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0820-C-AC-PEOPLEPICK -->
+<!-- BUILD: ELEVATE-2026-0820-D-AC-PEOPLE-ON-EXPAND -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -9142,7 +9142,7 @@ function jrvSetFeedBadge(live, count) {
         + '<input type="checkbox" class="jrv-ac-sel" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Select for bulk draft"' + (selectedSlugs.has(c.slug) ? ' checked' : '') + '>'
         + '<button class="jrv-ac-draft-btn" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '">✎ Draft email</button>'
         + '<button class="jrv-ac-refresh-one" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Scan this company\'s domain for your latest email (catches people not in RCRM)">↻ Refresh</button></div>'
-        + (selectedSlugs.has(c.slug) ? renderPeopleStrip(c.slug) : '')
+        + (selectedSlugs.has(c.slug) || expanded ? renderPeopleStrip(c.slug) : '')
         + (hasTouch && expanded ? renderExpanded(c.slug, t) : '')
         + '</div>';
     }
@@ -9331,7 +9331,11 @@ function jrvSetFeedBadge(live, count) {
         if (!block) return;
         const slug = block.dataset.slug;
         if (expandedSlugs.has(slug)) expandedSlugs.delete(slug);
-        else expandedSlugs.add(slug);
+        else {
+          expandedSlugs.add(slug);
+          // Expanding a row shows who Travis would write to there, same as ticking it.
+          acbEnsurePeople(slug);
+        }
         render();
       }
     });
@@ -9647,6 +9651,9 @@ function jrvSetFeedBadge(live, count) {
         const slug = chip.dataset.slug, email = (chip.dataset.email || '').toLowerCase();
         const set = selectedPeople[slug] || (selectedPeople[slug] = new Set());
         if (set.has(email)) set.delete(email); else set.add(email);
+        // Picking a person on a row that is only expanded (not ticked) puts that
+        // account into the run — otherwise the chip would look chosen but count for nothing.
+        if (set.size) selectedSlugs.add(slug); else selectedSlugs.delete(slug);
         render();
         return;
       }
