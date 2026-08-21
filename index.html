@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0820-F-AC-PEOPLE-BUTTON -->
+<!-- BUILD: ELEVATE-2026-0821-A-AC-CONTACTS-INLINE -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -914,6 +914,8 @@
   .jrv-acp-strip { display:flex; flex-wrap:wrap; align-items:center; gap:5px; padding:7px 10px 8px 18px;
     border-top:1px dashed rgba(255,255,255,0.10); background:rgba(255,255,255,0.02); }
   .jrv-acp-strip::before { content:'WRITING TO'; font-size:8.5px; font-weight:800; letter-spacing:0.09em; color:#7d7669; margin-right:3px; }
+  .jrv-acp-chip.is-on .jrv-acp-one { border-left:1px solid rgba(200,130,10,0.35); margin-left:3px; }
+  .jrv-acp-one { font-size:10px; font-weight:700; }
   .jrv-acp-note { font-size:11px; color:#8b867c; font-style:italic; }
   .jrv-acp-note-wrap::before { content:none; }
   .jrv-acp-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 4px 3px 7px; border-radius:12px; cursor:pointer;
@@ -9173,7 +9175,7 @@ function jrvSetFeedBadge(live, count) {
         + '<button class="jrv-ac-refresh-one" data-slug="' + esc(c.slug) + '" data-name="' + esc(c.name || '') + '" title="Scan this company\'s domain for your latest email (catches people not in RCRM)">↻ Refresh</button>'
         + '<button class="jrv-ac-people-btn' + (peopleOpen.has(c.slug) ? ' is-on' : '') + '" data-slug="' + esc(c.slug) + '" title="Show the people at this account">👥 People'
         + (peopleBySlug[c.slug] && peopleBySlug[c.slug].length ? ' (' + peopleBySlug[c.slug].length + ')' : '') + '</button></div>'
-        + (selectedSlugs.has(c.slug) || expanded || peopleOpen.has(c.slug) ? renderPeopleStrip(c.slug) : '')
+        + renderPeopleStrip(c.slug)
         + (hasTouch && expanded ? renderExpanded(c.slug, t) : '')
         + '</div>';
     }
@@ -9186,6 +9188,8 @@ function jrvSetFeedBadge(live, count) {
         return '<div class="jrv-acp-strip jrv-acp-note-wrap"><span class="jrv-acp-note">Finding your people there…</span></div>';
       }
       const list = peopleBySlug[slug];
+      // Not cached yet (a client the weekly contacts run has not covered): stay quiet
+      // on the card and let the 👥 People button fetch it live.
       if (!list) return '';
       if (!list.length) {
         const why = peopleError[slug]
@@ -9205,13 +9209,35 @@ function jrvSetFeedBadge(live, count) {
           + '<span class="jrv-acp-tick">' + (on ? '✓' : '+') + '</span>'
           + '<span class="jrv-acp-name">' + esc(nm) + '</span>'
           + (meta ? '<span class="jrv-acp-title">' + esc(meta) + '</span>' : '')
-          + '<button class="jrv-acp-one" data-slug="' + esc(slug) + '" data-email="' + esc(p.email) + '" title="Draft to this person now">✎</button>'
+          + '<button class="jrv-acp-one" data-slug="' + esc(slug) + '" data-email="' + esc(p.email) + '" title="Write to ' + esc(nm) + ' now, on their own">✎ Write</button>'
           + '</span>';
       }).join('');
       const more = list.length > shown.length
         ? '<button class="jrv-acp-more" data-slug="' + esc(slug) + '">show all ' + list.length + '</button>'
         : (showAll && list.length > acbPerAccount ? '<button class="jrv-acp-more" data-slug="' + esc(slug) + '">show fewer</button>' : '');
       return '<div class="jrv-acp-strip">' + chips + more + '</div>';
+    }
+    // People come down WITH the touch feed (contacts_json, cached weekly by Make
+    // 6012040), so every card can list them on load with no lookup. Seeding here is
+    // what makes them appear instantly; the live webhook is only a fallback.
+    function acbSeedPeopleFromTouch() {
+      Object.keys(touchBySlug).forEach(slug => {
+        if (peopleBySlug[slug]) return;
+        const raw = (touchBySlug[slug] || {}).contacts_json || '';
+        if (raw.indexOf('@') < 0) return;
+        const rows = raw.split('~~').map(l => l.trim()).filter(Boolean).map(l => {
+          const p = l.split('|');
+          return { email: (p[0] || '').trim(), first: (p[1] || '').trim(), last: (p[2] || '').trim(), title: (p[3] || '').trim() };
+        }).filter(p => p.email.indexOf('@') > 0);
+        if (!rows.length) return;
+        acbContactCache[slug] = rows;
+        const ranked = acbRankContacts(slug, rows);
+        peopleBySlug[slug] = ranked;
+        // Top-ranked person is pre-picked; the rest are one click away.
+        if (!selectedPeople[slug]) {
+          selectedPeople[slug] = new Set(ranked.slice(0, acbPerAccount).map(p => (p.email || '').toLowerCase()));
+        }
+      });
     }
     // Resolve + rank a client's people once, then default-select the top acbPerAccount.
     async function acbEnsurePeople(slug, force) {
@@ -9392,6 +9418,7 @@ function jrvSetFeedBadge(live, count) {
             const rec = (t && t.aggregate) ? t.aggregate : t;
             if (rec && rec.rcrm_company_slug) touchBySlug[rec.rcrm_company_slug] = rec;
           });
+          acbSeedPeopleFromTouch();
           render();
         })
         .catch(err => console.warn('[client-touch] fetch failed:', err && err.message))
