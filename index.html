@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0902-B -->
+<!-- BUILD: ELEVATE-2026-0902-C -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -1577,6 +1577,29 @@
     .anl-foldtitle{min-width:0;flex:1 0 100%}
     .anl-foldsum{flex:1 0 100%;padding-left:22px}
   }
+
+  /* two blocks: what we sent, and the outside world */
+  .anl-group{margin:30px 0 4px;display:flex;align-items:center;gap:12px}
+  .anl-group span{font-size:13px;font-weight:600;color:var(--text);letter-spacing:.2px}
+  .anl-group:after{content:'';flex:1;height:1px;background:var(--border)}
+
+  /* portfolio shape in one bar, then rows grouped by what the state instructs */
+  .anl-split{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--dark4);margin:2px 0 9px}
+  .anl-split i{display:block;height:100%}
+  .anl-s-enter{background:var(--green)} .anl-s-hold{background:var(--gold-light)} .anl-s-exit{background:var(--red)}
+  .anl-splitkey{display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--text-muted);margin-bottom:6px}
+  .anl-splitkey span{display:flex;align-items:center;gap:6px}
+  .anl-k{width:9px;height:9px;border-radius:2px;display:inline-block}
+  .anl-splitnote{flex:1;min-width:220px;font-size:11px;opacity:.85}
+  .anl-mgroup{margin-top:18px;padding-left:12px;border-left:2px solid var(--border)}
+  .anl-g-enter{border-left-color:var(--green)}
+  .anl-g-hold{border-left-color:var(--gold-light)}
+  .anl-g-exit{border-left-color:var(--red)}
+  .anl-mghead{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:2px}
+  .anl-mghead b{font-size:13px;color:var(--text);font-weight:600}
+  .anl-mgcount{font-size:11px;font-weight:700;color:var(--text-muted);background:var(--dark3);
+    border:1px solid var(--border);border-radius:10px;padding:1px 8px}
+  .anl-mgsub{flex:1;min-width:200px;font-size:11.5px;color:var(--text-muted)}
   @media(max-width:760px){.anl-grid2{grid-template-columns:1fr}}
   @media(max-width:420px){.anl-bar h2{width:100%}.anl-cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}}
 </style>
@@ -10335,6 +10358,12 @@ function anlOpenAll(open) {
 }
 
 // A section is a header you can scan and a body you can ignore.
+// A plain heading that says what the block underneath is about, so a reader
+// knows whether the next four rows concern their email or their market.
+function anlGroup(title) {
+  return '<div class="anl-group"><span>' + anlEsc(title) + '</span></div>';
+}
+
 function anlFold(id, title, summary, bodyFn, demoTag) {
   const open = !!anlOpenSecs[id];
   return '<div class="anl-fold' + (open ? ' anl-open' : '') + '">' +
@@ -10479,18 +10508,25 @@ function anlRender() {
     .some((k) => anlOpenSecs[k]);
   bodyEl.innerHTML =
     anlHeadline(d) +
-    anlScoreboard(d) +
     '<div class="anl-foldbar">' +
       '<span>Open a section for the detail behind it.</span>' +
       '<button class="anl-btn anl-ghost" onclick="anlOpenAll(' + (anyOpen ? 'false' : 'true') + ')">' +
         (anyOpen ? 'Collapse all' : 'Expand all') + '</button>' +
     '</div>' +
-    anlFold('market',    'Market Condition Board', anlSumMarket(d),    () => anlMarketBoard(d, meta), meta.markets_demo) +
+    // Two blocks, each ending with its own scorecard. Travis: "If it talks about
+    // emails, it should be with the outreach scoreboard." The segment breakdown
+    // and the briefing are both readings of the email programme and belong here;
+    // the Decision Log grades the decisions this block produced.
+    anlGroup('What we sent, and how it did') +
+    anlScoreboard(d) +
     anlFold('segments',  'What Is Working',        anlSumSegments(d),  () => anlSegments(d)) +
     anlFold('briefing',  'CEO Briefing',           anlSumBriefing(d),  () => anlBriefing(d, meta), meta.briefing_degraded) +
+    anlFold('decisions', 'Decision Log',           anlSumDecisions(d), () => anlDecisionLog(d, meta), meta.decisions_demo) +
+    // and the outside world, ending with the scorecard for ITS calls
+    anlGroup('The market, and where to spend next') +
+    anlFold('market',    'Market Condition Board', anlSumMarket(d),    () => anlMarketBoard(d, meta), meta.markets_demo) +
     anlFold('targeting', 'Targeting List',         anlSumTargeting(d), () => anlTargeting(d, meta), meta.markets_demo) +
     anlFold('macro',     'Macro Watch',            anlSumMacro(d),     () => anlMacro(d, meta), meta.radar_degraded) +
-    anlFold('decisions', 'Decision Log',           anlSumDecisions(d), () => anlDecisionLog(d, meta), meta.decisions_demo) +
     anlFold('forecasts', 'Forecast Register',      anlSumForecasts(d), () => anlForecasts(d, meta), meta.forecasts_demo);
 }
 
@@ -10642,69 +10678,102 @@ function anlScoreBar(score, scale) {
 let anlOpenRows = {};
 function anlToggleRow(id) { anlOpenRows[id] = !anlOpenRows[id]; anlRender(); }
 
+/**
+ * Market Condition Board.
+ *
+ * Travis, 2026-09-02: "maybe a simple pie chart for these or categorized with
+ * a better structure. I am not sure."
+ *
+ * A pie of 3/5/2 carries three numbers and no meaning, and pie slices are hard
+ * to compare at a glance. So: one stacked bar for the shape of the portfolio,
+ * then the rows grouped under what each state actually instructs you to do.
+ * ENTER/HOLD/EXIT are jargon until something says what they mean, and the
+ * instruction is the reason the board exists.
+ */
+const ANL_STATE_MEANING = {
+  ENTER: { head: 'Build in these', sub: 'Fund outreach here now. Relationships built this month convert later.', cls: 'anl-g-enter' },
+  HOLD:  { head: 'Hold these',     sub: 'Keep existing relationships warm. Do not fund new acquisition yet.',     cls: 'anl-g-hold' },
+  EXIT:  { head: 'Back out of these', sub: 'Stop spending acquisition effort. Keep what you have at no extra cost.', cls: 'anl-g-exit' },
+};
+
 function anlMarketBoard(d, meta) {
   const rows = d.market_board || [];
   if (!rows.length) return '';
   const scale = d.scale || {};
-  const counts = { ENTER: 0, HOLD: 0, EXIT: 0 };
-  rows.forEach((m) => { counts[m.state] = (counts[m.state] || 0) + 1; });
+  const groups = { ENTER: [], HOLD: [], EXIT: [] };
+  rows.forEach((m) => { (groups[m.state] || groups.HOLD).push(m); });
+  Object.keys(groups).forEach((k) => groups[k].sort((a, b) => b.score - a.score));
+  const total = rows.length || 1;
+  const wid = (n) => (n / total) * 100;
 
-  const order = { ENTER: 0, HOLD: 1, EXIT: 2 };
-  const sorted = rows.slice().sort((a, b) =>
-    (order[a.state] - order[b.state]) || (b.score - a.score));
-
+  // the shape of the portfolio in one line
   let html = '<div class="anl-panel">' +
-    '<div class="anl-note" style="margin:0 0 14px">' +
-      '<b style="color:var(--green)">' + counts.ENTER + ' to build in</b>  ·  ' +
-      '<b style="color:var(--gold-light)">' + counts.HOLD + ' to hold</b>  ·  ' +
-      '<b style="color:var(--red)">' + counts.EXIT + ' to back out of</b>. ' +
-      'Score is out of 100 from six public inputs. State and score are computed here, never written by the model, ' +
-      'and a state change needs ' + anlNum(scale.sticky_weeks || 3) + ' consecutive weeks so one odd week cannot flip a market.' +
+    '<div class="anl-split">' +
+      (groups.ENTER.length ? '<i class="anl-s-enter" style="width:' + wid(groups.ENTER.length) + '%"></i>' : '') +
+      (groups.HOLD.length  ? '<i class="anl-s-hold"  style="width:' + wid(groups.HOLD.length)  + '%"></i>' : '') +
+      (groups.EXIT.length  ? '<i class="anl-s-exit"  style="width:' + wid(groups.EXIT.length)  + '%"></i>' : '') +
+    '</div>' +
+    '<div class="anl-splitkey">' +
+      '<span><u class="anl-k anl-s-enter"></u>' + groups.ENTER.length + ' build in</span>' +
+      '<span><u class="anl-k anl-s-hold"></u>' + groups.HOLD.length + ' hold</span>' +
+      '<span><u class="anl-k anl-s-exit"></u>' + groups.EXIT.length + ' back out of</span>' +
+      '<span class="anl-splitnote">' + anlNum(rows.length) + ' markets tracked · scored 0 to 100 from six public inputs · ' +
+        'a state change needs ' + anlNum(scale.sticky_weeks || 3) + ' straight weeks</span>' +
     '</div>';
 
-  sorted.forEach((m) => {
-    const open = !!anlOpenRows[m.id];
-    const timing = m.timing && m.timing.kind !== 'none'
-      ? '<div class="anl-timing">' + (m.timing.kind === 'get_in_by' ? 'Get in by ' : 'Get out before ') +
-        '<b>' + anlEsc(m.timing.date) + '</b></div>' : '';
-    const prebuy = m.prebuy_active
-      ? '<div class="anl-prebuy">Postings here may be inflated by customers pulling volume forward ahead of ' +
-        anlEsc(m.policy_event && m.policy_event.date ? String(m.policy_event.date).slice(0, 10) : 'the scheduled date') +
-        '. Treat the rise as borrowed.' + (m.prebuy_capped ? ' Held at HOLD while this is on.' : '') + '</div>'
-      : '';
+  ['ENTER', 'HOLD', 'EXIT'].forEach((state) => {
+    const list = groups[state];
+    if (!list.length) return;
+    const meta2 = ANL_STATE_MEANING[state];
+    html += '<div class="anl-mgroup ' + meta2.cls + '">' +
+      '<div class="anl-mghead"><b>' + anlEsc(meta2.head) + '</b>' +
+        '<span class="anl-mgcount">' + list.length + '</span>' +
+        '<span class="anl-mgsub">' + anlEsc(meta2.sub) + '</span></div>';
 
-    let maths = '';
-    if (open) {
-      const b = m.breakdown || [];
-      maths = '<div class="anl-maths"><table><thead><tr><th>Input</th><th>Reading</th>' +
-        '<th class="anl-num">Weight</th><th class="anl-num">Points</th></tr></thead><tbody>' +
-        b.map((x) => '<tr><td>' + anlEsc(x.label) + '</td><td><span class="anl-why">' + anlEsc(x.display) + '</span></td>' +
-          '<td class="anl-num">' + anlNum(x.weight) + '%</td>' +
-          '<td class="anl-num"><b>' + anlNum(x.points, 1) + '</b></td></tr>').join('') +
-        '<tr class="anl-sum"><td colspan="3">Total</td><td class="anl-num"><b>' + anlNum(m.score) + '</b></td></tr>' +
-        '</tbody></table>' +
-        '<div class="anl-why" style="margin-top:8px">Each input is scored 0 to 100 then multiplied by its weight. ' +
-        'Layoff pressure and policy risk count backwards: more of either lowers the score.</div></div>';
-    }
+    list.forEach((m) => {
+      const open = !!anlOpenRows[m.id];
+      const timing = m.timing && m.timing.kind !== 'none'
+        ? '<div class="anl-timing">' + (m.timing.kind === 'get_in_by' ? 'Get in by ' : 'Get out before ') +
+          '<b>' + anlEsc(m.timing.date) + '</b></div>' : '';
+      const prebuy = m.prebuy_active
+        ? '<div class="anl-prebuy">Postings here may be inflated by customers pulling volume forward ahead of ' +
+          anlEsc(m.policy_event && m.policy_event.date ? String(m.policy_event.date).slice(0, 10) : 'the scheduled date') +
+          '. Treat the rise as borrowed.' + (m.prebuy_capped ? ' Held at HOLD while this is on.' : '') + '</div>'
+        : '';
 
-    html += '<div class="anl-mrow">' +
-      '<div class="anl-mhead">' +
-        '<div class="anl-mstate">' + anlStateBadge(m.state) +
-          '<div class="anl-why">' + anlNum(m.weeks_in_state) + 'w' +
-          (m.pending_state ? ' · ' + anlEsc(m.pending_state) + ' pending' : '') + '</div></div>' +
-        '<div class="anl-mname"><div class="anl-nm">' + anlEsc(m.sector) + '</div>' +
-          '<div class="anl-why">' + anlEsc(m.region) + '</div>' +
-          (m.reason ? '<div class="anl-mreason">' + anlEsc(m.reason) + '</div>' : '') +
-          prebuy + '</div>' +
-        '<div class="anl-mscore">' + anlScoreBar(m.score, scale) +
-          '<div class="anl-why" style="text-align:right">' +
-            ((Number(m.delta_wow) || 0) === 0 ? 'level on the week'
-              : anlSignStr(m.delta_wow) + ' on the week') + '</div>' + timing + '</div>' +
-      '</div>' +
-      '<button class="anl-more" onclick="anlToggleRow(\'' + anlEsc(m.id) + '\')">' +
-        (open ? 'Hide the maths' : 'Where this score comes from') + '</button>' +
-      maths +
-      '</div>';
+      let maths = '';
+      if (open) {
+        const b = m.breakdown || [];
+        maths = '<div class="anl-maths"><table><thead><tr><th>Input</th><th>Reading</th>' +
+          '<th class="anl-num">Weight</th><th class="anl-num">Points</th></tr></thead><tbody>' +
+          b.map((x) => '<tr><td>' + anlEsc(x.label) + '</td><td><span class="anl-why">' + anlEsc(x.display) + '</span></td>' +
+            '<td class="anl-num">' + anlNum(x.weight) + '%</td>' +
+            '<td class="anl-num"><b>' + anlNum(x.points, 1) + '</b></td></tr>').join('') +
+          '<tr class="anl-sum"><td colspan="3">Total</td><td class="anl-num"><b>' + anlNum(m.score) + '</b></td></tr>' +
+          '</tbody></table>' +
+          '<div class="anl-why" style="margin-top:8px">Each input is scored 0 to 100 then multiplied by its weight. ' +
+          'Layoff pressure and policy risk count backwards: more of either lowers the score.</div></div>';
+      }
+
+      html += '<div class="anl-mrow">' +
+        '<div class="anl-mhead">' +
+          '<div class="anl-mname"><div class="anl-nm">' + anlEsc(m.sector) + '</div>' +
+            '<div class="anl-why">' + anlEsc(m.region) + ' · ' + anlNum(m.weeks_in_state) + ' week' +
+              (m.weeks_in_state === 1 ? '' : 's') + ' at ' + anlEsc(m.state) +
+              (m.pending_state ? ', ' + anlEsc(m.pending_state) + ' pending' : '') + '</div>' +
+            (m.reason ? '<div class="anl-mreason">' + anlEsc(m.reason) + '</div>' : '') +
+            prebuy + '</div>' +
+          '<div class="anl-mscore">' + anlScoreBar(m.score, scale) +
+            '<div class="anl-why" style="text-align:right">' +
+              ((Number(m.delta_wow) || 0) === 0 ? 'level on the week'
+                : anlSignStr(m.delta_wow) + ' on the week') + '</div>' + timing + '</div>' +
+        '</div>' +
+        '<button class="anl-more" onclick="anlToggleRow(\'' + anlEsc(m.id) + '\')">' +
+          (open ? 'Hide the maths' : 'Where this score comes from') + '</button>' +
+        maths +
+        '</div>';
+    });
+    html += '</div>';
   });
   return html + '</div>';
 }
