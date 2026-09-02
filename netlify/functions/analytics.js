@@ -789,17 +789,17 @@ function extractJson(data) {
 async function briefingCall(scoreboard, segments) {
   const data = await anthropic({
     model: MODEL,
-    max_tokens: 1000,
+    max_tokens: 700,
     system: BRIEFING_SYSTEM,
     messages: [{ role: "user", content: JSON.stringify({ scoreboard, segments }) }],
-  }, 20000);
+  }, 11000);
   return extractJson(data);
 }
 
 async function radarCall(board) {
   const data = await anthropic({
     model: MODEL,
-    max_tokens: 900,
+    max_tokens: 700,
     system: RADAR_SYSTEM,
     // 4 searches plus generation overran the 26s function ceiling on the first
     // live run. Two is enough for a weekly market read and leaves headroom.
@@ -813,7 +813,7 @@ async function radarCall(board) {
           prebuy_active: m.prebuy_active, policy_event: m.policy_event,
         }))),
     }],
-  }, 25000);
+  }, 21000);
   return extractJson(data);
 }
 
@@ -1130,7 +1130,7 @@ exports.handler = async (event) => {
   if (process.env.ANALYTICS_FETCH_URL) {
     try {
       const sep = process.env.ANALYTICS_FETCH_URL.indexOf("?") >= 0 ? "&" : "?";
-      const res = await getJson(process.env.ANALYTICS_FETCH_URL + sep + "days=" + (days * 2), null, 9000);
+      const res = await getJson(process.env.ANALYTICS_FETCH_URL + sep + "days=" + (days * 2), null, 5000);
       if (res && Array.isArray(res.rows)) rows = res.rows;
       else warnings.push("Analytics fetch returned no rows array.");
     } catch (e) {
@@ -1178,7 +1178,7 @@ exports.handler = async (event) => {
       const res = await getJson(process.env.DECISION_LOG_URL, {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "list" }),
-      }, 8000);
+      }, 4000);
       if (res && Array.isArray(res.decisions)) decisionsLog = res.decisions;
     } catch (e) {
       warnings.push("Decision log fetch failed: " + String(e.message || e));
