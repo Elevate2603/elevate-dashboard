@@ -757,6 +757,13 @@ async function anthropic(body, timeoutMs) {
     const text = await r.text();
     if (!r.ok) throw new Error("Anthropic " + r.status + ": " + text.slice(0, 300));
     return JSON.parse(text);
+  } catch (e) {
+    // an AbortError surfaces as "This operation was aborted", which tells nobody
+    // what actually happened; name the real cause so meta.warnings is useful
+    if (e && (e.name === "AbortError" || /aborted/i.test(String(e.message)))) {
+      throw new Error("timed out after " + Math.round((timeoutMs || 20000) / 1000) + "s");
+    }
+    throw e;
   } finally {
     clearTimeout(timer);
   }
@@ -792,9 +799,11 @@ async function briefingCall(scoreboard, segments) {
 async function radarCall(board) {
   const data = await anthropic({
     model: MODEL,
-    max_tokens: 1000,
+    max_tokens: 900,
     system: RADAR_SYSTEM,
-    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }],
+    // 4 searches plus generation overran the 26s function ceiling on the first
+    // live run. Two is enough for a weekly market read and leaves headroom.
+    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 2 }],
     messages: [{
       role: "user",
       content: "Market Condition Board, already computed. Do not change state or score:\n" +
@@ -804,7 +813,7 @@ async function radarCall(board) {
           prebuy_active: m.prebuy_active, policy_event: m.policy_event,
         }))),
     }],
-  }, 24000);
+  }, 25000);
   return extractJson(data);
 }
 
