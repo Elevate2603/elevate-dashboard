@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0902-D -->
+<!-- BUILD: ELEVATE-2026-0902-E -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -10744,44 +10744,6 @@ function anlPickState(st) {
   anlRender();
 }
 
-/* A donut in plain SVG. Each arc is a circle with a dashed stroke sized to its
-   share, rotated into place. No library, no canvas, scales cleanly. */
-function anlDonut(groups, total) {
-  const R = 52, SW = 22, C = 2 * Math.PI * R;
-  let at = 0;
-  const arcs = ANL_STATES.map((st) => {
-    const n = groups[st].length;
-    if (!n) return '';
-    const frac = n / total;
-    const len = C * frac;
-    const sel = anlBoardPick === st;
-    const dim = anlBoardPick && !sel;
-    const a = '<circle class="anl-arc" cx="70" cy="70" r="' + R + '" fill="none"' +
-      ' stroke="' + ANL_STATE_MEANING[st].colour + '"' +
-      ' stroke-width="' + (sel ? SW + 6 : SW) + '"' +
-      ' stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '"' +
-      ' stroke-dashoffset="' + (-at).toFixed(2) + '"' +
-      ' opacity="' + (dim ? '.28' : '1') + '"' +
-      ' transform="rotate(-90 70 70)"' +
-      ' onclick="anlPickState(\'' + st + '\')">' +
-      '<title>' + n + ' ' + ANL_STATE_MEANING[st].head + '</title></circle>';
-    at += len;
-    return a;
-  }).join('');
-
-  const centre = anlBoardPick
-    ? '<tspan class="anl-dnum" x="70" dy="-2">' + groups[anlBoardPick].length + '</tspan>' +
-      '<tspan class="anl-dlbl" x="70" dy="16">' + anlEsc(ANL_STATE_MEANING[anlBoardPick].head.toLowerCase()) + '</tspan>'
-    : '<tspan class="anl-dnum" x="70" dy="-2">' + total + '</tspan>' +
-      '<tspan class="anl-dlbl" x="70" dy="16">markets</tspan>';
-
-  return '<svg class="anl-donut" viewBox="0 0 140 140" role="img" aria-label="Market states">' +
-    '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="var(--dark4)" stroke-width="' + SW + '"></circle>' +
-    arcs +
-    '<text x="70" y="70" text-anchor="middle">' + centre + '</text>' +
-    '</svg>';
-}
-
 function anlMarketBoard(d, meta) {
   const rows = d.market_board || [];
   if (!rows.length) return '';
@@ -10800,8 +10762,16 @@ function anlMarketBoard(d, meta) {
 
   const shown = anlBoardPick ? [anlBoardPick] : ANL_STATES;
 
+  // same renderer the targeting list uses, so the two donuts cannot drift apart
+  const donut = anlDonutOf(
+    ANL_STATES.map((st) => ({ key: st, label: groups[st].length + ' ' + ANL_STATE_MEANING[st].head,
+      value: groups[st].length, colour: ANL_STATE_MEANING[st].colour })),
+    anlBoardPick ? String(groups[anlBoardPick].length) : String(total),
+    anlBoardPick ? ANL_STATE_MEANING[anlBoardPick].head.toLowerCase() : 'markets',
+    anlBoardPick, 'anlPickState');
+
   let html = '<div class="anl-panel"><div class="anl-boardtop">' +
-    anlDonut(groups, total) +
+    donut +
     '<div class="anl-boardlegend">' + legend +
       '<div class="anl-why" style="margin-top:10px">' +
         (anlBoardPick
@@ -10987,50 +10957,134 @@ async function anlDecide(i, action) {
 }
 
 /* ---------- 5. targeting list ----------
-   Same visual language as the board above it: grouped by state with the same
-   coloured rail, the same score treatment, the same chips. It is the same ten
-   markets read a different way, so it should not look like a different tab. */
+   Same visual language as the board above it, and its own donut.
+
+   A pie of raw scores would be meaningless: scores are not parts of a whole.
+   What IS a whole is next month's outreach capacity, and splitting that across
+   these markets is the entire point of the section. So the donut shows the
+   recommended split of effort, and the rule producing it is stated on screen
+   rather than left as magic:
+     ENTER  weight = score          fund acquisition here
+     HOLD   weight = score * 0.25   maintenance only, no new acquisition
+     EXIT   weight = 0              you are backing out
+*/
+const ANL_SHADES = {
+  ENTER: ['#2ecc71', '#27ae60', '#1e8f52', '#177342'],
+  HOLD:  ['#e6a020', '#c8820a', '#a06a08', '#7d5306'],
+  EXIT:  ['#e74c3c', '#c0392b', '#962d21', '#75231a'],
+  '':    ['#5a6b85', '#4a5970'],
+};
+const ANL_EFFORT = { ENTER: 1, HOLD: 0.25, EXIT: 0, '': 0 };
+
+let anlTgtPick = '';
+function anlPickTarget(k) {
+  anlTgtPick = (anlTgtPick === k) ? '' : k;
+  anlRender();
+}
+
+/**
+ * One donut renderer, used by the board and by the targeting list, so the two
+ * cannot drift apart visually. `slices` is [{key,label,value,colour}].
+ */
+function anlDonutOf(slices, centreNum, centreLbl, picked, pickFn) {
+  const R = 52, SW = 22, C = 2 * Math.PI * R;
+  const total = slices.reduce((n, s) => n + s.value, 0) || 1;
+  let at = 0;
+  const arcs = slices.filter((s) => s.value > 0).map((s) => {
+    const len = C * (s.value / total);
+    const sel = picked === s.key, dim = picked && !sel;
+    const a = '<circle class="anl-arc" cx="70" cy="70" r="' + R + '" fill="none"' +
+      ' stroke="' + s.colour + '" stroke-width="' + (sel ? SW + 6 : SW) + '"' +
+      ' stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '"' +
+      ' stroke-dashoffset="' + (-at).toFixed(2) + '"' +
+      ' opacity="' + (dim ? '.28' : '1') + '" transform="rotate(-90 70 70)"' +
+      ' onclick="' + pickFn + '(\'' + anlEsc(s.key) + '\')">' +
+      '<title>' + anlEsc(s.label) + '</title></circle>';
+    at += len;
+    return a;
+  }).join('');
+  return '<svg class="anl-donut" viewBox="0 0 140 140" role="img" aria-label="Split">' +
+    '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="var(--dark4)" stroke-width="' + SW + '"></circle>' +
+    arcs +
+    '<text x="70" y="70" text-anchor="middle">' +
+      '<tspan class="anl-dnum" x="70" dy="-2">' + anlEsc(centreNum) + '</tspan>' +
+      '<tspan class="anl-dlbl" x="70" dy="16">' + anlEsc(centreLbl) + '</tspan>' +
+    '</text></svg>';
+}
+
 function anlTargeting(d, meta) {
   const list = d.targeting || [];
   if (!list.length) return '';
-  const groups = { ENTER: [], HOLD: [], EXIT: [], '': [] };
-  list.forEach((t) => { (groups[t.state] || groups['']).push(t); });
-  const order = ANL_STATES.concat(['']);
 
-  let html = '<div class="anl-panel">' +
-    '<div class="anl-why" style="margin-bottom:4px">The five markets worth the month, in the order the board ranks them. ' +
-    'State and score come from the board, not from the write-up.</div>';
-
-  order.forEach((state) => {
-    const rows = groups[state];
-    if (!rows || !rows.length) return;
-    const mean = ANL_STATE_MEANING[state];
-    html += '<div class="anl-mgroup" style="border-left-color:' + (mean ? mean.colour : 'var(--border)') + '">' +
-      '<div class="anl-mghead"><b style="color:' + (mean ? mean.colour : 'var(--text-muted)') + '">' +
-        anlEsc(mean ? mean.head : 'Not a tracked market') + '</b>' +
-        '<span class="anl-mgsub">' + anlEsc(mean ? mean.sub : 'No state, because the board does not track this one.') + '</span></div>';
-
-    rows.forEach((t) => {
-      html += '<div class="anl-m2">' +
-        '<div class="anl-m2top">' +
-          '<div class="anl-m2name">' + anlEsc(t.sector) + '</div>' +
-          (t.untracked ? '' :
-            '<div class="anl-m2score" style="color:' + anlScoreColour(t.score) + '">' + anlNum(t.score) +
-            '<i class="anl-m2bar"><b style="width:' + Math.max(0, Math.min(100, Number(t.score) || 0)) +
-              '%;background:' + anlScoreColour(t.score) + '"></b></i></div>') +
-        '</div>' +
-        '<div class="anl-m2meta">' + anlEsc(t.region) +
-          (t.window ? '<span class="anl-chip2">' + anlEsc(t.window) + '</span>' : '') + '</div>' +
-        (t.target_titles && t.target_titles.length
-          ? '<div class="anl-titles">' + t.target_titles.map((x) => '<em>' + anlEsc(x) + '</em>').join('') + '</div>'
-          : '') +
-        '<div class="anl-kv2"><b>Open on</b><span>' + anlEsc(t.hook) + '</span></div>' +
-        '<div class="anl-kv2 anl-kvwarn"><b>Do not</b><span>' + anlEsc(t.avoid) + '</span></div>' +
-        (t.company_profile ? '<div class="anl-kv2"><b>Who</b><span>' + anlEsc(t.company_profile) + '</span></div>' : '') +
-      '</div>';
-    });
-    html += '</div>';
+  // effort weight per market, then normalised to a percentage of the month
+  const seen = {};
+  const items = list.map((t, i) => {
+    const st = t.state || '';
+    const n = (seen[st] = (seen[st] || 0) + 1) - 1;
+    const shades = ANL_SHADES[st] || ANL_SHADES[''];
+    return {
+      key: 'tg' + i, t: t, state: st,
+      colour: shades[n % shades.length],
+      weight: (Number(t.score) || 0) * (ANL_EFFORT[st] === undefined ? 0 : ANL_EFFORT[st]),
+    };
   });
+  const totalW = items.reduce((n, x) => n + x.weight, 0);
+  items.forEach((x) => { x.share = totalW ? Math.round((x.weight / totalW) * 100) : 0; });
+  items.sort((a, b) => b.share - a.share);
+
+  const picked = anlTgtPick;
+  const donut = anlDonutOf(
+    items.map((x) => ({ key: x.key, label: x.t.sector + ' ' + x.share + '%', value: x.share, colour: x.colour })),
+    picked ? (items.filter((x) => x.key === picked)[0] || {}).share + '%' : String(items.length),
+    picked ? 'of the month' : 'markets',
+    picked, 'anlPickTarget');
+
+  const legend = items.map((x) =>
+    '<button class="anl-leg' + (picked === x.key ? ' anl-legon' : '') + '" onclick="anlPickTarget(\'' + x.key + '\')">' +
+      '<u style="background:' + x.colour + '"></u>' +
+      '<b>' + x.share + '%</b><span>' + anlEsc(x.t.sector) + '</span></button>').join('');
+
+  let html = '<div class="anl-panel"><div class="anl-boardtop">' + donut +
+    '<div class="anl-boardlegend">' + legend +
+      '<div class="anl-why" style="margin-top:10px">' +
+        (picked
+          ? 'Showing one market. <a href="#" onclick="event.preventDefault();anlPickTarget(\'' + picked + '\')">Show all</a>'
+          : 'How to split next month’s outreach. Markets to build in are weighted by score, ' +
+            'ones on hold get a quarter of that for maintenance, and ones you are backing out of get none. ' +
+            'State and score come from the board, not from the write-up.') +
+      '</div>' +
+    '</div></div>';
+
+  const shown = picked ? items.filter((x) => x.key === picked) : items;
+  let lastState = null;
+  shown.forEach((x) => {
+    const t = x.t, mean = ANL_STATE_MEANING[x.state];
+    if (x.state !== lastState) {
+      if (lastState !== null) html += '</div>';
+      html += '<div class="anl-mgroup" style="border-left-color:' + (mean ? mean.colour : 'var(--border)') + '">' +
+        '<div class="anl-mghead"><b style="color:' + (mean ? mean.colour : 'var(--text-muted)') + '">' +
+          anlEsc(mean ? mean.head : 'Not a tracked market') + '</b>' +
+          '<span class="anl-mgsub">' + anlEsc(mean ? mean.sub : 'No state, because the board does not track this one.') +
+          '</span></div>';
+      lastState = x.state;
+    }
+    html += '<div class="anl-m2">' +
+      '<div class="anl-m2top">' +
+        '<div class="anl-m2name">' + anlEsc(t.sector) + '</div>' +
+        '<div class="anl-m2score" style="color:' + x.colour + '">' + x.share + '%' +
+          '<i class="anl-m2bar"><b style="width:' + x.share + '%;background:' + x.colour + '"></b></i></div>' +
+      '</div>' +
+      '<div class="anl-m2meta">' + anlEsc(t.region) +
+        (t.untracked ? '' : '<span class="anl-chip2">score ' + anlNum(t.score) + '</span>') +
+        (t.window ? '<span class="anl-chip2">' + anlEsc(t.window) + '</span>' : '') + '</div>' +
+      (t.target_titles && t.target_titles.length
+        ? '<div class="anl-titles">' + t.target_titles.map((y) => '<em>' + anlEsc(y) + '</em>').join('') + '</div>' : '') +
+      '<div class="anl-kv2"><b>Open on</b><span>' + anlEsc(t.hook) + '</span></div>' +
+      '<div class="anl-kv2 anl-kvwarn"><b>Do not</b><span>' + anlEsc(t.avoid) + '</span></div>' +
+      (t.company_profile ? '<div class="anl-kv2"><b>Who</b><span>' + anlEsc(t.company_profile) + '</span></div>' : '') +
+    '</div>';
+  });
+  if (lastState !== null) html += '</div>';
   return html + '</div>';
 }
 
