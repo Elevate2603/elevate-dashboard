@@ -784,10 +784,10 @@ function extractJson(data) {
 async function briefingCall(scoreboard, segments) {
   const data = await anthropic({
     model: MODEL,
-    max_tokens: 700,
+    max_tokens: 1000,
     system: BRIEFING_SYSTEM,
     messages: [{ role: "user", content: JSON.stringify({ scoreboard, segments }) }],
-  }, 11000);
+  }, 20000);
   return extractJson(data);
 }
 
@@ -1186,15 +1186,35 @@ exports.handler = async (event) => {
   let briefing = null, briefing_degraded = false;
   let radar = null, radar_degraded = false;
 
+  /**
+   * Only the briefing runs on the request path.
+   *
+   * Two model calls do not fit in a 26 second Netlify function: measured live on
+   * 2026-09-02, running both together timed out every attempt, and shrinking the
+   * radar enough to fit made it return truncated JSON instead. Tuning cannot fix
+   * a wall clock.
+   *
+   * The radar is also the one with nothing real to say yet: its market reasons
+   * and targeting list depend on the Adzuna / WARN / PMI / tender feeds, which
+   * are not built. So it is skipped until MARKET_SIGNALS_URL exists, and those
+   * sections keep their demo copy and their demo markers. When the feeds land,
+   * the radar should move to a scheduled Make job that stores its output, not
+   * back onto this request.
+   */
+  const runRadar = hasKey && !!process.env.MARKET_SIGNALS_URL;
   if (hasKey) {
     const [bRes, rRes] = await Promise.allSettled([
       briefingCall(scoreboard, segments),
-      radarCall(board),
+      runRadar ? radarCall(board) : Promise.reject(new Error("skipped: market feeds not connected")),
     ]);
     if (bRes.status === "fulfilled" && bRes.value) briefing = bRes.value;
     else { briefing_degraded = true; warnings.push("Briefing call failed: " + String((bRes.reason && bRes.reason.message) || bRes.reason || "unknown")); }
     if (rRes.status === "fulfilled" && rRes.value) radar = rRes.value;
-    else { radar_degraded = true; warnings.push("Radar call failed: " + String((rRes.reason && rRes.reason.message) || rRes.reason || "unknown")); }
+    else {
+      radar_degraded = true;
+      const why = String((rRes.reason && rRes.reason.message) || rRes.reason || "unknown");
+      warnings.push(runRadar ? ("Radar call failed: " + why) : "Market radar not run: the public feeds are not connected yet.");
+    }
   } else {
     briefing_degraded = true;
     radar_degraded = true;
