@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0901-A -->
+<!-- BUILD: ELEVATE-2026-0902-A -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -1510,6 +1510,51 @@
   .anl-empty h3{margin:0 0 6px;font-size:16px;color:var(--text);letter-spacing:0;text-transform:none}
   .anl-empty p{margin:0 auto 18px;font-size:13px;color:var(--text-muted);max-width:460px}
   .anl-busy{opacity:.4;pointer-events:none}
+
+  /* the answer, before any table */
+  .anl-lead{background:var(--dark2);border:1px solid var(--border);border-left:3px solid var(--gold);
+    border-radius:10px;padding:16px 18px;margin-bottom:6px}
+  .anl-lead-h{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:10px}
+  .anl-lead-row{display:flex;gap:10px;align-items:flex-start;padding:7px 0}
+  .anl-lead-row b{font-size:14px;color:var(--text);font-weight:600}
+  .anl-lead-row span{color:var(--text-muted);font-size:13px}
+  .anl-dot{flex:0 0 8px;width:8px;height:8px;border-radius:50%;margin-top:7px}
+  .anl-dot-good{background:var(--green)} .anl-dot-bad{background:var(--red)} .anl-dot-flat{background:var(--text-muted)}
+
+  /* market rows: scan first, maths on request */
+  .anl-mrow{border-top:1px solid #1f1f23;padding:14px 0}
+  .anl-mrow:first-of-type{border-top:none;padding-top:2px}
+  .anl-mhead{display:grid;grid-template-columns:86px 1fr 150px;gap:14px;align-items:start}
+  .anl-mstate{text-align:left}
+  .anl-mstate .anl-why{margin-top:4px}
+  .anl-mname .anl-nm{font-size:14px;font-weight:600;color:var(--text)}
+  .anl-mreason{font-size:12.5px;color:var(--text-muted);margin-top:5px;max-width:62ch}
+  .anl-mscore{text-align:right}
+  .anl-scorewrap{display:inline-block;width:150px;text-align:right}
+  .anl-scoreval{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+  .anl-outof{font-size:11px;color:var(--text-muted);font-weight:500;margin-left:2px}
+  .anl-scalebar{position:relative;height:6px;background:var(--dark4);border-radius:3px;margin:6px 0 3px;overflow:visible}
+  .anl-scalebar i{display:block;height:100%;border-radius:3px}
+  .anl-tick{position:absolute;top:-3px;width:1px;height:12px;background:var(--text-muted);opacity:.75}
+  .anl-scalekey{font-size:10px;color:var(--text-muted);letter-spacing:.3px}
+  .anl-timing{font-size:12px;color:var(--text);margin-top:6px}
+  .anl-timing b{color:var(--gold)}
+  .anl-more{background:none;border:none;color:var(--text-muted);font-size:11.5px;cursor:pointer;
+    padding:6px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:3px}
+  .anl-more:hover{color:var(--gold-light)}
+  .anl-maths{background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:8px}
+  .anl-maths table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .anl-maths th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted);
+    padding:4px 8px;border-bottom:1px solid var(--border);font-weight:600}
+  .anl-maths td{padding:5px 8px;border-bottom:1px solid #1f1f23}
+  .anl-maths tr.anl-sum td{border-bottom:none;border-top:1px solid var(--border);color:var(--text)}
+  @media(max-width:700px){
+    .anl-mhead{grid-template-columns:1fr;gap:8px}
+    .anl-mscore{text-align:left}
+    .anl-scorewrap{width:100%;text-align:left}
+    .anl-mscore .anl-why{text-align:left!important}
+    .anl-maths table{min-width:0}
+  }
   @media(max-width:760px){.anl-grid2{grid-template-columns:1fr}}
   @media(max-width:420px){.anl-bar h2{width:100%}.anl-cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}}
 </style>
@@ -10318,6 +10363,7 @@ function anlRender() {
   const d = anlData;
   const meta = d.meta || {};
   bodyEl.innerHTML =
+    anlHeadline(d) +
     anlScoreboard(d) +
     anlMarketBoard(d, meta) +
     anlSegments(d) +
@@ -10375,6 +10421,74 @@ function anlScoreboard(d) {
     anlPctStr(g('open_rate').value) + '.)</span></div>';
 }
 
+/* ---------- 0. the answer, before any table ----------
+   Travis, 2026-09-02: "it should be easy to fly through this and understand".
+   Four plain sentences built from the same numbers the panels below show, so
+   the tab opens with a conclusion rather than a spreadsheet. */
+function anlHeadline(d) {
+  const sb = d.scoreboard || {};
+  const board = d.market_board || [];
+  const segs = (d.segments && d.segments.persona) || [];
+  const lines = [];
+
+  // 1. is outreach working
+  const rr = (sb.reply_rate || {}), sent = (sb.sent || {});
+  if (sent.value) {
+    const dir = (Number(rr.delta) || 0) > 0 ? 'up' : (Number(rr.delta) || 0) < 0 ? 'down' : 'flat';
+    lines.push({
+      k: dir === 'up' ? 'good' : dir === 'down' ? 'bad' : 'flat',
+      t: 'Outreach is ' + (dir === 'flat' ? 'holding steady' : dir === 'up' ? 'working better than last period' : 'working less well than last period') + '.',
+      w: anlPctStr(rr.value) + ' reply rate on ' + anlNum(sent.value) + ' sends, ' +
+         (dir === 'flat' ? 'level with' : anlSignStr(rr.delta) + ' points on') + ' the previous ' + anlNum(d.range_days) + ' days.'
+    });
+  }
+
+  // 2. the clearest thing to change
+  const scale = segs.filter((r) => r.verdict === 'SCALE')[0];
+  const kill = segs.filter((r) => r.verdict === 'KILL')[0];
+  if (scale && kill) {
+    lines.push({ k: 'good', t: 'Send more to ' + scale.label + ', stop sending to ' + kill.label + '.',
+      w: scale.label + ' replies at ' + anlPctStr(scale.reply_rate) + ' over ' + anlNum(scale.sent) + ' sends. ' +
+         kill.label + ' replies at ' + anlPctStr(kill.reply_rate) + ' over ' + anlNum(kill.sent) + '.' });
+  } else if (scale) {
+    lines.push({ k: 'good', t: 'Send more to ' + scale.label + '.',
+      w: 'Replying at ' + anlPctStr(scale.reply_rate) + ' over ' + anlNum(scale.sent) + ' sends, well above the rest.' });
+  }
+
+  // 3. where next month goes
+  const enters = board.filter((m) => m.state === 'ENTER').sort((a, b) => b.score - a.score);
+  if (enters.length) {
+    const b = enters[0];
+    lines.push({ k: 'good', t: 'Put next month into ' + b.sector + ', ' + b.region + '.',
+      w: 'Scoring ' + anlNum(b.score) + ' out of 100, above the ' + anlNum((d.scale || {}).enter || 70) +
+         ' line for ' + anlNum(b.weeks_in_state) + ' week' + (b.weeks_in_state === 1 ? '' : 's') + '.' +
+         (b.timing && b.timing.date ? ' Be in the room by ' + b.timing.date + '.' : '') });
+  }
+
+  // 4. what to back away from
+  const exits = board.filter((m) => m.state === 'EXIT')
+    .sort((a, b) => (a.weeks_to_event == null ? 999 : a.weeks_to_event) - (b.weeks_to_event == null ? 999 : b.weeks_to_event));
+  if (exits.length) {
+    const x = exits[0];
+    lines.push({ k: 'bad', t: 'Stop spending on ' + x.sector + ', ' + x.region + '.',
+      // A market forced out by a dated event is NOT the same as one that scored
+      // badly, and saying "below the 45 line" about a score of 47 is simply false.
+      w: (x.exit_forced_by_event && x.policy_event
+            ? x.policy_event.label + ' lands ' + String(x.policy_event.date).slice(0, 10) +
+              ', which forces an exit whatever the score says. Currently ' + anlNum(x.score) + '.'
+            : 'Scoring ' + anlNum(x.score) + ', below the ' + anlNum((d.scale || {}).hold || 45) + ' line.') +
+         (exits.length > 1 ? ' ' + anlNum(exits.length - 1) + ' other market' + (exits.length === 2 ? '' : 's') + ' also at EXIT.' : '') });
+  }
+
+  if (!lines.length) return '';
+  return '<div class="anl-lead">' +
+    '<div class="anl-lead-h">The short version</div>' +
+    lines.map((l) =>
+      '<div class="anl-lead-row"><span class="anl-dot anl-dot-' + l.k + '"></span>' +
+      '<div><b>' + anlEsc(l.t) + '</b> <span>' + anlEsc(l.w) + '</span></div></div>').join('') +
+    '</div>';
+}
+
 /* ---------- 2. market condition board ---------- */
 function anlStateBadge(state) {
   const cls = state === 'ENTER' ? 'anl-b-enter' : state === 'EXIT' ? 'anl-b-exit' : 'anl-b-hold';
@@ -10385,43 +10499,95 @@ function anlScoreColour(n) {
   return v >= 75 ? 'var(--green)' : v >= 55 ? 'var(--gold-light)' : 'var(--red)';
 }
 
+/**
+ * A score with the scale it sits on. "77" alone says nothing; "77, and ENTER
+ * starts at 70" says everything. Ticks mark the two thresholds that actually
+ * decide the state.
+ */
+function anlScoreBar(score, scale) {
+  const s = Math.max(0, Math.min(100, Number(score) || 0));
+  const enter = (scale && scale.enter) || 70;
+  const hold = (scale && scale.hold) || 45;
+  return '<div class="anl-scorewrap">' +
+    '<div class="anl-scoreval" style="color:' + anlScoreColour(s) + '">' + anlNum(s) +
+      '<span class="anl-outof">/100</span></div>' +
+    '<div class="anl-scalebar"><i style="width:' + s + '%;background:' + anlScoreColour(s) + '"></i>' +
+      '<u class="anl-tick" style="left:' + hold + '%" title="EXIT below ' + hold + '"></u>' +
+      '<u class="anl-tick" style="left:' + enter + '%" title="ENTER at ' + enter + ' and above"></u>' +
+    '</div>' +
+    '<div class="anl-scalekey">exit ' + hold + '  ·  enter ' + enter + '</div>' +
+    '</div>';
+}
+
+let anlOpenRows = {};
+function anlToggleRow(id) { anlOpenRows[id] = !anlOpenRows[id]; anlRender(); }
+
 function anlMarketBoard(d, meta) {
   const rows = d.market_board || [];
   if (!rows.length) return '';
-  let html = anlSect('Market Condition Board', meta.markets_demo) +
-    '<div class="anl-panel"><div class="anl-note" style="margin:0 0 10px">' +
-    'State and score are computed from public feeds before the model is called. The model writes the reason, ' +
-    'never the state. A state change needs three consecutive weeks, so one odd week does not flip a market.' +
-    '</div><div class="anl-tblwrap"><table><thead><tr>' +
-    '<th>Market</th><th class="anl-num">Score</th><th class="anl-num">WoW</th><th class="anl-num">Wks</th>' +
-    '<th>What is moving it</th><th>Read</th><th>Timing</th><th>State</th></tr></thead><tbody>';
+  const scale = d.scale || {};
+  const counts = { ENTER: 0, HOLD: 0, EXIT: 0 };
+  rows.forEach((m) => { counts[m.state] = (counts[m.state] || 0) + 1; });
 
-  rows.forEach((m) => {
-    const movers = (m.movers || []).map((x) =>
-      '<div class="anl-why" style="margin:0">' + anlEsc(x.label) + ': ' + anlEsc(x.display) + '</div>').join('');
+  const order = { ENTER: 0, HOLD: 1, EXIT: 2 };
+  const sorted = rows.slice().sort((a, b) =>
+    (order[a.state] - order[b.state]) || (b.score - a.score));
+
+  let html = anlSect('Market Condition Board', meta.markets_demo) +
+    '<div class="anl-panel">' +
+    '<div class="anl-note" style="margin:0 0 14px">' +
+      '<b style="color:var(--green)">' + counts.ENTER + ' to build in</b>  ·  ' +
+      '<b style="color:var(--gold-light)">' + counts.HOLD + ' to hold</b>  ·  ' +
+      '<b style="color:var(--red)">' + counts.EXIT + ' to back out of</b>. ' +
+      'Score is out of 100 from six public inputs. State and score are computed here, never written by the model, ' +
+      'and a state change needs ' + anlNum(scale.sticky_weeks || 3) + ' consecutive weeks so one odd week cannot flip a market.' +
+    '</div>';
+
+  sorted.forEach((m) => {
+    const open = !!anlOpenRows[m.id];
     const timing = m.timing && m.timing.kind !== 'none'
-      ? '<div style="font-size:12px">' + (m.timing.kind === 'get_in_by' ? 'Get in by ' : 'Get out before ') +
-        '<b style="color:var(--gold)">' + anlEsc(m.timing.date) + '</b></div>' +
-        '<div class="anl-why">' + anlEsc(m.timing.note) + '</div>'
-      : '<span class="anl-why">—</span>';
+      ? '<div class="anl-timing">' + (m.timing.kind === 'get_in_by' ? 'Get in by ' : 'Get out before ') +
+        '<b>' + anlEsc(m.timing.date) + '</b></div>' : '';
     const prebuy = m.prebuy_active
-      ? '<div class="anl-prebuy">Posting activity here may be inflated by customers pulling volume forward ahead of ' +
+      ? '<div class="anl-prebuy">Postings here may be inflated by customers pulling volume forward ahead of ' +
         anlEsc(m.policy_event && m.policy_event.date ? String(m.policy_event.date).slice(0, 10) : 'the scheduled date') +
-        '. Treat the current rise as borrowed.' + (m.prebuy_capped ? ' Capped at HOLD while this is active.' : '') + '</div>'
+        '. Treat the rise as borrowed.' + (m.prebuy_capped ? ' Held at HOLD while this is on.' : '') + '</div>'
       : '';
-    html += '<tr>' +
-      '<td><div class="anl-nm">' + anlEsc(m.sector) + '</div><div class="anl-why">' + anlEsc(m.region) + '</div>' + prebuy + '</td>' +
-      '<td class="anl-num"><b style="color:' + anlScoreColour(m.score) + '">' + anlNum(m.score) + '</b></td>' +
-      '<td class="anl-num ' + ((Number(m.delta_wow) || 0) >= 0 ? 'anl-up' : 'anl-down') + '">' + anlSignStr(m.delta_wow) + '</td>' +
-      '<td class="anl-num">' + anlNum(m.weeks_in_state) + '</td>' +
-      '<td>' + (movers || '<span class="anl-why">—</span>') + '</td>' +
-      '<td><span class="anl-why">' + (anlEsc(m.reason) || '—') + '</span></td>' +
-      '<td>' + timing + '</td>' +
-      '<td>' + anlStateBadge(m.state) +
-        (m.pending_state ? '<div class="anl-why">' + anlEsc(m.pending_state) + ' pending</div>' : '') + '</td>' +
-      '</tr>';
+
+    let maths = '';
+    if (open) {
+      const b = m.breakdown || [];
+      maths = '<div class="anl-maths"><table><thead><tr><th>Input</th><th>Reading</th>' +
+        '<th class="anl-num">Weight</th><th class="anl-num">Points</th></tr></thead><tbody>' +
+        b.map((x) => '<tr><td>' + anlEsc(x.label) + '</td><td><span class="anl-why">' + anlEsc(x.display) + '</span></td>' +
+          '<td class="anl-num">' + anlNum(x.weight) + '%</td>' +
+          '<td class="anl-num"><b>' + anlNum(x.points, 1) + '</b></td></tr>').join('') +
+        '<tr class="anl-sum"><td colspan="3">Total</td><td class="anl-num"><b>' + anlNum(m.score) + '</b></td></tr>' +
+        '</tbody></table>' +
+        '<div class="anl-why" style="margin-top:8px">Each input is scored 0 to 100 then multiplied by its weight. ' +
+        'Layoff pressure and policy risk count backwards: more of either lowers the score.</div></div>';
+    }
+
+    html += '<div class="anl-mrow">' +
+      '<div class="anl-mhead">' +
+        '<div class="anl-mstate">' + anlStateBadge(m.state) +
+          '<div class="anl-why">' + anlNum(m.weeks_in_state) + 'w' +
+          (m.pending_state ? ' · ' + anlEsc(m.pending_state) + ' pending' : '') + '</div></div>' +
+        '<div class="anl-mname"><div class="anl-nm">' + anlEsc(m.sector) + '</div>' +
+          '<div class="anl-why">' + anlEsc(m.region) + '</div>' +
+          (m.reason ? '<div class="anl-mreason">' + anlEsc(m.reason) + '</div>' : '') +
+          prebuy + '</div>' +
+        '<div class="anl-mscore">' + anlScoreBar(m.score, scale) +
+          '<div class="anl-why" style="text-align:right">' +
+            ((Number(m.delta_wow) || 0) === 0 ? 'level on the week'
+              : anlSignStr(m.delta_wow) + ' on the week') + '</div>' + timing + '</div>' +
+      '</div>' +
+      '<button class="anl-more" onclick="anlToggleRow(\'' + anlEsc(m.id) + '\')">' +
+        (open ? 'Hide the maths' : 'Where this score comes from') + '</button>' +
+      maths +
+      '</div>';
   });
-  return html + '</tbody></table></div></div>';
+  return html + '</div>';
 }
 
 /* ---------- 3. what is working ---------- */

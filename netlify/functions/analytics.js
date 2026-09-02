@@ -120,10 +120,14 @@ function rangeDays(range) {
 
 const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+// Acronyms that must not be sentence-cased. "Hr Manager" and "Gm" read as a
+// machine wrote them, which undermines everything else on the screen.
+const ACRONYMS = { hr: "HR", gm: "GM", ev: "EV", cfo: "CFO", ceo: "CEO", "3pl": "3PL",
+  tier1: "Tier 1", tier2: "Tier 2", vms: "VMS", az: "AZ", gta: "GTA", cma: "CMA", po: "PO" };
 const TITLE_CASE = (s) =>
   String(s || "other")
     .split(/[_\s]+/)
-    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : ""))
+    .map((w) => (!w ? "" : (ACRONYMS[w.toLowerCase()] || (w.charAt(0).toUpperCase() + w.slice(1)))))
     .join(" ")
     .trim();
 
@@ -388,6 +392,9 @@ function resolveState(score, market, nowMs) {
   return {
     state,
     proposed,
+    // an EXIT forced by a dated event is a different fact from a low score, and
+    // the two must never be reported as the same thing
+    exit_forced_by_event: severeSoon,
     pending: proposed !== state ? proposed : null,
     weeks_in_state: Math.min(weeksInState, 99),
     prebuy_capped: capped,
@@ -446,10 +453,17 @@ function buildMarketBoard(marketInputs, nowMs) {
       weeks_in_state: st.weeks_in_state,
       prebuy_active: st.prebuy_active,
       prebuy_capped: st.prebuy_capped,
+      exit_forced_by_event: !!st.exit_forced_by_event,
       policy_event: st.policy_event,
       weeks_to_event: st.weeks_to_event,
       hiring_lead_weeks: inp.hiring_lead_weeks || null,
       movers: scored.contributions.slice(0, 2).map((c) => ({ label: c.label, display: c.display })),
+      // The full arithmetic, so a score can be opened up and checked rather than
+      // taken on faith. "77" on its own tells nobody anything.
+      breakdown: scored.contributions.map((c) => ({
+        label: c.label, display: c.display, weight: WEIGHTS[c.key],
+        normalized: c.normalized, points: c.weighted,
+      })),
       reason: "",   // written by the model, never the score
       no_data: false,
     };
@@ -1240,6 +1254,13 @@ exports.handler = async (event) => {
     ok: true,
     demo,
     range_days: days,
+    // so the UI can draw the scale a score sits on instead of printing a bare number
+    scale: {
+      enter: ENTER_SCORE, hold: HOLD_SCORE, min_sends: MIN_N,
+      scale_mult: SCALE_MULT, kill_mult: KILL_MULT,
+      sticky_weeks: STATE_STICKY_WEEKS, prebuy_weeks: PREBUY_WEEKS,
+      weights: WEIGHTS,
+    },
     generated_at: iso(nowMs),
     scoreboard,
     segments,
