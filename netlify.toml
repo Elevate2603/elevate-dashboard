@@ -20,6 +20,10 @@
 [functions."market-hotspots"]
   timeout = 26
 
+# Analytics & CEO Briefing — two Claude calls, one with web_search, plus upstream fetches
+[functions."analytics"]
+  timeout = 26
+
 # Static asset cache headers (long for static images, short for index.html so deploys appear instantly)
 [[headers]]
   for = "/index.html"

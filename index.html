@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0821-A-AC-CONTACTS-INLINE -->
+<!-- BUILD: ELEVATE-2026-0901-A -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -1398,6 +1398,120 @@
   .jrv-report-item-why { color: var(--text); font-size:11px; margin-top:6px; padding-top:6px; border-top:1px dashed var(--border); line-height:1.4; }
   .jrv-report-item-why strong { color: var(--gold); font-family:'Consolas', monospace; font-size:9px; letter-spacing:0.18em; }
 
+
+  /* ═══════════ ANALYTICS & CEO BRIEFING ═══════════
+     Every class here is anl- prefixed. The preview mock used generic names
+     (.card .panel .badge .row .btn .note .chip .bar .num .why) and all ten of
+     those are already in use elsewhere in this file, so an unprefixed copy
+     would have silently restyled the Approval Queue and Sales tabs. */
+  .anl-bar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:18px}
+  .anl-bar h2{font-size:18px;margin:0;font-weight:600;letter-spacing:.2px;color:var(--gold)}
+  .anl-spacer{flex:1}
+  .anl-stamp{font-size:11px;color:var(--text-muted)}
+  .anl-stamp.anl-stale{color:var(--gold-light)}
+  .anl-btn{background:var(--gold);color:#151006;border:none;border-radius:6px;padding:9px 16px;
+    font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+  .anl-btn:disabled{opacity:.55;cursor:default}
+  .anl-btn.anl-ghost{background:transparent;color:var(--text-muted);border:1px solid var(--border);font-weight:500;padding:5px 11px;font-size:12px}
+  .anl-btn.anl-ghost:hover:not(:disabled){color:var(--text);border-color:var(--gold)}
+  .anl-range{background:var(--dark3);border:1px solid var(--border);color:var(--text);
+    border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit}
+
+  .anl-sect{margin:26px 0 10px;display:flex;align-items:center;gap:10px}
+  .anl-sect h3{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold);margin:0;font-weight:700}
+  .anl-sect .anl-rule{flex:1;height:1px;background:var(--border)}
+
+  /* per-section demo marker: a fabricated EXIT is worse than no panel, so the
+     sections that could be mistaken for a real market read say so on the line */
+  .anl-demo-tag{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+    background:rgba(230,160,32,.15);color:var(--gold-light);border:1px solid rgba(230,160,32,.35);
+    border-radius:5px;padding:2px 8px;white-space:nowrap}
+
+  .anl-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .anl-card{background:var(--dark2);border:1px solid var(--border);border-radius:10px;padding:14px}
+  .anl-card .anl-lbl{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px}
+  .anl-card .anl-val{font-size:26px;font-weight:700;margin:6px 0 2px}
+  .anl-card .anl-dlt{font-size:11px}
+  .anl-up{color:var(--green)} .anl-down{color:var(--red)} .anl-flat{color:var(--text-muted)}
+
+  .anl-panel{background:var(--dark2);border:1px solid var(--border);border-radius:10px;padding:16px}
+  .anl-panel + .anl-panel{margin-top:12px}
+
+  .anl-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .anl-chip{background:var(--dark3);border:1px solid var(--border);color:var(--text-muted);border-radius:999px;
+    padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+  .anl-chip.anl-on{background:rgba(200,130,10,.14);border-color:var(--gold);color:var(--gold-light)}
+
+  .anl-tblwrap{overflow-x:auto}
+  .anl-tblwrap table{width:100%;border-collapse:collapse;font-size:13px;min-width:620px}
+  .anl-tblwrap th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);
+    padding:8px 10px;border-bottom:1px solid var(--border);font-weight:600}
+  .anl-tblwrap td{padding:10px;border-bottom:1px solid #1f1f23;vertical-align:top}
+  .anl-tblwrap tr:last-child td{border-bottom:none}
+  .anl-num{text-align:right;font-variant-numeric:tabular-nums}
+  .anl-badge{display:inline-block;padding:3px 9px;border-radius:5px;font-size:10.5px;font-weight:700;letter-spacing:.4px}
+  .anl-b-scale,.anl-b-enter,.anl-b-worked{background:rgba(46,204,113,.15);color:var(--green)}
+  .anl-b-hold,.anl-b-mixed{background:rgba(230,160,32,.15);color:var(--gold-light)}
+  .anl-b-kill,.anl-b-exit,.anl-b-reversed{background:rgba(231,76,60,.15);color:var(--red)}
+  .anl-b-thin,.anl-b-pending{background:rgba(153,153,153,.13);color:var(--text-muted)}
+  .anl-meter{height:5px;background:var(--dark4);border-radius:3px;overflow:hidden;min-width:70px}
+  .anl-meter i{display:block;height:100%;background:var(--gold)}
+
+  .anl-ceo{border-left:3px solid var(--gold)}
+  .anl-ceo h4{margin:0 0 4px;font-size:15px;color:var(--text);font-weight:600}
+  .anl-ceo .anl-sub{font-size:11px;color:var(--text-muted);margin-bottom:14px}
+  .anl-dec{display:flex;gap:12px;padding:12px 0;border-top:1px solid #1f1f23}
+  .anl-dec:first-of-type{border-top:none;padding-top:4px}
+  .anl-dec .anl-n{flex:0 0 24px;height:24px;border-radius:5px;background:rgba(200,130,10,.15);color:var(--gold-light);
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+  .anl-dec .anl-t{font-weight:600;margin-bottom:3px}
+  .anl-dec .anl-w{color:var(--text-muted);font-size:12.5px}
+  .anl-dec.anl-gone{opacity:.4}
+  .anl-acts{display:flex;gap:8px;margin-top:9px}
+  .anl-quote{background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:12px;
+    font-size:13px;margin-top:8px;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .anl-conf{margin-top:14px;padding-top:12px;border-top:1px solid #1f1f23;font-size:11.5px;color:var(--text-muted)}
+
+  .anl-grid2{display:grid;grid-template-columns:1.35fr 1fr;gap:12px}
+  .anl-row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid #1f1f23}
+  .anl-row:first-child{border-top:none}
+  .anl-nm{font-size:13px}
+  .anl-sc{font-variant-numeric:tabular-nums;font-weight:700;font-size:13px;width:34px;text-align:right}
+  .anl-why{font-size:11.5px;color:var(--text-muted);margin-top:2px}
+
+  .anl-macro{padding:12px 0;border-top:1px solid #1f1f23}
+  .anl-macro:first-of-type{border-top:none;padding-top:2px}
+  .anl-macro .anl-h{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap}
+  .anl-macro .anl-h b{font-size:13px}
+  .anl-lag{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:5px;
+    background:rgba(52,152,219,.14);color:var(--blue);white-space:nowrap}
+  .anl-lag.anl-now{background:rgba(231,76,60,.15);color:var(--red)}
+  .anl-macro p{margin:5px 0 0;font-size:12.5px;color:var(--text-muted)}
+  .anl-macro .anl-act{margin-top:6px;font-size:12.5px;color:var(--text)}
+  .anl-macro .anl-act span{color:var(--gold);font-weight:600}
+
+  .anl-tgt{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+  .anl-tgt .anl-card{padding:14px}
+  .anl-tgt h5{margin:0 0 2px;font-size:13.5px;font-weight:600;color:var(--text)}
+  .anl-tgt .anl-meta{font-size:11px;color:var(--text-muted);margin-bottom:9px}
+  .anl-kv{font-size:12.5px;margin-top:7px}
+  .anl-kv b{color:var(--gold);font-weight:600;display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:1px}
+  .anl-kv span{color:var(--text-muted)}
+  .anl-titles{display:flex;flex-wrap:wrap;gap:5px;margin-top:3px}
+  .anl-titles em{font-style:normal;background:var(--dark3);border:1px solid var(--border);border-radius:4px;
+    padding:2px 7px;font-size:11px;color:var(--text)}
+
+  .anl-note{font-size:11.5px;color:var(--text-muted);margin-top:8px}
+  .anl-prebuy{font-size:11.5px;color:var(--gold-light);margin-top:4px}
+  .anl-banner{border-radius:8px;padding:10px 13px;font-size:12.5px;margin-bottom:14px}
+  .anl-banner.anl-amber{background:rgba(230,160,32,.12);border:1px solid rgba(230,160,32,.4);color:var(--gold-light)}
+  .anl-banner.anl-red{background:rgba(231,76,60,.12);border:1px solid rgba(231,76,60,.45);color:var(--red)}
+  .anl-empty{background:var(--dark2);border:1px dashed var(--border);border-radius:10px;padding:40px 24px;text-align:center}
+  .anl-empty h3{margin:0 0 6px;font-size:16px;color:var(--text);letter-spacing:0;text-transform:none}
+  .anl-empty p{margin:0 auto 18px;font-size:13px;color:var(--text-muted);max-width:460px}
+  .anl-busy{opacity:.4;pointer-events:none}
+  @media(max-width:760px){.anl-grid2{grid-template-columns:1fr}}
+  @media(max-width:420px){.anl-bar h2{width:100%}.anl-cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <!-- BUILD_TOKEN: ELEVATE-SECRETS-REMOVED-1776279864 -->
@@ -1434,6 +1548,7 @@
     <button class="tab-btn" onclick="showTab(&#39;queue&#39;,this)">Approval Queue</button>
     <button class="tab-btn" onclick="showTab(&#39;sales&#39;,this)">Sales Intelligence</button>
     <button class="tab-btn" onclick="showTab(&#39;sourcing&#39;,this)">AI Sourcing</button>
+    <button class="tab-btn" onclick="showTab(&#39;analytics&#39;,this)">Analytics</button>
     <button class="tab-btn" onclick="showTab(&#39;import&#39;,this)">CSV Import</button>
     <button class="tab-btn" onclick="showTab(&#39;settings&#39;,this)">Settings</button>
   </div>
@@ -1876,6 +1991,25 @@
   <div id="tabSourcing" class="tab-content">
     <h2 style="color:var(--gold);margin-bottom:8px;">AI Sourcing</h2>
     <p style="color:var(--text-muted);font-size:14px;">Candidate sourcing engine — coming next phase.</p>
+  </div>
+
+  <!-- ══════════════ ANALYTICS & CEO BRIEFING ══════════════ -->
+  <!-- Painted from localStorage on load. NOTHING here fetches on tab open or on
+       a timer; the Refresh button is the only thing that calls the function. -->
+  <div id="tabAnalytics" class="tab-content">
+    <div class="anl-bar">
+      <h2>Analytics &amp; CEO Briefing</h2>
+      <div class="anl-spacer"></div>
+      <select class="anl-range" id="anlRange" onchange="anlSetRange(this.value)">
+        <option value="30">Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="qtd">Quarter to date</option>
+      </select>
+      <span class="anl-stamp" id="anlStamp"></span>
+      <button class="anl-btn" id="anlRefreshBtn" onclick="anlRefresh()">Refresh</button>
+    </div>
+    <div id="anlBanners"></div>
+    <div id="anlBody"></div>
   </div>
 
   <!-- ══════════════ CSV IMPORT ══════════════ -->
@@ -10029,8 +10163,506 @@ function jrvSetFeedBadge(live, count) {
 })();
 
 // Boot when DOM ready (auth gate runs first; JARVIS lives inside the protected page)
+
+// ═══════════════════════════════════════════
+// ANALYTICS & CEO BRIEFING
+// ═══════════════════════════════════════════
+// Refresh-only by design. The tab paints from localStorage on load and on tab
+// open, and NEVER fetches by itself: no load fetch, no tab-open fetch, no
+// interval. The Refresh button is the single trigger. Everything is anl-
+// prefixed because index.html is one 4,500-line script and a bare name here
+// would silently overwrite something in another tab.
+
+const ANL_CONFIG = {
+  URL: '/.netlify/functions/analytics',
+  CACHE_PREFIX: 'anl_cache_v1_',
+  DEFAULT_RANGE: 30
+};
+
+const ANL_DIMS = [
+  { k: 'persona',       label: 'Persona' },
+  { k: 'industry',      label: 'Industry' },
+  { k: 'region',        label: 'Region' },
+  { k: 'signal_type',   label: 'Signal type' },
+  { k: 'opener_style',  label: 'Opening line' },
+  { k: 'sequence_step', label: 'Sequence step' },
+  { k: 'send_dow',      label: 'Send day' }
+];
+
+let anlRange = String(ANL_CONFIG.DEFAULT_RANGE);
+let anlDim = 'persona';
+let anlData = null;
+let anlCachedAt = null;
+let anlBusy = false;
+let anlNetError = '';
+let anlHandled = {};   // decision index -> 'accepted' | 'dismissed'
+
+/* ---------- cache ---------- */
+function anlCacheKey(range) { return ANL_CONFIG.CACHE_PREFIX + range; }
+function anlCacheRead(range) {
+  try {
+    const raw = localStorage.getItem(anlCacheKey(range));
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return (o && typeof o.cachedAt === 'number' && o.data) ? o : null;
+  } catch (_) { return null; }
+}
+function anlCacheWrite(range, data) {
+  try { localStorage.setItem(anlCacheKey(range), JSON.stringify({ cachedAt: Date.now(), data: data })); } catch (_) {}
+}
+// Stale = cached on an earlier calendar day. Shown in amber so the age is
+// visible, but it still does not trigger a fetch.
+function anlIsStale(ms) {
+  if (!ms) return false;
+  const c = new Date(ms), n = new Date();
+  return c.toDateString() !== n.toDateString();
+}
+
+/* ---------- small helpers ---------- */
+function anlEsc(s) { return escapeHtml(s == null ? '' : s); }
+function anlNum(n, dp) {
+  const v = Number(n);
+  if (isNaN(v)) return '0';
+  return dp ? v.toFixed(dp) : String(Math.round(v));
+}
+function anlPctStr(n) { return anlNum(n, 1) + '%'; }
+function anlSignStr(n, suffix) {
+  const v = Number(n) || 0;
+  return (v > 0 ? '+' : '') + anlNum(v, Math.abs(v) % 1 ? 1 : 0) + (suffix || '');
+}
+function anlDateShort(s) {
+  const t = Date.parse(s);
+  if (isNaN(t)) return anlEsc(s || '');
+  return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+function anlStampText(ms) {
+  const d = new Date(ms);
+  return 'Last refreshed: ' +
+    d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ', ' +
+    d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+function anlSect(title, demoTag) {
+  return '<div class="anl-sect"><h3>' + anlEsc(title) + '</h3>' +
+    (demoTag ? '<span class="anl-demo-tag" title="This section is running on demo data, not a live feed">Demo data</span>' : '') +
+    '<div class="anl-rule"></div></div>';
+}
+
+/* ---------- refresh, the ONLY network call ---------- */
+function anlSetRange(v) {
+  anlRange = String(v);
+  const c = anlCacheRead(anlRange);
+  anlData = c ? c.data : null;
+  anlCachedAt = c ? c.cachedAt : null;
+  anlHandled = {};
+  anlRender();
+}
+
+async function anlRefresh() {
+  if (anlBusy) return;
+  anlBusy = true;
+  anlNetError = '';
+  const btn = document.getElementById('anlRefreshBtn');
+  const body = document.getElementById('anlBody');
+  if (btn) { btn.disabled = true; btn.textContent = 'Refreshing…'; }
+  if (body && anlData) body.classList.add('anl-busy');
+  try {
+    const r = await fetch(ANL_CONFIG.URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ range: anlRange === 'qtd' ? 'qtd' : parseInt(anlRange, 10) })
+    });
+    if (!r.ok) throw new Error('Function returned ' + r.status);
+    const data = await r.json();
+    if (!data || data.ok !== true) throw new Error((data && data.error) || 'Unexpected response');
+    anlData = data;
+    anlCachedAt = Date.now();
+    anlHandled = {};
+    anlCacheWrite(anlRange, data);
+  } catch (e) {
+    // Never blank the tab on a failure: the cached view stays on screen and the
+    // banner explains why it did not move.
+    anlNetError = String((e && e.message) || e);
+  } finally {
+    anlBusy = false;
+    if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+    if (body) body.classList.remove('anl-busy');
+    anlRender();
+  }
+}
+
+/* ---------- render ---------- */
+function anlRender() {
+  const bannersEl = document.getElementById('anlBanners');
+  const bodyEl = document.getElementById('anlBody');
+  const stampEl = document.getElementById('anlStamp');
+  const rangeEl = document.getElementById('anlRange');
+  if (!bodyEl || !bannersEl) return;
+  if (rangeEl && rangeEl.value !== anlRange) rangeEl.value = anlRange;
+
+  if (stampEl) {
+    stampEl.textContent = anlCachedAt ? anlStampText(anlCachedAt) : 'Not pulled yet';
+    stampEl.className = 'anl-stamp' + (anlCachedAt && anlIsStale(anlCachedAt) ? ' anl-stale' : '');
+  }
+
+  bannersEl.innerHTML = anlBanners();
+
+  if (!anlData) {
+    bodyEl.innerHTML =
+      '<div class="anl-empty"><h3>Nothing pulled yet</h3>' +
+      '<p>This tab never fetches on its own, so nothing has been requested. Press Refresh to pull ' +
+      'the outreach numbers, the market board and this week’s briefing.</p>' +
+      '<button class="anl-btn" onclick="anlRefresh()">Refresh</button></div>';
+    return;
+  }
+
+  const d = anlData;
+  const meta = d.meta || {};
+  bodyEl.innerHTML =
+    anlScoreboard(d) +
+    anlMarketBoard(d, meta) +
+    anlSegments(d) +
+    anlBriefing(d, meta) +
+    anlTargeting(d, meta) +
+    anlMacro(d, meta) +
+    anlDecisionLog(d, meta) +
+    anlForecasts(d, meta);
+}
+
+function anlBanners() {
+  let out = '';
+  if (anlNetError) {
+    out += '<div class="anl-banner anl-red">Could not reach the analytics function. ' +
+      anlEsc(anlNetError) + (anlData ? ' Showing the last result that came through.' : '') + '</div>';
+  }
+  if (anlData && anlData.demo) {
+    out += '<div class="anl-banner anl-amber">Demo data. The Make analytics pipeline is not connected, ' +
+      'so these numbers are generated, not measured.</div>';
+  }
+  return out;
+}
+
+/* ---------- 1. scoreboard ---------- */
+function anlStatCard(label, value, delta, opts) {
+  opts = opts || {};
+  const v = Number(delta) || 0;
+  // median time to reply is inverted: a bigger number is worse
+  const better = opts.inverted ? v < 0 : v > 0;
+  const cls = v === 0 ? 'anl-flat' : (better ? 'anl-up' : 'anl-down');
+  const txt = v === 0 ? 'no change' : anlSignStr(v, opts.deltaSuffix || '') + (opts.deltaNote || '');
+  return '<div class="anl-card"><div class="anl-lbl">' + anlEsc(label) + '</div>' +
+    '<div class="anl-val">' + anlEsc(value) + '</div>' +
+    '<div class="anl-dlt ' + cls + '">' + anlEsc(txt) + '</div></div>';
+}
+
+function anlScoreboard(d) {
+  const s = d.scoreboard || {};
+  const g = (k) => (s[k] || { value: 0, delta: 0 });
+  const priorNote = ' vs prior ' + (d.range_days || 30);
+  return anlSect('Outreach Scoreboard') +
+    '<div class="anl-cards">' +
+      anlStatCard('Sent', anlNum(g('sent').value), g('sent').delta, { deltaNote: priorNote }) +
+      anlStatCard('Replies', anlNum(g('replies').value), g('replies').delta) +
+      anlStatCard('Reply rate', anlPctStr(g('reply_rate').value), g('reply_rate').delta, { deltaSuffix: ' pts' }) +
+      anlStatCard('Positive replies', anlNum(g('positive_replies').value), g('positive_replies').delta) +
+      anlStatCard('Meetings booked', anlNum(g('meetings').value), g('meetings').delta) +
+      anlStatCard('Median time to reply', anlNum(g('median_days_to_reply').value, 1) + 'd',
+        g('median_days_to_reply').delta, { inverted: true, deltaSuffix: 'd',
+          deltaNote: (Number(g('median_days_to_reply').delta) || 0) > 0 ? ' slower' : ' faster' }) +
+    '</div>' +
+    '<div class="anl-note">Open rate is shown as a weak secondary signal only. Enterprise Microsoft tenants ' +
+    'pre-fetch images and links, which inflates opens. Replies and positive replies are the metrics decisions ' +
+    'are made on. <span style="color:var(--text-muted)">(Open rate this period: ' +
+    anlPctStr(g('open_rate').value) + '.)</span></div>';
+}
+
+/* ---------- 2. market condition board ---------- */
+function anlStateBadge(state) {
+  const cls = state === 'ENTER' ? 'anl-b-enter' : state === 'EXIT' ? 'anl-b-exit' : 'anl-b-hold';
+  return '<span class="anl-badge ' + cls + '">' + anlEsc(state) + '</span>';
+}
+function anlScoreColour(n) {
+  const v = Number(n) || 0;
+  return v >= 75 ? 'var(--green)' : v >= 55 ? 'var(--gold-light)' : 'var(--red)';
+}
+
+function anlMarketBoard(d, meta) {
+  const rows = d.market_board || [];
+  if (!rows.length) return '';
+  let html = anlSect('Market Condition Board', meta.markets_demo) +
+    '<div class="anl-panel"><div class="anl-note" style="margin:0 0 10px">' +
+    'State and score are computed from public feeds before the model is called. The model writes the reason, ' +
+    'never the state. A state change needs three consecutive weeks, so one odd week does not flip a market.' +
+    '</div><div class="anl-tblwrap"><table><thead><tr>' +
+    '<th>Market</th><th class="anl-num">Score</th><th class="anl-num">WoW</th><th class="anl-num">Wks</th>' +
+    '<th>What is moving it</th><th>Read</th><th>Timing</th><th>State</th></tr></thead><tbody>';
+
+  rows.forEach((m) => {
+    const movers = (m.movers || []).map((x) =>
+      '<div class="anl-why" style="margin:0">' + anlEsc(x.label) + ': ' + anlEsc(x.display) + '</div>').join('');
+    const timing = m.timing && m.timing.kind !== 'none'
+      ? '<div style="font-size:12px">' + (m.timing.kind === 'get_in_by' ? 'Get in by ' : 'Get out before ') +
+        '<b style="color:var(--gold)">' + anlEsc(m.timing.date) + '</b></div>' +
+        '<div class="anl-why">' + anlEsc(m.timing.note) + '</div>'
+      : '<span class="anl-why">—</span>';
+    const prebuy = m.prebuy_active
+      ? '<div class="anl-prebuy">Posting activity here may be inflated by customers pulling volume forward ahead of ' +
+        anlEsc(m.policy_event && m.policy_event.date ? String(m.policy_event.date).slice(0, 10) : 'the scheduled date') +
+        '. Treat the current rise as borrowed.' + (m.prebuy_capped ? ' Capped at HOLD while this is active.' : '') + '</div>'
+      : '';
+    html += '<tr>' +
+      '<td><div class="anl-nm">' + anlEsc(m.sector) + '</div><div class="anl-why">' + anlEsc(m.region) + '</div>' + prebuy + '</td>' +
+      '<td class="anl-num"><b style="color:' + anlScoreColour(m.score) + '">' + anlNum(m.score) + '</b></td>' +
+      '<td class="anl-num ' + ((Number(m.delta_wow) || 0) >= 0 ? 'anl-up' : 'anl-down') + '">' + anlSignStr(m.delta_wow) + '</td>' +
+      '<td class="anl-num">' + anlNum(m.weeks_in_state) + '</td>' +
+      '<td>' + (movers || '<span class="anl-why">—</span>') + '</td>' +
+      '<td><span class="anl-why">' + (anlEsc(m.reason) || '—') + '</span></td>' +
+      '<td>' + timing + '</td>' +
+      '<td>' + anlStateBadge(m.state) +
+        (m.pending_state ? '<div class="anl-why">' + anlEsc(m.pending_state) + ' pending</div>' : '') + '</td>' +
+      '</tr>';
+  });
+  return html + '</tbody></table></div></div>';
+}
+
+/* ---------- 3. what is working ---------- */
+function anlSetDim(k) { anlDim = k; anlRender(); }
+
+function anlSegments(d) {
+  const segs = d.segments || {};
+  const rows = segs[anlDim] || [];
+  const chips = ANL_DIMS.map((x) =>
+    '<span class="anl-chip' + (x.k === anlDim ? ' anl-on' : '') + '" onclick="anlSetDim(\'' + x.k + '\')">' +
+    anlEsc(x.label) + '</span>').join('');
+  const dimLabel = (ANL_DIMS.filter((x) => x.k === anlDim)[0] || { label: 'Segment' }).label;
+
+  let body;
+  if (!rows.length) {
+    body = '<div class="anl-note">Not enough data yet for this breakdown.</div>';
+  } else {
+    const best = Math.max.apply(null, rows.map((r) => Number(r.positive_rate) || 0).concat([1]));
+    body = '<div class="anl-tblwrap"><table><thead><tr><th>' + anlEsc(dimLabel) + '</th>' +
+      '<th class="anl-num">Sent</th><th class="anl-num">Replies</th><th class="anl-num">Reply rate</th>' +
+      '<th>Positive</th><th>Verdict</th></tr></thead><tbody>' +
+      rows.map((r) => {
+        const v = String(r.verdict || 'HOLD');
+        const cls = v === 'SCALE' ? 'anl-b-scale' : v === 'KILL' ? 'anl-b-kill' : v === 'TOO_THIN' ? 'anl-b-thin' : 'anl-b-hold';
+        const pctWidth = Math.round(((Number(r.positive_rate) || 0) / best) * 100);
+        return '<tr><td>' + anlEsc(r.label) + '</td>' +
+          '<td class="anl-num">' + anlNum(r.sent) + '</td>' +
+          '<td class="anl-num">' + anlNum(r.replies) + '</td>' +
+          '<td class="anl-num">' + anlPctStr(r.reply_rate) + '</td>' +
+          '<td><div class="anl-meter"><i style="width:' + pctWidth + '%"></i></div>' +
+            '<div class="anl-why">' + anlPctStr(r.positive_rate) + ' positive</div></td>' +
+          '<td><span class="anl-badge ' + cls + '">' + anlEsc(v.replace('_', ' ')) + '</span></td></tr>';
+      }).join('') +
+      '</tbody></table></div>' +
+      '<div class="anl-note">Verdicts require ' + anlNum(40) + '+ sends in a segment. Anything below that is held ' +
+      'at TOO THIN rather than judged, and sorted to the bottom.</div>';
+  }
+  return anlSect('What Is Working') + '<div class="anl-panel"><div class="anl-chips">' + chips + '</div>' + body + '</div>';
+}
+
+/* ---------- 4. CEO briefing ---------- */
+function anlBriefing(d, meta) {
+  const b = d.briefing || {};
+  const decs = Array.isArray(b.decisions) ? b.decisions : [];
+  let html = anlSect('CEO Briefing', meta.briefing_degraded) +
+    '<div class="anl-panel anl-ceo">' +
+    '<h4>' + (anlEsc(b.headline) || 'No briefing available for this period.') + '</h4>' +
+    '<div class="anl-sub">Generated from ' + anlNum((meta.rows_analyzed || 0)) + ' sends over the last ' +
+    anlNum(d.range_days || 30) + ' days.</div>';
+
+  decs.forEach((dec, i) => {
+    const st = anlHandled[i];
+    html += '<div class="anl-dec' + (st ? ' anl-gone' : '') + '" id="anlDec' + i + '">' +
+      '<div class="anl-n">' + (i + 1) + '</div><div style="flex:1">' +
+      '<div class="anl-t">' + anlEsc(dec.title) + '</div>' +
+      '<div class="anl-w">' + anlEsc(dec.reasoning) + '</div>' +
+      (dec.copy_test ? '<div class="anl-quote">' + anlEsc(dec.copy_test) + '</div>' : '') +
+      (st
+        ? '<div class="anl-why" style="margin-top:8px">' + (st === 'accepted' ? 'Accepted, moved to the Decision Log.' : 'Dismissed.') + '</div>'
+        : '<div class="anl-acts">' +
+            '<button class="anl-btn anl-ghost" onclick="anlDecide(' + i + ',\'accept\')">Accept</button>' +
+            '<button class="anl-btn anl-ghost" onclick="anlDecide(' + i + ',\'reject\')">Dismiss</button>' +
+          '</div>') +
+      '</div></div>';
+  });
+
+  if (b.confidence) html += '<div class="anl-conf">' + anlEsc(b.confidence) + '</div>';
+  return html + '</div>';
+}
+
+/**
+ * Accept moves the decision into the Decision Log immediately and writes
+ * through in the background. If the write fails the row is rolled back out
+ * again, because a decision that looks logged but is not is worse than one
+ * that visibly failed.
+ */
+async function anlDecide(i, action) {
+  const b = (anlData && anlData.briefing) || {};
+  const dec = (b.decisions || [])[i];
+  if (!dec || anlHandled[i]) return;
+
+  anlHandled[i] = action === 'accept' ? 'accepted' : 'dismissed';
+  let optimistic = null;
+  if (action === 'accept') {
+    optimistic = {
+      created_at: new Date().toISOString(),
+      decision_text: dec.title,
+      result_value: 'Accepted today, graded in 30 days',
+      grade: 'pending',
+      _optimistic: true
+    };
+    if (!Array.isArray(anlData.decisions_log)) anlData.decisions_log = [];
+    anlData.decisions_log.unshift(optimistic);
+  }
+  anlRender();
+
+  try {
+    const r = await fetch(ANL_CONFIG.URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: action,
+        decision: {
+          decision_text: dec.title,
+          rationale: dec.reasoning || '',
+          segment: dec.segment || '',
+          metric: dec.metric || 'reply_rate',
+          baseline_value: Number((anlData.scoreboard && anlData.scoreboard.reply_rate && anlData.scoreboard.reply_rate.value) || 0)
+        }
+      })
+    });
+    const res = await r.json();
+    if (!r.ok || !res || res.ok !== true) throw new Error((res && res.error) || 'write failed');
+    anlCacheWrite(anlRange, anlData);
+  } catch (e) {
+    delete anlHandled[i];
+    if (optimistic && Array.isArray(anlData.decisions_log)) {
+      anlData.decisions_log = anlData.decisions_log.filter((x) => x !== optimistic);
+    }
+    anlNetError = 'That decision could not be written: ' + String((e && e.message) || e);
+    anlRender();
+  }
+}
+
+/* ---------- 5. targeting list ---------- */
+function anlTargeting(d, meta) {
+  const list = d.targeting || [];
+  if (!list.length) return '';
+  return anlSect('Targeting List — where next month’s outreach goes', meta.markets_demo) +
+    '<div class="anl-tgt">' + list.map((t) =>
+      '<div class="anl-card">' +
+        '<h5>' + anlEsc(t.sector) + '</h5>' +
+        '<div class="anl-meta">' + anlEsc(t.region) + '  ·  ' +
+          // state and score are the board's, reconciled server-side. A card naming
+          // a market we do not track shows no state at all rather than an invented one.
+          (t.untracked
+            ? '<span class="anl-why">not a tracked market</span>'
+            : anlStateBadge(t.state) + '  <span style="color:' + anlScoreColour(t.score) +
+              ';font-weight:700">' + anlNum(t.score) + '</span>') + '</div>' +
+        '<div class="anl-kv"><b>Target titles</b><div class="anl-titles">' +
+          (t.target_titles || []).map((x) => '<em>' + anlEsc(x) + '</em>').join('') + '</div></div>' +
+        '<div class="anl-kv"><b>Company profile</b><span>' + anlEsc(t.company_profile) + '</span></div>' +
+        '<div class="anl-kv"><b>Hook</b><span>' + anlEsc(t.hook) + '</span></div>' +
+        '<div class="anl-kv"><b>Avoid</b><span>' + anlEsc(t.avoid) + '</span></div>' +
+        '<div class="anl-kv"><b>Window</b><span>' + anlEsc(t.window) + '</span></div>' +
+      '</div>').join('') +
+    '</div>';
+}
+
+/* ---------- 6. macro watch ---------- */
+function anlMacro(d, meta) {
+  const list = d.macro || [];
+  if (!list.length) return '';
+  return anlSect('Macro Watch — and when it lands', meta.radar_degraded) +
+    '<div class="anl-panel">' + list.map((m) =>
+      '<div class="anl-macro"><div class="anl-h"><b>' + anlEsc(m.headline) + '</b>' +
+        '<span class="anl-lag' + (m.urgent ? ' anl-now' : '') + '">' + anlEsc(m.lag) + '</span></div>' +
+        '<p>' + anlEsc(m.explanation) + '</p>' +
+        '<div class="anl-act"><span>Do now:</span> ' + anlEsc(m.action) + '</div></div>').join('') +
+    '</div>';
+}
+
+/* ---------- 7. decision log + forecast register ---------- */
+function anlGradeBadge(g) {
+  const v = String(g || 'pending').toLowerCase();
+  const cls = v === 'worked' || v === 'hit' ? 'anl-b-worked'
+    : v === 'reversed' || v === 'miss' ? 'anl-b-reversed'
+    : v === 'mixed' || v === 'partial' ? 'anl-b-mixed' : 'anl-b-pending';
+  return '<span class="anl-badge ' + cls + '">' + anlEsc(v.toUpperCase()) + '</span>';
+}
+
+function anlDecisionLog(d, meta) {
+  const rows = d.decisions_log || [];
+  let body;
+  if (!rows.length) {
+    body = '<div class="anl-note">No decisions accepted yet. Accepting one from the briefing above puts it here.</div>';
+  } else {
+    body = '<div class="anl-tblwrap"><table><thead><tr><th>Date</th><th>Decision</th><th>Result</th><th>Grade</th></tr></thead><tbody>' +
+      rows.map((r) =>
+        '<tr><td>' + anlDateShort(r.created_at) + '</td>' +
+        '<td>' + anlEsc(r.decision_text) + '</td>' +
+        '<td><span class="anl-why">' + anlEsc(r.result_value) + '</span></td>' +
+        '<td>' + anlGradeBadge(r.grade) + '</td></tr>').join('') +
+      '</tbody></table></div>';
+  }
+  return anlSect('Decision Log', meta.decisions_demo) +
+    '<div class="anl-panel"><div class="anl-note" style="margin:0 0 10px">Every accepted recommendation is written ' +
+    'here and graded against what actually happened. This is what stops the briefing repeating itself.</div>' +
+    body + '</div>';
+}
+
+function anlForecasts(d, meta) {
+  const rows = d.forecasts || [];
+  const s = d.forecast_summary || {};
+  const rate = s.scoreable
+    ? '<b style="color:' + (Number(s.hit_rate) >= 50 ? 'var(--green)' : 'var(--red)') + '">' + anlPctStr(s.hit_rate) + ' hit rate</b>' +
+      ' <span class="anl-why">across ' + anlNum(s.resolved_count) + ' resolved</span>'
+    : '<span class="anl-why">Not enough resolved calls to score (' + anlNum(s.resolved_count || 0) + ' of ' +
+      anlNum(s.min_resolved || 12) + ').</span>';
+
+  let body;
+  if (!rows.length) {
+    body = '<div class="anl-note">No forecasts on record. A market call only reaches this register if it carries a ' +
+      'number, a resolve date, and a named public series it can be checked against.</div>';
+  } else {
+    body = '<div class="anl-tblwrap"><table><thead><tr><th>Claim</th><th>Market</th><th>Resolves</th>' +
+      '<th>Confidence</th><th>Outcome</th></tr></thead><tbody>' +
+      rows.map((f) =>
+        '<tr><td>' + anlEsc(f.claim) + '<div class="anl-why">checks against ' + anlEsc(f.metric) +
+          // a call proposed this run that has not reached the datastore is not
+          // history yet, and should not read like it is
+          (f._new && !f._saved ? ' · <span style="color:var(--gold-light)">not yet saved</span>' : '') + '</div></td>' +
+        '<td><span class="anl-why">' + anlEsc(f.market) + '</span></td>' +
+        '<td>' + anlDateShort(f.resolve_at) + '</td>' +
+        '<td><span class="anl-why">' + anlEsc(f.confidence) + '</span></td>' +
+        '<td>' + anlGradeBadge(f.outcome) + '</td></tr>').join('') +
+      '</tbody></table></div>';
+  }
+
+  const warn = s.unreliable
+    ? '<div class="anl-banner anl-red" style="margin:10px 0 0">The market calls are not currently reliable. ' +
+      'High-confidence forecasts are hitting below 50% across 12 or more resolved calls, so treat this section as ' +
+      'prompts for your own judgement rather than guidance.</div>'
+    : '';
+
+  return anlSect('Forecast Register', meta.forecasts_demo) +
+    '<div class="anl-panel"><div class="anl-note" style="margin:0 0 10px">' + rate +
+    ' · A market brain that cannot be proven wrong in public is a horoscope.</div>' +
+    body + warn + '</div>';
+}
+
+/* ---------- boot: paint from cache, fetch nothing ---------- */
+function anlInit() {
+  const c = anlCacheRead(anlRange);
+  if (c) { anlData = c.data; anlCachedAt = c.cachedAt; }
+  anlRender();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   // Defer until Three.js is loaded (CDN). If THREE shows up later, init then.
+  anlInit();   // paints the Analytics tab from localStorage. Fetches nothing.
   if (typeof THREE !== 'undefined') { jrvInit(); }
   else { const tries = setInterval(() => { if (typeof THREE !== 'undefined') { clearInterval(tries); jrvInit(); } }, 100); setTimeout(() => clearInterval(tries), 5000); }
 });

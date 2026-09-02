@@ -1,4 +1,4 @@
-﻿.env
+.env
 .env.local
 .env.*.local
 *.pem
@@ -30,3 +30,4 @@ voice/state.json
 voice/.env
 __pycache__/
 *.pyc
+incoming/
