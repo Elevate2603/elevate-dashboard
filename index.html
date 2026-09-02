@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0902-A -->
+<!-- BUILD: ELEVATE-2026-0902-B -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -1554,6 +1554,28 @@
     .anl-scorewrap{width:100%;text-align:left}
     .anl-mscore .anl-why{text-align:left!important}
     .anl-maths table{min-width:0}
+  }
+
+  /* folded sections: the whole tab is a dozen lines until you open something */
+  .anl-foldbar{display:flex;align-items:center;gap:12px;margin:26px 0 8px;
+    font-size:11.5px;color:var(--text-muted)}
+  .anl-foldbar span{flex:1}
+  .anl-fold{border-top:1px solid var(--border)}
+  .anl-fold:last-of-type{border-bottom:1px solid var(--border)}
+  .anl-foldhead{display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;
+    color:var(--text);font-family:inherit;text-align:left;cursor:pointer;padding:13px 2px}
+  .anl-foldhead:hover{background:rgba(255,255,255,.02)}
+  .anl-caret{flex:0 0 12px;color:var(--gold);font-size:11px}
+  .anl-foldtitle{font-size:12px;letter-spacing:1.1px;text-transform:uppercase;color:var(--gold);
+    font-weight:700;flex:0 0 auto;min-width:190px}
+  .anl-foldsum{flex:1;font-size:12.5px;color:var(--text-muted);font-weight:400}
+  .anl-foldsum b{font-weight:600}
+  .anl-fold.anl-open .anl-foldtitle{color:var(--gold-light)}
+  .anl-foldbody{padding:2px 0 18px}
+  @media(max-width:620px){
+    .anl-foldhead{flex-wrap:wrap;gap:6px}
+    .anl-foldtitle{min-width:0;flex:1 0 100%}
+    .anl-foldsum{flex:1 0 100%;padding-left:22px}
   }
   @media(max-width:760px){.anl-grid2{grid-template-columns:1fr}}
   @media(max-width:420px){.anl-bar h2{width:100%}.anl-cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}}
@@ -10286,6 +10308,97 @@ function anlStampText(ms) {
     d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ', ' +
     d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
+/**
+ * Collapsible sections.
+ *
+ * Travis, 2026-09-02: "A simple scan through should tell me a lot, then I can
+ * deep dive if I want too." Adding a summary at the top and leaving eight open
+ * panels underneath made the page LONGER, which was the opposite of the ask.
+ * So: everything below the scoreboard is shut by default and carries a one-line
+ * summary on its header. The whole tab is about a dozen lines until you open
+ * something. What you open is remembered.
+ */
+let anlOpenSecs = (function () {
+  try { return JSON.parse(localStorage.getItem('anl_open_v1') || '{}') || {}; }
+  catch (_) { return {}; }
+})();
+function anlToggleSec(id) {
+  anlOpenSecs[id] = !anlOpenSecs[id];
+  try { localStorage.setItem('anl_open_v1', JSON.stringify(anlOpenSecs)); } catch (_) {}
+  anlRender();
+}
+function anlOpenAll(open) {
+  ['market', 'segments', 'briefing', 'targeting', 'macro', 'decisions', 'forecasts']
+    .forEach((k) => { anlOpenSecs[k] = open; });
+  try { localStorage.setItem('anl_open_v1', JSON.stringify(anlOpenSecs)); } catch (_) {}
+  anlRender();
+}
+
+// A section is a header you can scan and a body you can ignore.
+function anlFold(id, title, summary, bodyFn, demoTag) {
+  const open = !!anlOpenSecs[id];
+  return '<div class="anl-fold' + (open ? ' anl-open' : '') + '">' +
+    '<button class="anl-foldhead" onclick="anlToggleSec(\'' + id + '\')">' +
+      '<span class="anl-caret">' + (open ? '▾' : '▸') + '</span>' +
+      '<span class="anl-foldtitle">' + anlEsc(title) + '</span>' +
+      '<span class="anl-foldsum">' + (summary || '') + '</span>' +
+      (demoTag ? '<span class="anl-demo-tag">Demo data</span>' : '') +
+    '</button>' +
+    (open ? '<div class="anl-foldbody">' + bodyFn() + '</div>' : '') +
+    '</div>';
+}
+
+/* one-line summaries: what the section would tell you if you opened it */
+function anlSumMarket(d) {
+  const b = d.market_board || [];
+  const c = { ENTER: 0, HOLD: 0, EXIT: 0 };
+  b.forEach((m) => { c[m.state] = (c[m.state] || 0) + 1; });
+  return '<b style="color:var(--green)">' + c.ENTER + ' build</b> · ' +
+         '<b style="color:var(--gold-light)">' + c.HOLD + ' hold</b> · ' +
+         '<b style="color:var(--red)">' + c.EXIT + ' exit</b>';
+}
+function anlSumSegments(d) {
+  const s = (d.segments && d.segments.persona) || [];
+  const up = s.filter((r) => r.verdict === 'SCALE')[0];
+  const down = s.filter((r) => r.verdict === 'KILL')[0];
+  if (!up && !down) return '<span>no clear winner yet</span>';
+  return (up ? '<b style="color:var(--green)">' + anlEsc(up.label) + ' ' + anlPctStr(up.reply_rate) + '</b>' : '') +
+         (up && down ? ' · ' : '') +
+         (down ? '<b style="color:var(--red)">' + anlEsc(down.label) + ' ' + anlPctStr(down.reply_rate) + '</b>' : '');
+}
+function anlSumBriefing(d) {
+  const n = ((d.briefing || {}).decisions || []).length;
+  return '<span>' + n + ' decision' + (n === 1 ? '' : 's') + ' for this week</span>';
+}
+function anlSumTargeting(d) {
+  const t = d.targeting || [];
+  const top = t.filter((x) => x.state === 'ENTER')[0] || t[0];
+  return '<span>' + t.length + ' market' + (t.length === 1 ? '' : 's') +
+    (top ? ' · top is ' + anlEsc(top.sector) : '') + '</span>';
+}
+function anlSumMacro(d) {
+  const m = d.macro || [];
+  const urgent = m.filter((x) => x.urgent).length;
+  return '<span>' + m.length + ' item' + (m.length === 1 ? '' : 's') + '</span>' +
+    (urgent ? ' · <b style="color:var(--red)">' + urgent + (urgent === 1 ? ' needs' : ' need') + ' action now</b>' : '');
+}
+function anlSumDecisions(d) {
+  const r = d.decisions_log || [];
+  const w = r.filter((x) => String(x.grade).toLowerCase() === 'worked').length;
+  const rev = r.filter((x) => String(x.grade).toLowerCase() === 'reversed').length;
+  if (!r.length) return '<span>none accepted yet</span>';
+  return '<span>' + r.length + ' logged</span>' +
+    (w ? ' · <b style="color:var(--green)">' + w + ' worked</b>' : '') +
+    (rev ? ' · <b style="color:var(--red)">' + rev + ' reversed</b>' : '');
+}
+function anlSumForecasts(d) {
+  const s = d.forecast_summary || {};
+  const open = (d.forecasts || []).filter((f) => !f.outcome || f.outcome === 'pending').length;
+  return '<span>' + open + ' open</span>' +
+    (s.scoreable ? ' · <b>' + anlPctStr(s.hit_rate) + ' hit rate</b>'
+                 : ' · <span>' + anlNum(s.resolved_count || 0) + ' resolved, too few to score</span>');
+}
+
 function anlSect(title, demoTag) {
   return '<div class="anl-sect"><h3>' + anlEsc(title) + '</h3>' +
     (demoTag ? '<span class="anl-demo-tag" title="This section is running on demo data, not a live feed">Demo data</span>' : '') +
@@ -10362,16 +10475,23 @@ function anlRender() {
 
   const d = anlData;
   const meta = d.meta || {};
+  const anyOpen = ['market','segments','briefing','targeting','macro','decisions','forecasts']
+    .some((k) => anlOpenSecs[k]);
   bodyEl.innerHTML =
     anlHeadline(d) +
     anlScoreboard(d) +
-    anlMarketBoard(d, meta) +
-    anlSegments(d) +
-    anlBriefing(d, meta) +
-    anlTargeting(d, meta) +
-    anlMacro(d, meta) +
-    anlDecisionLog(d, meta) +
-    anlForecasts(d, meta);
+    '<div class="anl-foldbar">' +
+      '<span>Open a section for the detail behind it.</span>' +
+      '<button class="anl-btn anl-ghost" onclick="anlOpenAll(' + (anyOpen ? 'false' : 'true') + ')">' +
+        (anyOpen ? 'Collapse all' : 'Expand all') + '</button>' +
+    '</div>' +
+    anlFold('market',    'Market Condition Board', anlSumMarket(d),    () => anlMarketBoard(d, meta), meta.markets_demo) +
+    anlFold('segments',  'What Is Working',        anlSumSegments(d),  () => anlSegments(d)) +
+    anlFold('briefing',  'CEO Briefing',           anlSumBriefing(d),  () => anlBriefing(d, meta), meta.briefing_degraded) +
+    anlFold('targeting', 'Targeting List',         anlSumTargeting(d), () => anlTargeting(d, meta), meta.markets_demo) +
+    anlFold('macro',     'Macro Watch',            anlSumMacro(d),     () => anlMacro(d, meta), meta.radar_degraded) +
+    anlFold('decisions', 'Decision Log',           anlSumDecisions(d), () => anlDecisionLog(d, meta), meta.decisions_demo) +
+    anlFold('forecasts', 'Forecast Register',      anlSumForecasts(d), () => anlForecasts(d, meta), meta.forecasts_demo);
 }
 
 function anlBanners() {
@@ -10533,8 +10653,7 @@ function anlMarketBoard(d, meta) {
   const sorted = rows.slice().sort((a, b) =>
     (order[a.state] - order[b.state]) || (b.score - a.score));
 
-  let html = anlSect('Market Condition Board', meta.markets_demo) +
-    '<div class="anl-panel">' +
+  let html = '<div class="anl-panel">' +
     '<div class="anl-note" style="margin:0 0 14px">' +
       '<b style="color:var(--green)">' + counts.ENTER + ' to build in</b>  ·  ' +
       '<b style="color:var(--gold-light)">' + counts.HOLD + ' to hold</b>  ·  ' +
@@ -10625,15 +10744,14 @@ function anlSegments(d) {
       '<div class="anl-note">Verdicts require ' + anlNum(40) + '+ sends in a segment. Anything below that is held ' +
       'at TOO THIN rather than judged, and sorted to the bottom.</div>';
   }
-  return anlSect('What Is Working') + '<div class="anl-panel"><div class="anl-chips">' + chips + '</div>' + body + '</div>';
+  return '<div class="anl-panel"><div class="anl-chips">' + chips + '</div>' + body + '</div>';
 }
 
 /* ---------- 4. CEO briefing ---------- */
 function anlBriefing(d, meta) {
   const b = d.briefing || {};
   const decs = Array.isArray(b.decisions) ? b.decisions : [];
-  let html = anlSect('CEO Briefing', meta.briefing_degraded) +
-    '<div class="anl-panel anl-ceo">' +
+  let html = '<div class="anl-panel anl-ceo">' +
     '<h4>' + (anlEsc(b.headline) || 'No briefing available for this period.') + '</h4>' +
     '<div class="anl-sub">Generated from ' + anlNum((meta.rows_analyzed || 0)) + ' sends over the last ' +
     anlNum(d.range_days || 30) + ' days.</div>';
@@ -10716,8 +10834,7 @@ async function anlDecide(i, action) {
 function anlTargeting(d, meta) {
   const list = d.targeting || [];
   if (!list.length) return '';
-  return anlSect('Targeting List — where next month’s outreach goes', meta.markets_demo) +
-    '<div class="anl-tgt">' + list.map((t) =>
+  return '<div class="anl-tgt">' + list.map((t) =>
       '<div class="anl-card">' +
         '<h5>' + anlEsc(t.sector) + '</h5>' +
         '<div class="anl-meta">' + anlEsc(t.region) + '  ·  ' +
@@ -10741,8 +10858,7 @@ function anlTargeting(d, meta) {
 function anlMacro(d, meta) {
   const list = d.macro || [];
   if (!list.length) return '';
-  return anlSect('Macro Watch — and when it lands', meta.radar_degraded) +
-    '<div class="anl-panel">' + list.map((m) =>
+  return '<div class="anl-panel">' + list.map((m) =>
       '<div class="anl-macro"><div class="anl-h"><b>' + anlEsc(m.headline) + '</b>' +
         '<span class="anl-lag' + (m.urgent ? ' anl-now' : '') + '">' + anlEsc(m.lag) + '</span></div>' +
         '<p>' + anlEsc(m.explanation) + '</p>' +
@@ -10773,8 +10889,7 @@ function anlDecisionLog(d, meta) {
         '<td>' + anlGradeBadge(r.grade) + '</td></tr>').join('') +
       '</tbody></table></div>';
   }
-  return anlSect('Decision Log', meta.decisions_demo) +
-    '<div class="anl-panel"><div class="anl-note" style="margin:0 0 10px">Every accepted recommendation is written ' +
+  return '<div class="anl-panel"><div class="anl-note" style="margin:0 0 10px">Every accepted recommendation is written ' +
     'here and graded against what actually happened. This is what stops the briefing repeating itself.</div>' +
     body + '</div>';
 }
@@ -10813,8 +10928,7 @@ function anlForecasts(d, meta) {
       'prompts for your own judgement rather than guidance.</div>'
     : '';
 
-  return anlSect('Forecast Register', meta.forecasts_demo) +
-    '<div class="anl-panel"><div class="anl-note" style="margin:0 0 10px">' + rate +
+  return '<div class="anl-panel"><div class="anl-note" style="margin:0 0 10px">' + rate +
     ' · A market brain that cannot be proven wrong in public is a horoscope.</div>' +
     body + warn + '</div>';
 }
