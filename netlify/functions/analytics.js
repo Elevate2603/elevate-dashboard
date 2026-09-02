@@ -720,17 +720,12 @@ and macro watch beneath them.
 
 ${DOCTRINE}
 
-Respond with JSON only. No preamble, no markdown fences.
+Respond with JSON only. No preamble, no markdown fences. Keep it tight: this
+must fit in a small response, so no long prose.
 {
-  "market_reasons": [ { "id": "", "reason": "one line, why this market is where it is" } ],
-  "targeting": [
-    { "sector": "", "region": "", "state": "ENTER|HOLD|EXIT", "score": 0,
-      "target_titles": [""], "company_profile": "", "hook": "", "avoid": "",
-      "window": "get in by / get out before, with a date" }
-  ],
   "macro": [
     { "headline": "", "lag": "e.g. Tier 1 impact in 4 to 8 weeks", "urgent": true,
-      "explanation": "", "action": "" }
+      "explanation": "two sentences at most", "action": "" }
   ],
   "forecasts": [
     { "claim": "must contain a number and a date", "market": "", "metric": "one of: ${PUBLIC_METRIC_IDS.join(", ")}",
@@ -738,7 +733,7 @@ Respond with JSON only. No preamble, no markdown fences.
       "confidence": "high|medium|low", "basis": "" }
   ]
 }
-Five targeting entries, four to six macro items, two to four forecasts.`;
+Four macro items, two forecasts. Nothing else.`;
 
 async function anthropic(body, timeoutMs) {
   const ctrl = new AbortController();
@@ -1207,7 +1202,14 @@ exports.handler = async (event) => {
   }
 
   if (!briefing) briefing = demoBriefing();
-  if (!radar) radar = demoRadar();
+  // The radar is only asked for macro and forecasts now: market reasons and the
+  // targeting list need the public feeds, which are not built. Whatever it does
+  // return is merged over the demo copy so a partial answer is still used.
+  const demoR = demoRadar();
+  radar = Object.assign({}, demoR, radar || {});
+  if (!Array.isArray(radar.macro) || !radar.macro.length) radar.macro = demoR.macro;
+  if (!Array.isArray(radar.targeting) || !radar.targeting.length) radar.targeting = demoR.targeting;
+  if (!Array.isArray(radar.market_reasons) || !radar.market_reasons.length) radar.market_reasons = demoR.market_reasons;
 
   // the model writes each market's one-line reason; the state stays ours
   const reasonById = {};
