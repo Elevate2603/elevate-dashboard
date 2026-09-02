@@ -8842,6 +8842,18 @@ function jrvApplyLocalSend(queueKey, subject) {
 async function jrvSendDraftViaOutlook() {
   const qk = jrvDraftState.currentKey;
   if (!qk) return;
+
+  // Last line of defence against emailing a dead address. The mailbox scan that
+  // sets `bounced` only runs Mon and Thu, so a bounce that arrives on Tuesday is
+  // not flagged until Thursday, and nothing else here would stop a second send.
+  const rec = (jrvInSeqState.records || []).filter(r => (r.key || '') === qk)[0];
+  if (rec && (rec.bounced === true || rec.bounced === 'true')) {
+    const why = (rec.bounce_reason || 'This address hard-bounced.').trim();
+    alert('Not sending: ' + (rec.contact_email || 'this address') + ' is marked undeliverable.\n\n' +
+          why + '\n\nFix the address on the record, or use Remove to un-enroll them.');
+    return;
+  }
+
   const sendBtn = document.getElementById('jrvDraftModalSendBtn');
   const subjEl = document.getElementById('jrvDraftModalSubject');
   const bodyEl = document.getElementById('jrvDraftModalBody');
