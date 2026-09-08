@@ -241,6 +241,169 @@ function groupRows(rows, keyFn, labelFn, overallRate) {
   return out;
 }
 
+/* ============================================================================
+   CADENCE — how many reach-outs a person takes before they answer
+   ----------------------------------------------------------------------------
+   Travis, 2026-09-08: "I want you to be smart and understand how many reach
+   outs to individuals, until a response etc."
+
+   THE TOUCH NUMBER IS DERIVED, NEVER READ.
+   The queue carries a `reach_out_count` field, and it is not trustworthy: 93 of
+   124 contacts sat at 0 despite 91 of them having a real `outlook_sent_at`. A
+   counter that a scenario has to remember to increment fails silently and you
+   cannot tell a true 1 from a missed increment. So touch number here is the
+   ordinal position of a send within that contact's own history, sorted by
+   sent_at. It cannot drift, and it self-heals if a send is logged late.
+
+   RIGHT-CENSORING IS THE TRAP.
+   The naive version divides replies-at-touch-N by everyone who ever got touch
+   N. That silently punishes recent sends: an email sent yesterday counts as a
+   failure at that touch even though the person has not had time to answer. With
+   a steady send volume this drags every rate down and makes later touches look
+   worse than they are. So a touch only enters the denominator once it has had
+   MATURITY_DAYS to produce a reply. Everything younger is reported separately
+   as "still open", never as a failure.
+   ========================================================================== */
+
+// How long a send gets to earn a reply before we are willing to call it a miss.
+// 14 days is well past the observed median for this pipeline; a reply after that
+// is rare enough that waiting longer costs more insight than it buys accuracy.
+const MATURITY_DAYS = 14;
+// A recommendation to stop at touch N is only made when at least this many
+// contacts actually reached touch N. Below it the panel says so and stays quiet.
+const CADENCE_MIN_N = 25;
+
+/**
+ * Groups every logged send by person and returns their sends in time order.
+ * Keyed on contact_email because that is the only identifier present on every
+ * row; slugs are blank for anything that never reached RCRM.
+ */
+function sendsByContact(rows) {
+  const by = new Map();
+  rows.forEach((r) => {
+    const who = String(r.contact_email || "").trim().toLowerCase();
+    if (!who) return;
+    if (!by.has(who)) by.set(who, []);
+    by.get(who).push(r);
+  });
+  by.forEach((list) => list.sort((a, b) => (parseTs(a.sent_at) || 0) - (parseTs(b.sent_at) || 0)));
+  return by;
+}
+
+/**
+ * Which touch actually earned the reply.
+ *
+ * A reply is credited to the LAST send at or before the reply timestamp, not to
+ * the first send and not to the most recent one. Crediting the first would say
+ * every reply came from touch 1; crediting the latest would credit a follow-up
+ * that went out after they had already answered.
+ */
+function replyTouchIndex(list) {
+  const replyAt = list.map((r) => parseTs(r.replied_at)).filter((t) => t !== null).sort((a, b) => a - b)[0];
+  if (replyAt == null) return null;
+  let idx = null;
+  list.forEach((r, i) => {
+    const s = parseTs(r.sent_at);
+    if (s !== null && s <= replyAt) idx = i;
+  });
+  // A reply stamped before any send we know about still counts as a reply, and
+  // belongs to the earliest send rather than being silently dropped.
+  return { touch: (idx === null ? 0 : idx) + 1, at: replyAt };
+}
+
+function buildCadence(rows, nowMs) {
+  const by = sendsByContact(rows);
+  const cutoff = nowMs - MATURITY_DAYS * 86400000;
+
+  const touches = [];       // per touch number
+  const people = [];        // per contact, for the stop-list
+  let repliedTotal = 0;
+
+  by.forEach((list, who) => {
+    const rep = replyTouchIndex(list);
+    if (rep) repliedTotal++;
+    const lastSent = parseTs(list[list.length - 1].sent_at);
+    people.push({
+      contact_email: who,
+      company: list[list.length - 1].company_name || "",
+      sends: list.length,
+      replied_on_touch: rep ? rep.touch : null,
+      last_sent_at: lastSent ? iso(lastSent) : "",
+      // a person is only "exhausted" once their newest send has also had its
+      // chance; otherwise they are simply still in flight
+      matured: lastSent !== null && lastSent <= cutoff,
+    });
+
+    list.forEach((r, i) => {
+      const t = i + 1;
+      const sent = parseTs(r.sent_at);
+      if (sent === null) return;
+      while (touches.length < t) {
+        touches.push({ touch: touches.length + 1, reached: 0, matured: 0, replied: 0, still_open: 0 });
+      }
+      const row = touches[t - 1];
+      row.reached++;
+      // Only a touch that has had its full window counts for or against the rate.
+      if (sent <= cutoff) row.matured++;
+      else row.still_open++;
+      if (rep && rep.touch === t) row.replied++;
+    });
+  });
+
+  // Reply rate per touch, plus what each extra touch actually buys.
+  let cumulativeReplies = 0;
+  const contactsTotal = by.size;
+  touches.forEach((t) => {
+    cumulativeReplies += t.replied;
+    t.reply_rate = pct(t.replied, t.matured);
+    t.cumulative_replies = cumulativeReplies;
+    t.cumulative_rate = pct(cumulativeReplies, contactsTotal);
+    t.thin = t.matured < CADENCE_MIN_N;
+  });
+
+  // Where the cadence stops paying: the first matured touch that produced
+  // nothing on an adequate sample, with every later touch also empty. Anything
+  // less than that is a dip, not a floor, and must not be sold as a stop point.
+  let stop = null;
+  for (let i = 0; i < touches.length; i++) {
+    const t = touches[i];
+    if (t.thin || t.replied > 0) continue;
+    if (touches.slice(i).every((x) => x.replied === 0)) { stop = t.touch; break; }
+  }
+
+  // What the dead touches are costing, counted only on people who are actually
+  // done rather than mid-sequence.
+  let wastedSends = 0, wastedPeople = 0;
+  if (stop !== null) {
+    people.forEach((p) => {
+      if (p.replied_on_touch !== null || !p.matured) return;
+      if (p.sends >= stop) { wastedPeople++; wastedSends += p.sends - (stop - 1); }
+    });
+  }
+
+  const maturedContacts = people.filter((p) => p.matured).length;
+  const replyTouches = people.map((p) => p.replied_on_touch).filter((n) => n !== null).sort((a, b) => a - b);
+
+  return {
+    contacts: contactsTotal,
+    contacts_matured: maturedContacts,
+    replied: repliedTotal,
+    reply_rate: pct(repliedTotal, contactsTotal),
+    median_touches_to_reply: replyTouches.length ? median(replyTouches) : null,
+    max_touches_seen: touches.length,
+    touches,
+    maturity_days: MATURITY_DAYS,
+    min_n: CADENCE_MIN_N,
+    stop_after: stop,
+    wasted_sends: wastedSends,
+    wasted_people: wastedPeople,
+    // Never let the UI imply a finding we do not have.
+    thin: contactsTotal < CADENCE_MIN_N,
+    // people still worth a follow-up vs people who have had enough
+    open_now: people.filter((p) => p.replied_on_touch === null && !p.matured).length,
+  };
+}
+
 function buildSegments(rows) {
   const overallRate = pct(rows.filter(hasReply).length, rows.length);
   return {
@@ -632,6 +795,13 @@ Rules you must follow:
   counted as one. A reply means a person wrote back.
 - Never declare a winner or loser on a segment with fewer than 40 sends. Say
   the sample is too thin and state how many more sends are needed.
+- The cadence block tells you how many reach-outs it takes to earn a reply. A
+  touch marked too_thin_to_judge has not been tried on enough people; never
+  recommend adding or cutting a touch on the strength of one. Only recommend
+  stopping at a touch when stop_after is set, and if it is, say how many sends
+  that frees.
+- A touch that has not yet had maturity_days to earn a reply is not a failure.
+  Never describe recent sends as having been ignored.
 - State your confidence and separate findings that are solid from findings
   that are directional.
 - If you recommend a copy change, write the actual replacement email.
@@ -777,12 +947,28 @@ function extractJson(data) {
   return JSON.parse(joined.slice(start, end + 1));
 }
 
-async function briefingCall(scoreboard, segments) {
+async function briefingCall(scoreboard, segments, cadence) {
+  // Cadence goes in trimmed. The model needs the per-touch shape to reason about
+  // follow-up depth, but not the per-person roster, which is long and adds nothing
+  // it can act on.
+  const cad = cadence ? {
+    contacts: cadence.contacts,
+    replied: cadence.replied,
+    reply_rate: cadence.reply_rate,
+    median_touches_to_reply: cadence.median_touches_to_reply,
+    stop_after: cadence.stop_after,
+    wasted_sends: cadence.wasted_sends,
+    maturity_days: cadence.maturity_days,
+    touches: (cadence.touches || []).map((t) => ({
+      touch: t.touch, judged: t.matured, replied: t.replied,
+      reply_rate: t.reply_rate, too_thin_to_judge: t.thin,
+    })),
+  } : null;
   const data = await anthropic({
     model: MODEL,
     max_tokens: 1000,
     system: BRIEFING_SYSTEM,
-    messages: [{ role: "user", content: JSON.stringify({ scoreboard, segments }) }],
+    messages: [{ role: "user", content: JSON.stringify({ scoreboard, segments, cadence: cad }) }],
   }, 20000);
   return extractJson(data);
 }
@@ -851,41 +1037,60 @@ function demoRows(days, nowMs) {
   // its illustration, which is also enough for most segments to clear MIN_N and
   // actually get a verdict rather than reading TOO THIN across the board.
   const total = Math.round(days * 25);
-  for (let i = 0; i < total; i++) {
+
+  // Rows are generated PER CONTACT, as a real sequence, not as independent sends.
+  // A cadence panel built on independent rows would show replies spread evenly
+  // across touch numbers, which is the one shape real outreach never has. Persona,
+  // industry and region are fixed per person for the same reason: a contact does
+  // not change job or city between touch 2 and touch 3.
+  let made = 0, cid = 0;
+  while (made < total) {
+    cid++;
     const persona = pick(rnd, DEMO_PERSONA);
     const industry = pick(rnd, DEMO_INDUSTRY);
     const region = pick(rnd, DEMO_REGION);
     const signal = pick(rnd, DEMO_SIGNAL);
     const opener = pick(rnd, DEMO_OPENER);
-    const step = 1 + Math.floor(rnd() * 3);
+    // most people get one or two touches, a tail gets chased further
+    const planned = 1 + Math.floor(Math.pow(rnd(), 1.7) * 6);
     // skewed toward recent so the prior-period deltas are non-zero, the way a
     // program that is growing actually looks
-    const sentAt = nowMs - Math.floor(Math.pow(rnd(), 1.35) * span);
-    const dow = new Date(sentAt).getDay();
+    const first = nowMs - Math.floor(Math.pow(rnd(), 1.35) * span);
+    const gapMs = (4 + Math.floor(rnd() * 7)) * 86400000;
 
-    // blended likelihood, nudged by step and weekday so those dimensions move too
-    let p = (persona[1] + industry[1] + region[1] + signal[1] + opener[1]) / 5;
-    p *= step === 2 ? 1.5 : step === 3 ? 1.2 : 0.85;
-    p *= (dow === 0 || dow === 6) ? 0.3 : (dow === 5 ? 0.6 : 1.05);
+    for (let step = 1; step <= planned && made < total; step++) {
+      const sentAt = first + (step - 1) * gapMs;
+      if (sentAt > nowMs) break;             // not sent yet
+      const dow = new Date(sentAt).getDay();
 
-    const replied = rnd() < p;
-    const replyMs = replied ? sentAt + Math.floor((0.2 + rnd() * 3.5) * 86400000) : null;
-    const sentiment = !replied ? "" : (rnd() < 0.38 ? "positive" : rnd() < 0.6 ? "neutral" : rnd() < 0.85 ? "not_now" : "negative");
-    const meeting = sentiment === "positive" && rnd() < 0.42;
+      // blended likelihood, nudged by step and weekday so those dimensions move too
+      let p = (persona[1] + industry[1] + region[1] + signal[1] + opener[1]) / 5;
+      p *= step === 2 ? 1.5 : step === 3 ? 1.2 : 0.85;
+      p *= (dow === 0 || dow === 6) ? 0.3 : (dow === 5 ? 0.6 : 1.05);
 
-    rows.push({
-      contact_slug: "demo-" + i,
-      persona: persona[0], industry: industry[0], region: region[0],
-      signal_type: signal[0], opener_style: opener[0],
-      sequence_step: step,
-      sent_at: iso(sentAt),
-      opened_at: rnd() < 0.34 ? iso(sentAt + 3600000) : "",
-      open_count: rnd() < 0.34 ? 1 + Math.floor(rnd() * 3) : 0,
-      replied_at: replyMs ? iso(replyMs) : "",
-      reply_sentiment: sentiment,
-      outcome: meeting ? "meeting_booked" : "",
-      outcome_at: meeting && replyMs ? iso(replyMs + 86400000) : "",
-    });
+      const replied = rnd() < p;
+      const replyMs = replied ? sentAt + Math.floor((0.2 + rnd() * 3.5) * 86400000) : null;
+      const sentiment = !replied ? "" : (rnd() < 0.38 ? "positive" : rnd() < 0.6 ? "neutral" : rnd() < 0.85 ? "not_now" : "negative");
+      const meeting = sentiment === "positive" && rnd() < 0.42;
+
+      rows.push({
+        contact_slug: "demo-" + cid,
+        contact_email: "demo" + cid + "@example.invalid",
+        company_name: "Demo Co " + cid,
+        persona: persona[0], industry: industry[0], region: region[0],
+        signal_type: signal[0], opener_style: opener[0],
+        sequence_step: step,
+        sent_at: iso(sentAt),
+        replied_at: replyMs ? iso(replyMs) : "",
+        reply_sentiment: sentiment,
+        outcome: meeting ? "meeting_booked" : "",
+        outcome_at: meeting && replyMs ? iso(replyMs + 86400000) : "",
+      });
+      made++;
+      // once somebody answers, the sequence stops. Continuing to email a person
+      // who already replied is exactly the behaviour this panel exists to catch.
+      if (replied) break;
+    }
   }
   return rows;
 }
@@ -1133,6 +1338,10 @@ exports.handler = async (event) => {
   const { cur, prev } = splitPeriods(rows, days, nowMs);
   const scoreboard = buildScoreboard(cur, prev);
   const segments = buildSegments(cur);
+  // Cadence is computed over the WHOLE log, not the reporting window: a contact
+  // first emailed four months ago is still on touch 5 today, and windowing the
+  // rows would restart their count and understate how many it really took.
+  const cadence = buildCadence(rows, nowMs);
 
   // 2. market inputs
   let marketInputs = null;
@@ -1200,7 +1409,7 @@ exports.handler = async (event) => {
   const runRadar = hasKey && !!process.env.MARKET_SIGNALS_URL;
   if (hasKey) {
     const [bRes, rRes] = await Promise.allSettled([
-      briefingCall(scoreboard, segments),
+      briefingCall(scoreboard, segments, cadence),
       runRadar ? radarCall(board) : Promise.reject(new Error("skipped: market feeds not connected")),
     ]);
     if (bRes.status === "fulfilled" && bRes.value) briefing = bRes.value;
@@ -1291,6 +1500,7 @@ exports.handler = async (event) => {
     generated_at: iso(nowMs),
     scoreboard,
     segments,
+    cadence,
     market_board: board,
     briefing,
     targeting: rec.targeting,
@@ -1321,5 +1531,6 @@ exports._internals = {
   buildScoreboard, buildSegments, verdictFor, scoreMarket, resolveState,
   buildMarketBoard, buildForecastRegister, forecastRejectReason, extractJson, reconcileTargeting,
   demoRows, demoMarketInputs, splitPeriods, rangeDays, MARKETS, MIN_N,
+  buildCadence, MATURITY_DAYS, CADENCE_MIN_N,
   RADAR_SYSTEM, BRIEFING_SYSTEM, anthropic, MODEL,
 };

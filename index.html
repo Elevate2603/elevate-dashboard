@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0908-A -->
+<!-- BUILD: ELEVATE-2026-0908-B -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -1497,6 +1497,27 @@
     padding:2px 7px;font-size:11px;color:var(--text)}
 
   .anl-note{font-size:11.5px;color:var(--text-muted);margin-top:8px}
+  /* Reach-Outs Per Reply. min-width:0 on the prose columns is load-bearing:
+     a flex child without it cannot shrink below its content and pushes the
+     panel sideways, which is what broke this tab once already. */
+  .anl-cad-head{font-size:13px;line-height:1.55;margin-bottom:12px}
+  .anl-cad-head b{color:var(--gold)}
+  .anl-cad-bars{display:flex;flex-direction:column;gap:7px;margin-bottom:12px}
+  .anl-cad-row{display:flex;align-items:center;gap:10px;font-size:12px}
+  .anl-cad-n{flex:0 0 62px;color:var(--text-muted)}
+  .anl-cad-track{flex:1 1 auto;min-width:60px;height:9px;border-radius:5px;
+    background:rgba(255,255,255,.07);box-shadow:inset 0 1px 2px rgba(0,0,0,.45);overflow:hidden}
+  .anl-cad-fill{height:100%;border-radius:5px;
+    background:linear-gradient(90deg,var(--gold),#e0a63a);box-shadow:0 0 8px rgba(200,130,10,.5)}
+  .anl-cad-dim{background:rgba(255,255,255,.2);box-shadow:none}
+  .anl-cad-rate{flex:0 0 46px;text-align:right;font-variant-numeric:tabular-nums}
+  .anl-cad-meta{flex:1 1 40%;min-width:0;color:var(--text-muted);font-size:11px;
+    overflow-wrap:anywhere}
+  .anl-cad-thin{border:1px solid rgba(255,255,255,.18);border-radius:4px;
+    padding:0 4px;margin-left:4px;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+  .anl-cad-call{font-size:12.5px;line-height:1.5;padding:10px 12px;border-radius:8px;
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09)}
+  .anl-cad-stop{border-color:rgba(200,130,10,.45);background:rgba(200,130,10,.10)}
   .anl-prebuy{font-size:11.5px;color:var(--gold-light);margin-top:4px}
   .anl-banner{border-radius:8px;padding:10px 13px;font-size:12.5px;margin-bottom:14px}
   .anl-banner.anl-amber{background:rgba(230,160,32,.12);border:1px solid rgba(230,160,32,.4);color:var(--gold-light)}
@@ -10547,6 +10568,7 @@ function anlRender() {
     anlGroup('What we sent, and how it did') +
     anlScoreboard(d) +
     anlFold('segments',  'What Is Working',        anlSumSegments(d),  () => anlSegments(d)) +
+    anlFold('cadence',   'Reach-Outs Per Reply',   anlSumCadence(d),   () => anlCadence(d)) +
     anlFold('briefing',  'CEO Briefing',           anlSumBriefing(d),  () => anlBriefing(d, meta), meta.briefing_degraded) +
     anlFold('decisions', 'Decision Log',           anlSumDecisions(d), () => anlDecisionLog(d, meta), meta.decisions_demo) +
     // and the outside world, ending with the scorecard for ITS calls
@@ -10819,6 +10841,82 @@ function anlMarketBoard(d, meta) {
 
 /* ---------- 3. what is working ---------- */
 function anlSetDim(k) { anlDim = k; anlRender(); }
+
+/* ---------- how many reach-outs it takes ----------
+   Travis, 2026-09-08: "understand how many reach outs to individuals, until a
+   response etc." The touch number is DERIVED from send history in the function,
+   not read from reach_out_count, which is unreliable. See buildCadence(). */
+function anlSumCadence(d) {
+  const c = d.cadence || {};
+  if (!c.contacts) return '<span class="anl-foldsum-dim">no sends logged yet</span>';
+  if (c.thin) return anlEsc(c.contacts + ' people so far, too few to read a pattern');
+  const m = c.median_touches_to_reply;
+  const best = (c.touches || []).filter((t) => !t.thin)
+    .reduce((a, t) => (a && a.reply_rate >= t.reply_rate ? a : t), null);
+  return anlEsc((m ? 'usually ' + m + ' touch' + (m === 1 ? '' : 'es') + ' to a reply' : 'no replies yet') +
+    (best ? ', best rate on touch ' + best.touch : ''));
+}
+
+function anlCadence(d) {
+  const c = d.cadence || {};
+  if (!c.contacts) {
+    return '<div class="anl-note">Nothing has been logged yet, so there is no cadence to read. ' +
+      'This fills in on its own as emails go out.</div>';
+  }
+  const rows = c.touches || [];
+  const peak = rows.filter((t) => !t.thin).reduce((a, t) => (a && a.reply_rate >= t.reply_rate ? a : t), null);
+  const maxRate = Math.max(1, ...rows.map((t) => Number(t.reply_rate) || 0));
+
+  // the answer first, in a sentence
+  let head;
+  if (!c.replied) {
+    head = 'No one has replied yet across ' + c.contacts + ' ' + (c.contacts === 1 ? 'person' : 'people') + '.';
+  } else {
+    head = 'It takes a median of <b>' + c.median_touches_to_reply + ' touch' +
+      (c.median_touches_to_reply === 1 ? '' : 'es') + '</b> to get a reply. ' +
+      c.replied + ' of ' + c.contacts + ' people have answered (' + anlPctStr(c.reply_rate) + ').';
+    if (peak) head += ' The best single touch is <b>number ' + peak.touch + '</b> at ' + anlPctStr(peak.reply_rate) + '.';
+  }
+
+  const bars = rows.map((t) => {
+    const w = Math.round((Number(t.reply_rate) || 0) / maxRate * 100);
+    const thin = t.thin
+      ? '<span class="anl-cad-thin" title="Fewer than ' + c.min_n + ' people have reached this touch and had time to answer, so this rate is not yet meaningful">thin</span>'
+      : '';
+    return '<div class="anl-cad-row">' +
+      '<div class="anl-cad-n">Touch ' + t.touch + '</div>' +
+      '<div class="anl-cad-track"><div class="anl-cad-fill' + (t.thin ? ' anl-cad-dim' : '') +
+        '" style="width:' + w + '%"></div></div>' +
+      '<div class="anl-cad-rate">' + anlPctStr(t.reply_rate) + '</div>' +
+      '<div class="anl-cad-meta">' + t.replied + ' of ' + t.matured + ' judged' +
+        (t.still_open ? ', ' + t.still_open + ' still out' : '') + ' ' + thin + '</div>' +
+      '</div>';
+  }).join('');
+
+  // what to actually do about it
+  let verdict;
+  if (c.stop_after) {
+    verdict = '<div class="anl-cad-call anl-cad-stop"><b>Stop after touch ' + (c.stop_after - 1) + '.</b> ' +
+      'Touch ' + c.stop_after + ' and everything past it has produced no replies at all on a large enough sample. ' +
+      (c.wasted_sends ? 'That is <b>' + c.wasted_sends + ' emails</b> across ' + c.wasted_people +
+        ' people that bought nothing.' : '') + '</div>';
+  } else if (c.thin) {
+    verdict = '<div class="anl-cad-call"><b>Not enough people yet.</b> ' + c.contacts + ' so far; ' +
+      'a stop point is not worth naming until at least ' + c.min_n + ' have reached a given touch.</div>';
+  } else {
+    verdict = '<div class="anl-cad-call"><b>No dead touch yet.</b> Every touch on a solid sample is still ' +
+      'producing replies, so there is no evidence-backed point to stop at. This will name one as soon as there is.</div>';
+  }
+
+  return '<div class="anl-cad-head">' + head + '</div>' +
+    '<div class="anl-cad-bars">' + bars + '</div>' +
+    verdict +
+    '<div class="anl-note">A touch only counts for or against the rate once it has had <b>' +
+      c.maturity_days + ' days</b> to earn a reply. ' +
+      (c.open_now ? '<b>' + c.open_now + '</b> ' + (c.open_now === 1 ? 'person is' : 'people are') +
+        ' still inside that window and are not counted as a miss. ' : '') +
+      'The touch number is counted from what was actually sent, not from a stored counter.</div>';
+}
 
 function anlSegments(d) {
   const segs = d.segments || {};
