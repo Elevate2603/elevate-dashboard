@@ -241,6 +241,129 @@ function groupRows(rows, keyFn, labelFn, overallRate) {
   return out;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   IN SEQUENCE IS THE SOURCE OF TRUTH
+   ----------------------------------------------------------------------
+   Travis, 2026-09-08: "the in sequence is what matters, I put everything in
+   there now. Those are all my outreaches."
+
+   So the roster comes from the queue datastore behind the In Sequence panel,
+   not from elevate_outreach_log. The log records one row per SEND and is the
+   better shape for cadence, but it only started filling in September and only
+   captures one send path. In Sequence holds every person Travis has actually
+   reached out to, which is the population the numbers are about.
+
+   The trade is real and worth stating: the queue holds one row per PERSON, not
+   per send, so the exact send-by-send history is not in it. Touch counts come
+   from reach_out_count, which is missing on most records (see below), and those
+   contacts are reported as unknown rather than guessed at.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const TRUE_ISH = (v) => String(v).trim().toLowerCase() === "true";
+
+// A reply means a person wrote back. The classifier's auto_reply state is an
+// out-of-office and is NOT a response; counting it would badly overstate how
+// well the outreach is doing. 17 of 19 classified replies were auto_reply when
+// this was written, so this single rule is the difference between a 20% reply
+// rate and the real one.
+function genuineReply(r) {
+  const s = String(r.response_state || "").trim().toLowerCase();
+  return s === "warm" || s === "cold";
+}
+
+function personaFromTitle(title) {
+  const t = String(title || "").toLowerCase();
+  if (!t) return "other";
+  if (t.indexOf("plant manager") >= 0) return "plant_manager";
+  if (t.indexOf("production") >= 0) return "production_manager";
+  if (t.indexOf("human resource") >= 0 || t.indexOf("hr ") >= 0 || t.indexOf("recruit") >= 0
+      || t.indexOf("talent") >= 0 || t.indexOf("people") >= 0) return "hr_manager";
+  if (t.indexOf("warehouse") >= 0 || t.indexOf("logistic") >= 0 || t.indexOf("distribution") >= 0) return "warehouse_manager";
+  if (t.indexOf("general manager") >= 0) return "gm";
+  if (t.indexOf("engineer") >= 0) return "engineering_manager";
+  if (t.indexOf("finance") >= 0 || t.indexOf("cfo") >= 0 || t.indexOf("controller") >= 0
+      || t.indexOf("account") >= 0) return "finance";
+  if (t.indexOf("operation") >= 0) return "operations";
+  if (t.indexOf("president") >= 0 || t.indexOf("owner") >= 0 || t.indexOf("ceo") >= 0) return "exec";
+  if (t.indexOf("maintenance") >= 0) return "maintenance_manager";
+  if (t.indexOf("supervisor") >= 0) return "supervisor";
+  return "other";
+}
+
+function regionFromPlace(city, state) {
+  const g = (String(city || "") + " " + String(state || "")).toLowerCase();
+  if (!g.trim()) return "other";
+  const any = (list) => list.some((w) => g.indexOf(w) >= 0);
+  if (any(["windsor", "tecumseh", "lasalle", "leamington", "kingsville", "amherstburg", "essex", "chatham"])) return "windsor_essex";
+  if (any(["brampton", "mississauga", "toronto", "vaughan", "markham", "oakville", "milton",
+           "hamilton", "guelph", "kitchener", "waterloo", "cambridge", "oshawa", "burlington", "brantford"])) return "gta_brampton";
+  if (any(["detroit", "michigan", " mi"])) return "detroit_michigan";
+  if (any(["phoenix", "maricopa", "arizona", " az"])) return "phoenix_maricopa";
+  if (any(["london", "sarnia", "stratford", "woodstock", "ingersoll"])) return "southwest_ontario";
+  return "other";
+}
+
+/**
+ * One In Sequence record becomes one analytics row. Nothing is invented: a field
+ * that is not in the record comes out as "other" or empty, never as a guess.
+ */
+function mapInSeqRow(a) {
+  const replied = genuineReply(a);
+  const touches = Math.max(0, parseInt(a.reach_out_count, 10) || 0);
+  return {
+    contact_email: String(a.contact_email || "").trim().toLowerCase(),
+    contact_title: a.contact_title || "",
+    company_name: a.company_name || "",
+    persona: personaFromTitle(a.contact_title),
+    // the queue does not carry company_industry through this feed, so industry is
+    // deliberately absent rather than filled with a guess
+    industry: "other",
+    region: regionFromPlace(a.company_city || a.contact_city, a.company_state || a.contact_state),
+    signal_type: String(a.lead_source || "") === "manual" ? "manual"
+      : String(a.lead_source || "") === "hiring_signals" ? "job_posting" : "cold",
+    opener_style: "other",
+    sequence_step: touches,
+    // touches is 0 when nothing was recorded, which is NOT the same as one send.
+    // Kept separate so the cadence panel can exclude them instead of calling them 1.
+    touches_known: touches > 0,
+    sent_at: a.outlook_sent_at || a.approved_at || a.added_at || "",
+    replied_at: replied ? (a.responded_at || a.last_reply_at || "") : "",
+    reply_sentiment: !replied ? "" : (String(a.response_state).toLowerCase() === "cold" ? "negative" : "positive"),
+    // an out-of-office is tracked so it can be reported, never as a reply
+    auto_reply: String(a.response_state || "").toLowerCase() === "auto_reply",
+    // flagged inbound that the classifier could never reach, because reply_is_new
+    // needs last_reply_at and it is blank on these
+    reply_unclassified: TRUE_ISH(a.has_replied) && !String(a.response_state || "").trim(),
+    bounced: TRUE_ISH(a.bounced),
+    outcome: "",
+    outcome_at: "",
+  };
+}
+
+async function fetchInSequence(timeoutMs) {
+  const url = process.env.INSEQ_FETCH_URL;
+  if (!url) return null;
+  const res = await getJson(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: "all" }),
+  }, timeoutMs || 9000);
+  if (!res) return null;
+  // The feed answers as a bare array of BasicAggregator bundles, each wrapping the
+  // record under `aggregate`. Reading the top level instead makes every field look
+  // missing, which is indistinguishable from a real schema problem. Handle both.
+  const list = Array.isArray(res) ? res : (Array.isArray(res.rows) ? res.rows : Object.keys(res).map((k) => res[k]));
+  const out = [];
+  list.forEach((item) => {
+    const a = (item && item.aggregate) ? item.aggregate : item;
+    if (!a || typeof a !== "object") return;
+    if (!a.contact_email) return;
+    if (TRUE_ISH(a.removed_from_sequence)) return;   // un-enrolled, not outreach in flight
+    out.push(mapInSeqRow(a));
+  });
+  return out;
+}
+
 /* ============================================================================
    CADENCE — how many reach-outs a person takes before they answer
    ----------------------------------------------------------------------------
@@ -272,6 +395,10 @@ const MATURITY_DAYS = 14;
 // A recommendation to stop at touch N is only made when at least this many
 // contacts actually reached touch N. Below it the panel says so and stays quiet.
 const CADENCE_MIN_N = 25;
+// A median computed from two people is not a median. "It takes 8 touches" off a
+// sample of two would be the most confidently wrong sentence on the page, so the
+// figure is withheld until enough people have actually replied.
+const CADENCE_MIN_REPLIES = 8;
 
 /**
  * Groups every logged send by person and returns their sends in time order.
@@ -309,6 +436,34 @@ function replyTouchIndex(list) {
   // A reply stamped before any send we know about still counts as a reply, and
   // belongs to the earliest send rather than being silently dropped.
   return { touch: (idx === null ? 0 : idx) + 1, at: replyAt };
+}
+
+/**
+ * In Sequence gives one row per PERSON carrying a touch count, not one row per
+ * send. Where that count is missing the person is set aside as unknown rather
+ * than counted as a single touch: a missing counter and a genuine first touch
+ * look identical, and treating them as the same would put most of the roster on
+ * touch 1 and invent a curve that is not there.
+ */
+function contactsFromPerPerson(rows, nowMs) {
+  const cutoff = nowMs - MATURITY_DAYS * 86400000;
+  const out = [], unknown = [];
+  rows.forEach((r) => {
+    const who = String(r.contact_email || "").trim().toLowerCase();
+    if (!who || r.bounced) return;
+    const touches = Math.max(0, parseInt(r.sequence_step, 10) || 0);
+    const sent = parseTs(r.sent_at);
+    const rec = {
+      contact_email: who,
+      company: r.company_name || "",
+      sends: touches,
+      replied_on_touch: parseTs(r.replied_at) !== null ? (touches || 1) : null,
+      last_sent_at: sent ? iso(sent) : "",
+      matured: sent !== null && sent <= cutoff,
+    };
+    if (touches > 0) out.push(rec); else unknown.push(rec);
+  });
+  return { known: out, unknown };
 }
 
 function buildCadence(rows, nowMs) {
@@ -350,9 +505,17 @@ function buildCadence(rows, nowMs) {
     });
   });
 
+  return summariseCadence(touches, people, by.size, repliedTotal, 0);
+}
+
+/**
+ * Shared tail for both shapes. `people` is one entry per contact, `touches` is
+ * the per-touch histogram, and `unknownTouches` is the number of contacts we know
+ * were emailed but whose touch count was never recorded.
+ */
+function summariseCadence(touches, people, contactsTotal, repliedTotal, unknownTouches) {
   // Reply rate per touch, plus what each extra touch actually buys.
   let cumulativeReplies = 0;
-  const contactsTotal = by.size;
   touches.forEach((t) => {
     cumulativeReplies += t.replied;
     t.reply_rate = pct(t.replied, t.matured);
@@ -383,13 +546,20 @@ function buildCadence(rows, nowMs) {
 
   const maturedContacts = people.filter((p) => p.matured).length;
   const replyTouches = people.map((p) => p.replied_on_touch).filter((n) => n !== null).sort((a, b) => a - b);
+  const medianTouches = replyTouches.length >= CADENCE_MIN_REPLIES ? median(replyTouches) : null;
 
   return {
     contacts: contactsTotal,
     contacts_matured: maturedContacts,
     replied: repliedTotal,
     reply_rate: pct(repliedTotal, contactsTotal),
-    median_touches_to_reply: replyTouches.length ? median(replyTouches) : null,
+    median_touches_to_reply: medianTouches,
+    // how many replies the median rests on, so the panel can say why it is absent
+    median_basis: replyTouches.length,
+    min_replies: CADENCE_MIN_REPLIES,
+    // set by the per-person path: a touch count taken from a running counter is an
+    // upper bound on when they answered, not the exact touch that earned it
+    touch_is_upper_bound: false,
     max_touches_seen: touches.length,
     touches,
     maturity_days: MATURITY_DAYS,
@@ -401,7 +571,50 @@ function buildCadence(rows, nowMs) {
     thin: contactsTotal < CADENCE_MIN_N,
     // people still worth a follow-up vs people who have had enough
     open_now: people.filter((p) => p.replied_on_touch === null && !p.matured).length,
+    // people we know were emailed but whose touch count was never recorded. They
+    // are excluded from every rate above rather than assumed to be on touch 1.
+    unknown_touches: unknownTouches,
   };
+}
+
+/**
+ * Cadence from one-row-per-person data (In Sequence). Same output shape as the
+ * per-send version so the panel does not care which fed it.
+ */
+function buildCadenceFromContacts(rows, nowMs) {
+  const { known, unknown } = contactsFromPerPerson(rows, nowMs);
+  const touches = [];
+  let repliedTotal = 0;
+  known.forEach((p) => {
+    if (p.replied_on_touch !== null) repliedTotal++;
+    for (let t = 1; t <= p.sends; t++) {
+      while (touches.length < t) {
+        touches.push({ touch: touches.length + 1, reached: 0, matured: 0, replied: 0, still_open: 0 });
+      }
+      const row = touches[t - 1];
+      row.reached++;
+      // Only the person's LAST touch can still be inside the maturity window;
+      // the earlier ones are older than it by definition.
+      if (t < p.sends || p.matured) row.matured++; else row.still_open++;
+      if (p.replied_on_touch === t) row.replied++;
+    }
+  });
+  // The denominator for the headline rate is everyone in sequence, including the
+  // people whose touch count is missing. They were still emailed and still did
+  // not reply, and dropping them would flatter the number.
+  const total = known.length + unknown.length;
+  const repliedUnknown = unknown.filter((p) => p.replied_on_touch !== null).length;
+  const out = summariseCadence(touches, known.concat(unknown), total, repliedTotal + repliedUnknown, unknown.length);
+  // median touches is only meaningful for people whose count we actually have
+  const rt = known.map((p) => p.replied_on_touch).filter((n) => n !== null).sort((a, b) => a - b);
+  out.median_touches_to_reply = rt.length >= CADENCE_MIN_REPLIES ? median(rt) : null;
+  out.median_basis = rt.length;
+  // One row per person means the touch count is where the counter had got to, not
+  // the touch they actually answered on. If they replied after touch 3 and the
+  // sequence kept running to 6, this reads 6. It is an upper bound and the panel
+  // must say so rather than present it as the answer.
+  out.touch_is_upper_bound = true;
+  return out;
 }
 
 function buildSegments(rows) {
@@ -1321,19 +1534,47 @@ exports.handler = async (event) => {
   const warnings = [];
   let demo = false;
 
-  // 1. outreach rows
-  let rows = null;
-  if (process.env.ANALYTICS_FETCH_URL) {
+  // 1. outreach rows.
+  //
+  // In Sequence FIRST. Travis: "the in sequence is what matters, I put everything
+  // in there now. Those are all my outreaches." It is the population the numbers
+  // are about. elevate_outreach_log is the better SHAPE, one row per send, but it
+  // only began filling in September and only from one send path, so it is the
+  // fallback rather than the source.
+  let rows = null, perPerson = false;
+  if (process.env.INSEQ_FETCH_URL) {
+    try {
+      const list = await fetchInSequence(9000);
+      if (list && list.length) { rows = list; perPerson = true; }
+      else warnings.push("In Sequence returned no contacts.");
+    } catch (e) {
+      warnings.push("In Sequence fetch failed: " + String(e.message || e));
+    }
+  }
+  if (!rows && process.env.ANALYTICS_FETCH_URL) {
     try {
       const sep = process.env.ANALYTICS_FETCH_URL.indexOf("?") >= 0 ? "&" : "?";
       const res = await getJson(process.env.ANALYTICS_FETCH_URL + sep + "days=" + (days * 2), null, 5000);
-      if (res && Array.isArray(res.rows)) rows = res.rows;
-      else warnings.push("Analytics fetch returned no rows array.");
+      if (res && Array.isArray(res.rows) && res.rows.length) rows = res.rows;
+      else warnings.push("Outreach log returned no rows.");
     } catch (e) {
       warnings.push("Analytics fetch failed: " + String(e.message || e));
     }
   }
   if (!rows) { rows = demoRows(days, nowMs); demo = true; }
+
+  // Reported so the tab can say what it is counting, and so nobody has to guess
+  // later why a number moved.
+  const autoReplies = rows.filter((r) => r.auto_reply).length;
+  const unclassified = rows.filter((r) => r.reply_unclassified).length;
+  const bounced = rows.filter((r) => r.bounced).length;
+  if (autoReplies) {
+    warnings.push(autoReplies + " out-of-office auto-replies are excluded from the reply count.");
+  }
+  if (unclassified) {
+    warnings.push(unclassified + " contact(s) show an inbound reply that was never classified, " +
+      "so they are not counted as a reply. They need last_reply_at before the classifier can read them.");
+  }
 
   const { cur, prev } = splitPeriods(rows, days, nowMs);
   const scoreboard = buildScoreboard(cur, prev);
@@ -1341,7 +1582,7 @@ exports.handler = async (event) => {
   // Cadence is computed over the WHOLE log, not the reporting window: a contact
   // first emailed four months ago is still on touch 5 today, and windowing the
   // rows would restart their count and understate how many it really took.
-  const cadence = buildCadence(rows, nowMs);
+  const cadence = perPerson ? buildCadenceFromContacts(rows, nowMs) : buildCadence(rows, nowMs);
 
   // 2. market inputs
   let marketInputs = null;
@@ -1516,6 +1757,12 @@ exports.handler = async (event) => {
     },
     meta: {
       rows_analyzed: cur.length,
+      source: demo ? "demo" : (perPerson ? "in_sequence" : "outreach_log"),
+      // one row per person, so per-send detail is not available from this source
+      per_person: perPerson,
+      auto_replies_excluded: autoReplies,
+      replies_unclassified: unclassified,
+      bounced,
       radar_degraded,
       briefing_degraded,
       markets_demo: marketsDemo,
@@ -1531,6 +1778,7 @@ exports._internals = {
   buildScoreboard, buildSegments, verdictFor, scoreMarket, resolveState,
   buildMarketBoard, buildForecastRegister, forecastRejectReason, extractJson, reconcileTargeting,
   demoRows, demoMarketInputs, splitPeriods, rangeDays, MARKETS, MIN_N,
-  buildCadence, MATURITY_DAYS, CADENCE_MIN_N,
+  buildCadence, buildCadenceFromContacts, mapInSeqRow, personaFromTitle, regionFromPlace,
+  MATURITY_DAYS, CADENCE_MIN_N, CADENCE_MIN_REPLIES,
   RADAR_SYSTEM, BRIEFING_SYSTEM, anthropic, MODEL,
 };

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0908-B -->
+<!-- BUILD: ELEVATE-2026-0908-C -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -1515,6 +1515,7 @@
     overflow-wrap:anywhere}
   .anl-cad-thin{border:1px solid rgba(255,255,255,.18);border-radius:4px;
     padding:0 4px;margin-left:4px;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+  .anl-cad-caveat{display:block;margin-top:6px;font-size:11.5px;color:var(--text-muted)}
   .anl-cad-call{font-size:12.5px;line-height:1.5;padding:10px 12px;border-radius:8px;
     background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09)}
   .anl-cad-stop{border-color:rgba(200,130,10,.45);background:rgba(200,130,10,.10)}
@@ -10851,10 +10852,9 @@ function anlSumCadence(d) {
   if (!c.contacts) return '<span class="anl-foldsum-dim">no sends logged yet</span>';
   if (c.thin) return anlEsc(c.contacts + ' people so far, too few to read a pattern');
   const m = c.median_touches_to_reply;
-  const best = (c.touches || []).filter((t) => !t.thin)
-    .reduce((a, t) => (a && a.reply_rate >= t.reply_rate ? a : t), null);
-  return anlEsc((m ? 'usually ' + m + ' touch' + (m === 1 ? '' : 'es') + ' to a reply' : 'no replies yet') +
-    (best ? ', best rate on touch ' + best.touch : ''));
+  if (!c.replied) return anlEsc(c.contacts + ' people contacted, none have replied');
+  return anlEsc(c.replied + ' of ' + c.contacts + ' replied (' + anlPctStr(c.reply_rate) + ')' +
+    (m ? ', usually by touch ' + m : ''));
 }
 
 function anlCadence(d) {
@@ -10867,15 +10867,28 @@ function anlCadence(d) {
   const peak = rows.filter((t) => !t.thin).reduce((a, t) => (a && a.reply_rate >= t.reply_rate ? a : t), null);
   const maxRate = Math.max(1, ...rows.map((t) => Number(t.reply_rate) || 0));
 
-  // the answer first, in a sentence
+  // the answer first, in a sentence, and never a number the sample cannot carry
   let head;
   if (!c.replied) {
     head = 'No one has replied yet across ' + c.contacts + ' ' + (c.contacts === 1 ? 'person' : 'people') + '.';
   } else {
-    head = 'It takes a median of <b>' + c.median_touches_to_reply + ' touch' +
-      (c.median_touches_to_reply === 1 ? '' : 'es') + '</b> to get a reply. ' +
-      c.replied + ' of ' + c.contacts + ' people have answered (' + anlPctStr(c.reply_rate) + ').';
-    if (peak) head += ' The best single touch is <b>number ' + peak.touch + '</b> at ' + anlPctStr(peak.reply_rate) + '.';
+    head = '<b>' + c.replied + ' of ' + c.contacts + '</b> people have written back (' +
+      anlPctStr(c.reply_rate) + ').';
+    if (c.median_touches_to_reply) {
+      head += ' It takes a median of <b>' + c.median_touches_to_reply + ' touch' +
+        (c.median_touches_to_reply === 1 ? '' : 'es') + '</b>' +
+        (c.touch_is_upper_bound ? ' or fewer' : '') + ' to earn one.';
+    } else {
+      head += ' Only ' + c.median_basis + ' of those have a touch count behind them, so a median ' +
+        'is not worth quoting yet; it needs ' + c.min_replies + '.';
+    }
+    if (peak && peak.replied) head += ' The best single touch is <b>number ' + peak.touch + '</b> at ' + anlPctStr(peak.reply_rate) + '.';
+  }
+  // The counter tells us how many were sent, not which one they answered. Saying
+  // "8 touches" when they may have replied after 3 would be a made-up number.
+  if (c.touch_is_upper_bound && c.replied) {
+    head += ' <span class="anl-cad-caveat">Touch numbers come from a running counter, ' +
+      'so they show how many had gone out by the time someone replied, not the exact one that did it.</span>';
   }
 
   const bars = rows.map((t) => {
@@ -10908,8 +10921,19 @@ function anlCadence(d) {
       'producing replies, so there is no evidence-backed point to stop at. This will name one as soon as there is.</div>';
   }
 
+  // The single most important caveat on this panel: most of the roster has no
+  // touch count at all, and pretending they are on touch 1 would invent a curve.
+  const unknownNote = c.unknown_touches
+    ? ('<div class="anl-cad-call"><b>' + c.unknown_touches + ' of ' + c.contacts +
+       ' people have no touch count recorded.</b> They were emailed, but nothing logged how ' +
+       'many times, so they are left out of the bars above rather than counted as one send. ' +
+       'The reply rate above still includes them, because they were still contacted and ' +
+       'still did not answer.</div>')
+    : '';
+
   return '<div class="anl-cad-head">' + head + '</div>' +
     '<div class="anl-cad-bars">' + bars + '</div>' +
+    unknownNote +
     verdict +
     '<div class="anl-note">A touch only counts for or against the rate once it has had <b>' +
       c.maturity_days + ' days</b> to earn a reply. ' +
