@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0902-G -->
+<!-- BUILD: ELEVATE-2026-0908-A -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -10598,10 +10598,10 @@ function anlScoreboard(d) {
         g('median_days_to_reply').delta, { inverted: true, deltaSuffix: 'd',
           deltaNote: (Number(g('median_days_to_reply').delta) || 0) > 0 ? ' slower' : ' faster' }) +
     '</div>' +
-    '<div class="anl-note">Open rate is shown as a weak secondary signal only. Enterprise Microsoft tenants ' +
-    'pre-fetch images and links, which inflates opens. Replies and positive replies are the metrics decisions ' +
-    'are made on. <span style="color:var(--text-muted)">(Open rate this period: ' +
-    anlPctStr(g('open_rate').value) + '.)</span></div>';
+    '<div class="anl-note">Opens are deliberately not tracked. Enterprise Microsoft tenants pre-fetch ' +
+    'images and links, so an open says more about their mail scanner than about the person. Replies are ' +
+    'the signal, and they are what gets adjusted if they are not coming. An out of office does not count ' +
+    'as a reply.</div>';
 }
 
 /* ---------- 0. the answer, before any table ----------

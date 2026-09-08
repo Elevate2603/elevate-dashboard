@@ -153,7 +153,6 @@ function splitPeriods(rows, days, nowMs) {
 const hasReply = (r) => !!parseTs(r.replied_at);
 const isPositive = (r) => hasReply(r) && r.reply_sentiment === "positive";
 const isMeeting = (r) => r.outcome === "meeting_booked";
-const wasOpened = (r) => !!parseTs(r.opened_at) || (Number(r.open_count) || 0) > 0;
 
 function daysToReply(r) {
   const s = parseTs(r.sent_at), p = parseTs(r.replied_at);
@@ -166,7 +165,6 @@ function periodStats(rows) {
   const replies = rows.filter(hasReply).length;
   const positive = rows.filter(isPositive).length;
   const meetings = rows.filter(isMeeting).length;
-  const opens = rows.filter(wasOpened).length;
   const lags = rows.map(daysToReply).filter((n) => n !== null);
   return {
     sent,
@@ -176,8 +174,6 @@ function periodStats(rows) {
     positive_rate: pct(positive, sent),
     meetings,
     median_days_to_reply: round1(median(lags)),
-    opens,
-    open_rate: pct(opens, sent),
   };
 }
 
@@ -195,8 +191,6 @@ function buildScoreboard(cur, prev) {
     positive_rate: cell("positive_rate", true),
     meetings: cell("meetings"),
     median_days_to_reply: cell("median_days_to_reply", true),
-    opens: cell("opens"),
-    open_rate: cell("open_rate", true),
   };
 }
 
@@ -631,9 +625,11 @@ Produce at most three decisions for the coming week. Each decision must:
 - state what it costs or frees up
 
 Rules you must follow:
-- Never make a recommendation based on open rate. Open rates from enterprise
-  Microsoft tenants are inflated by automated link and image scanning. Reply
-  rate and positive reply rate are the only performance metrics you trust.
+- Opens are not tracked and are not available to you. Never mention, estimate or
+  reason about open rates. Reply rate and positive reply rate are the only
+  performance metrics that exist here.
+- An out-of-office or other automated bounce-back is NOT a reply and is never
+  counted as one. A reply means a person wrote back.
 - Never declare a winner or loser on a segment with fewer than 40 sends. Say
   the sample is too thin and state how many more sends are needed.
 - State your confidence and separate findings that are solid from findings
@@ -1023,7 +1019,7 @@ function demoBriefing() {
         reasoning: "Openers naming a specific posting or shift pattern replied at 13.2%. Openers naming company growth or news replied at 6.4%. Same doctrine, sharper detail. Test the copy below on the next 60 sends.",
         copy_test: "SUBJECT: Your afternoon shift postings\nBODY: Mark,\n\nYou have had three afternoon assembler postings open in Windsor since early August. That usually means the shift is running short rather than growing.\n\nWe staff afternoon and midnight coverage in Windsor and can hold a bench so a callout does not cost you a line. Worth a short call this week?\n\nTravis" },
     ],
-    confidence: "Medium. The persona finding is solid at this volume. The opening-line finding is directional and needs another 120 sends before it is trusted. Nothing here is based on open rates.",
+    confidence: "Medium. The persona finding is solid at this volume. The opening-line finding is directional and needs another 120 sends before it is trusted. Nothing here is based on open rates, which are not tracked.",
   };
 }
 
