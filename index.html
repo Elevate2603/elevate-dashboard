@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0916-A -->
+<!-- BUILD: ELEVATE-2026-0916-B -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -7566,6 +7566,20 @@ function jrvComputeCounts(records) {
   jrvState.counts = c;
 }
 
+/**
+ * Move the stage chips by hand after a write, instead of waiting for the next daily read.
+ *
+ * The dashboard reads Make once a calendar day, so adding a lead or moving one between
+ * pipelines left the NEW / IN SEQUENCE / IN THE MIX numbers showing this morning's
+ * figures until the page was reloaded — an add to In the Mix still read 0.
+ * Writes already update the panels in memory; the chips now follow the same rule.
+ */
+function jrvBumpCounts(bucket, delta) {
+  if (!jrvState.counts || jrvState.counts[bucket] == null) return;
+  jrvState.counts[bucket] = Math.max(0, jrvState.counts[bucket] + delta);
+  jrvRenderStages();
+}
+
 function jrvRenderStages() {
   const map = { new:'jrvStageNew', enrolled:'jrvStageEnrolled', mix:'jrvStageMix' };
   for (const k of Object.keys(map)) {
@@ -7958,6 +7972,8 @@ async function jrvSubmitManualLead() {
     // that is open, show it now; otherwise clear that panel's cache so it reconciles
     // the next time it is opened (no extra Make operation either way).
     const destMode = jrvManualDest === 'in_the_mix' ? 'in_the_mix' : 'in_sequence';
+    // the chips are painted from the daily read, so move them now rather than next load
+    jrvBumpCounts(destMode === 'in_the_mix' ? 'mix' : 'enrolled', optimistic.length);
     if (destMode !== jrvInSeqState.pipelineMode) {
       jrvCacheBust(destMode === 'in_the_mix' ? JRV_CACHE_KEYS.inmix : JRV_CACHE_KEYS.inseq);
     } else {
@@ -8656,6 +8672,9 @@ async function jrvOnStageChange(queueKey, rcrmId, selectEl, companySlug) {
     const res = await fetch(url, { method: 'GET' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     jrvCacheBust(JRV_CACHE_KEYS.queue); // counts reconcile on next natural load
+    // ...and shift the chips now, so the header agrees with the panel straight away
+    jrvBumpCounts(value === 'in_the_mix' ? 'mix' : 'enrolled', 1);
+    jrvBumpCounts(value === 'in_the_mix' ? 'enrolled' : 'mix', -1);
     // Drop from current panel (record's stage no longer matches), persist that to
     // the current day cache, and invalidate the DESTINATION panel's cache so it
     // reconciles (shows the moved contact) the next time it is opened. No re-read here.
