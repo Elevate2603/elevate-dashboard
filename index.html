@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0908-C -->
+<!-- BUILD: ELEVATE-2026-0916-A -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -7728,9 +7728,28 @@ function jrvOpenInSeqModal(mode) {
 function jrvOpenInTheMix() { jrvOpenInSeqModal('in_the_mix'); }
 
 // ── Manual Lead form ────────────────────────────────────────────────
+// Which pipeline a new manual lead lands in: 'in_sequence' (default, shows in the
+// Manual Lead section) or 'in_the_mix' (skips In Sequence entirely).
+let jrvManualDest = 'in_sequence';
+function jrvSetManualDest(dest) {
+  jrvManualDest = (dest === 'in_the_mix') ? 'in_the_mix' : 'in_sequence';
+  const seqBtn = document.getElementById('jrvManualDestSeq');
+  const mixBtn = document.getElementById('jrvManualDestMix');
+  if (seqBtn) seqBtn.classList.toggle('active', jrvManualDest === 'in_sequence');
+  if (mixBtn) mixBtn.classList.toggle('active', jrvManualDest === 'in_the_mix');
+  const hint = document.getElementById('jrvManualDestHint');
+  const addBtn = document.getElementById('jrvManualAddBtn');
+  if (hint) hint.textContent = jrvManualDest === 'in_the_mix'
+    ? 'Goes straight to In the Mix, skipping In Sequence. Use this for leads already in play.'
+    : 'Goes to In Sequence, in the Manual Lead section, until the first email goes out.';
+  if (addBtn) addBtn.textContent = jrvManualDest === 'in_the_mix' ? 'Add to In the Mix' : 'Add to Manual Lead';
+}
+
 function jrvOpenAddManualLead() {
   const modal = document.getElementById('jrvAddManualModal');
   if (!modal) return;
+  // Default to whichever pipeline panel you are looking at.
+  jrvSetManualDest((jrvInSeqState && jrvInSeqState.pipelineMode === 'in_the_mix') ? 'in_the_mix' : 'in_sequence');
   // Clear fields each open
   ['jrvManualCompany','jrvManualCity','jrvManualWebsite','jrvManualContext','jrvManualPersonal','jrvManualContacts'].forEach(id => {
     const el = document.getElementById(id);
@@ -7764,7 +7783,7 @@ function jrvCloseAddManualLead() {
   const usageEl = document.getElementById('jrvZIUsageInline');
   if (usageEl) { usageEl.style.display = 'none'; usageEl.innerHTML = ''; }
   const btn = document.getElementById('jrvManualAddBtn');
-  if (btn) { btn.disabled = false; btn.textContent = 'Add to Manual Lead'; }
+  if (btn) { btn.disabled = false; btn.textContent = jrvManualDest === 'in_the_mix' ? 'Add to In the Mix' : 'Add to Manual Lead'; }
 }
 
 async function jrvSubmitManualLead() {
@@ -7905,7 +7924,7 @@ async function jrvSubmitManualLead() {
     const res = await fetch(JRV_CONFIG.MANUAL_LEAD_ADD_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company_name: company, company_city: city, target_role: targetRole, context, contacts }),
+      body: JSON.stringify({ company_name: company, company_city: city, target_role: targetRole, context, contacts, pipeline_stage: jrvManualDest === 'in_the_mix' ? 'in_the_mix' : 'manual_lead' }),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     // The add webhook returns the backend-generated keys (comma-separated, in the same
@@ -7921,7 +7940,8 @@ async function jrvSubmitManualLead() {
     const _nowIso = new Date().toISOString();
     const optimistic = contacts.map((c, i) => ({
       key: addedKeys[i] || _mkKey(c.name),
-      decision: 'approved', outlook_status: 'sent', pipeline_stage: 'manual_lead',
+      decision: 'approved', outlook_status: 'sent',
+      pipeline_stage: jrvManualDest === 'in_the_mix' ? 'in_the_mix' : 'manual_lead',
       lead_source: 'manual', in_sequence: 'true', is_client: 'false',
       removed_from_sequence: 'false', bounced: 'false', has_replied: 'false',
       response_state: '', reach_out_count: 0,
@@ -7934,10 +7954,12 @@ async function jrvSubmitManualLead() {
       added_at: _nowIso, approved_at: _nowIso,
     }));
     jrvCloseAddManualLead();
-    if (jrvInSeqState.pipelineMode === 'in_the_mix') {
-      // The Add form lives in the In Sequence panel; if we're somehow in In-the-Mix
-      // mode, just clear the In Sequence cache so its next open pulls the new leads.
-      jrvCacheBust(JRV_CACHE_KEYS.inseq);
+    // Where the lead landed decides what we can splice in. If it went to the panel
+    // that is open, show it now; otherwise clear that panel's cache so it reconciles
+    // the next time it is opened (no extra Make operation either way).
+    const destMode = jrvManualDest === 'in_the_mix' ? 'in_the_mix' : 'in_sequence';
+    if (destMode !== jrvInSeqState.pipelineMode) {
+      jrvCacheBust(destMode === 'in_the_mix' ? JRV_CACHE_KEYS.inmix : JRV_CACHE_KEYS.inseq);
     } else {
       // Replace any existing same-email rows (a confirmed re-add resets that entry),
       // then merge + dedupe, update the cache so a reopen needs no fetch, and repaint.
@@ -7947,13 +7969,14 @@ async function jrvSubmitManualLead() {
         return !(e && _newEmails.has(e));
       });
       jrvInSeqState.records = jrvDedupeByContact(_base.concat(optimistic));
-      try { jrvCacheWrite(JRV_CACHE_KEYS.inseq, jrvInSeqState.records); } catch (_) {}
+      // cache key follows the open panel (In Sequence vs In the Mix)
+      try { jrvCacheWrite(jrvInSeqCacheKey(), jrvInSeqState.records); } catch (_) {}
       if (typeof jrvRenderInSeq === 'function') jrvRenderInSeq();
     }
   } catch (e) {
     console.error('[Manual lead add] failed:', e);
     alert('Add failed: ' + (e.message || ''));
-    if (btn) { btn.disabled = false; btn.textContent = 'Add to Manual Lead'; }
+    if (btn) { btn.disabled = false; btn.textContent = jrvManualDest === 'in_the_mix' ? 'Add to In the Mix' : 'Add to Manual Lead'; }
   }
 }
 
@@ -8747,9 +8770,18 @@ async function jrvSaveContext() {
   const context = ta ? ta.value : '';
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
   try {
+    // Send the RCRM slugs we already hold (the panel resolves contact slugs lazily and
+    // caches them). The webhook files ONE note against the contact with the company
+    // associated to it, so the same note shows on both profiles in RCRM — and it also
+    // writes these slugs back to the queue record if it was missing them.
+    const _rec = jrvFindContextRecord(qk) || {};
     const res = await fetch(JRV_CONFIG.CONTEXT_SET_URL, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ queue_key: qk, context })
+      body: JSON.stringify({
+        queue_key: qk, context,
+        contact_slug: _rec.rcrm_contact_id || '',
+        company_slug: _rec.rcrm_company_slug || '',
+      })
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const r = jrvFindContextRecord(qk);
@@ -11387,6 +11419,16 @@ document.addEventListener('DOMContentLoaded', function() {
         <textarea id="jrvManualPersonal" placeholder="e.g. I've known Craig 25 years, we played hockey together at York Mills, still play every Tuesday. — or — Met John briefly at the SME conference in March, talked about EV battery hiring. — or — His son works with my brother." class="jrv-manual-input" style="height:80px;resize:vertical;"></textarea>
       </div>
       <div id="jrvManualCandidates" style="margin-bottom:12px; display:none;"></div>
+      <!-- Where the lead lands. In Sequence = still working it; In the Mix = something
+           promising you want to keep an eye on (skips In Sequence entirely). -->
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Where does this go</label>
+        <div class="jrv-inseq-groupby-seg" style="display:inline-flex;">
+          <button type="button" id="jrvManualDestSeq" class="jrv-inseq-groupby-btn active" onclick="jrvSetManualDest('in_sequence')" title="Still pursuing, nothing promising yet">In Sequence</button>
+          <button type="button" id="jrvManualDestMix" class="jrv-inseq-groupby-btn" onclick="jrvSetManualDest('in_the_mix')" title="Something is going on here — quotes, agreements, live conversation. Skips In Sequence.">In the Mix</button>
+        </div>
+        <div id="jrvManualDestHint" style="font-size:11px;color:var(--text-muted);margin-top:5px;">Goes to In Sequence, in the Manual Lead section, until the first email goes out.</div>
+      </div>
       <div style="margin-bottom:14px;">
         <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;">Contacts (one per line: Name | email | title | city)</label>
         <textarea id="jrvManualContacts" placeholder="e.g.&#10;Peter Krug | pkrug@multimatic.com | General Manager | Markham&#10;Jane Doe | jdoe@multimatic.com | HR Manager | Markham" class="jrv-manual-input" style="height:120px;resize:vertical;font-family:ui-monospace,monospace;font-size:12px;"></textarea>
@@ -11464,6 +11506,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <div class="jrv-modal-body" style="padding:18px;">
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;">Extra context for <strong id="jrvContextWho" style="color:var(--gold-light);"></strong> that the AI drafter factors in <em>on top of</em> the live email thread it reads — a phone call, something you learned, or what to emphasize next. Save this <strong>before</strong> you draft.</div>
+      <div style="font-size:12px;color:var(--gold-light);background:rgba(200,130,10,0.10);border:1px solid rgba(200,130,10,0.28);border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.5;">Saved as a note in RCRM too — one note filed on the contact with their company attached to it, so it shows on both profiles. Only new or changed text is filed, so re-saving the same words will not double up.</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;">Context — type or dictate</span>
         <button type="button" id="jrvContextMicBtn" onclick="jrvContextMicToggle()" class="jrv-ctx-mic" title="Dictate (speech to text)">🎤 Dictate</button>
