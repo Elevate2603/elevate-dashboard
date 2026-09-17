@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0917-A -->
+<!-- BUILD: ELEVATE-2026-0917-B -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -93,6 +93,12 @@
   .contact-info-badge { background:var(--dark4); color:var(--text-muted); font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; letter-spacing:0.02em; }
   .contact-sequence-badge { background:rgba(124,58,237,0.2); color:#a78bfa; border:1px solid rgba(124,58,237,0.45); font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   /* the same person arriving as a DIFFERENT record — approving both double-enrols them */
+  /* Is the contact at the office that is hiring? ZI files people under an office record
+     that often is not where they actually sit. */
+  .contact-site-ok { color:#2ecc71; font-size:10px; font-weight:700; letter-spacing:0.04em; margin-left:6px; }
+  .contact-site-warn { color:#f1c40f; font-size:10px; font-weight:700; letter-spacing:0.04em; margin-left:6px; }
+  .contact-site-bad { color:#e74c3c; font-size:10px; font-weight:700; letter-spacing:0.04em; margin-left:6px; }
+  .contact-site-unknown { color:var(--text-muted); font-size:10px; font-weight:600; letter-spacing:0.04em; margin-left:6px; }
   .contact-dup-badge { background:rgba(231,76,60,0.18); color:#ff8f7a; border:1px solid rgba(231,76,60,0.5); font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   .contact-title { font-size:13px; color:var(--text-muted); margin-top:3px; }
   .contact-company { font-size:13px; color:var(--gold); font-weight:600; margin-top:2px; }
@@ -765,6 +771,12 @@
   .jrv-inseq-search-input:focus { outline:none; border-color: var(--gold); background: var(--dark); }
   .jrv-inseq-search-clear { background:transparent; border:1px solid var(--border); color: var(--text-muted); cursor:pointer; padding:6px 10px; border-radius:4px; font-size:11px; font-family: inherit; }
   .jrv-inseq-search-clear:hover { color: var(--text); border-color: var(--text-muted); }
+  /* Colour filter chips — counts live inside the button so the number is always visible */
+  .jrv-color-count { display:inline-block; min-width:18px; padding:0 4px; margin-left:4px; border-radius:8px;
+    background:rgba(255,255,255,0.10); font-size:10px; font-weight:700; }
+  .jrv-inseq-groupby-btn.jrv-color-green.active { border-color:rgba(46,204,113,0.6); color:#2ecc71; }
+  .jrv-inseq-groupby-btn.jrv-color-yellow.active { border-color:rgba(241,196,15,0.6); color:#f1c40f; }
+  .jrv-inseq-groupby-btn.jrv-color-red.active { border-color:rgba(231,76,60,0.6); color:#e74c3c; }
   /* Group-by toggle — segmented control to switch In Sequence between recency and company grouping */
   .jrv-inseq-groupby { display:flex; align-items:center; gap:6px; margin-left:4px; }
   .jrv-inseq-groupby-label { font-size:10px; text-transform:uppercase; letter-spacing:0.6px; color: var(--text-muted); }
@@ -3029,6 +3041,17 @@ function renderQueue() {
     const locIsCompany = !contactLoc && !!companyLoc;
     const locCountry = (c.contact_country || c.company_country || '').trim();
     const locOutsideON = location && !/\b(ontario|ON)\b/i.test(location);
+    // Is this person actually AT the site that is hiring? ZoomInfo files people under a
+    // company office, but a "Burlington" HR record can sit in Vancouver or Ohio, and a
+    // contact at the wrong site is worth nothing on a location-specific role.
+    const cCity = (c.contact_city || '').trim();
+    const oCity = (c.company_city || '').trim();
+    const cState = (c.contact_state || '').trim();
+    const oState = (c.company_state || '').trim();
+    const sameCity = cCity && oCity && cCity.toLowerCase() === oCity.toLowerCase();
+    const sameState = cState && oState && cState.toLowerCase() === oState.toLowerCase();
+    const siteCheck = !cCity ? (oCity ? 'unknown' : '')
+      : sameCity ? 'onsite' : (sameState ? 'province' : 'elsewhere');
     const linkedin = c.contact_linkedin || '';
     const sequence = c.sequence_name || '';
     const isClient = c.is_client === true || c.is_client === 'true';
@@ -3061,7 +3084,11 @@ function renderQueue() {
               ${signalLabel ? `<span class="${signalClass}">${signalLabel}</span>` : ''}
               ${employees ? `<span class="contact-info-badge">👥 ${escapeHtml(employees)}</span>` : ''}
             </div>
-            ${location ? `<div class="contact-location${locOutsideON ? ' is-outside-on' : ''}">📍 ${escapeHtml(location)}${locCountry && !/canada/i.test(locCountry) ? ', ' + escapeHtml(locCountry) : ''}${locIsCompany ? ' <span class="contact-location-src">(company HQ)</span>' : ''}${locOutsideON ? ' <span class="contact-location-warn">OUTSIDE ONTARIO</span>' : ''}</div>` : '<div class="contact-location is-unknown">📍 Location unknown</div>'}
+            ${location ? `<div class="contact-location${locOutsideON ? ' is-outside-on' : ''}">📍 ${escapeHtml(location)}${locCountry && !/canada/i.test(locCountry) ? ', ' + escapeHtml(locCountry) : ''}${locIsCompany ? ' <span class="contact-location-src">(company HQ)</span>' : ''}${locOutsideON ? ' <span class="contact-location-warn">OUTSIDE ONTARIO</span>' : ''}${
+              siteCheck === 'onsite' ? ' <span class="contact-site-ok" title="This person sits at the office that is hiring">✓ AT THE SITE</span>'
+              : siteCheck === 'province' ? ` <span class="contact-site-warn" title="Same province as the hiring office (${escapeAttr(oCity + ', ' + oState)}), different city">SAME PROVINCE, NOT THE SITE</span>`
+              : siteCheck === 'elsewhere' ? ` <span class="contact-site-bad" title="The hiring office is ${escapeAttr(oCity + ', ' + oState)} — this person is not there">⚠ NOT AT ${escapeHtml((oCity || 'the site').toUpperCase())}</span>`
+              : siteCheck === 'unknown' ? ' <span class="contact-site-unknown" title="ZoomInfo has no personal location for this contact, only the office record">LOCATION UNCONFIRMED</span>' : ''}</div>` : '<div class="contact-location is-unknown">📍 Location unknown</div>'}
             <div class="contact-title">${escapeHtml(title)}</div>
             <div class="contact-company">${escapeHtml(company)}${industry ? ' · ' + escapeHtml(industry) : ''}</div>
           </div>
@@ -7694,7 +7721,26 @@ function jrvRenderStages() {
 // scope is granted on connection 8250656, verified 2026-06-09).
 // pipelineMode: 'in_sequence' or 'in_the_mix' — which fetch URL + filter to use.
 // selectedKeys: queue_keys checked for bulk send.
-let jrvInSeqState = { records: [], loading: false, searchTerm: '', pipelineMode: 'in_sequence', selectedKeys: new Set(), groupBy: 'recency', dupClusters: [] };
+let jrvInSeqState = { records: [], loading: false, searchTerm: '', pipelineMode: 'in_sequence', selectedKeys: new Set(), groupBy: 'recency', dupClusters: [], colorFilter: 'all' };
+
+// Jump straight to one recency colour instead of scrolling past the others.
+// 'all' | 'green' | 'yellow' | 'red'. Pressing the active one clears it.
+function jrvSyncColorChips(counts) {
+  const total = (counts.green || 0) + (counts.yellow || 0) + (counts.red || 0);
+  const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = String(n); };
+  set('jrvColorCount_all', total); set('jrvColorCount_green', counts.green || 0);
+  set('jrvColorCount_yellow', counts.yellow || 0); set('jrvColorCount_red', counts.red || 0);
+}
+
+function jrvInSeqSetColor(color) {
+  const next = (jrvInSeqState.colorFilter === color) ? 'all' : color;
+  jrvInSeqState.colorFilter = next;
+  ['all', 'green', 'yellow', 'red'].forEach(c => {
+    const b = document.getElementById('jrvColor_' + c);
+    if (b) b.classList.toggle('active', next === c);
+  });
+  jrvRenderInSeq();
+}
 
 // Session cache + throttle for RCRM slug resolution.
 // Tracks: emails resolved this session (slug present), and emails tried-and-empty.
@@ -7823,6 +7869,12 @@ function jrvOpenInSeqModal(mode) {
   const _cb = document.getElementById('jrvGroupByCompany');
   if (_rb) _rb.classList.add('active');
   if (_cb) _cb.classList.remove('active');
+  // ...and with every colour showing, so a filter left on yesterday never hides work
+  jrvInSeqState.colorFilter = 'all';
+  ['all', 'green', 'yellow', 'red'].forEach(c => {
+    const b = document.getElementById('jrvColor_' + c);
+    if (b) b.classList.toggle('active', c === 'all');
+  });
   const titleEl = document.getElementById('jrvInSeqTitle');
   if (titleEl) titleEl.textContent = jrvInSeqState.pipelineMode === 'in_the_mix' ? 'In the Mix' : 'In Sequence';
   modal.style.display = 'flex';
@@ -8567,7 +8619,11 @@ function jrvRenderInSeq() {
     `;
   }
 
+  // Keep the chip counts honest even when a filter is hiding the other colours.
+  jrvSyncColorChips({ green: buckets.green.length, yellow: buckets.yellow.length, red: buckets.red.length });
+  const colorPick = jrvInSeqState.colorFilter || 'all';
   const groupsHtml = groupOrder.map(g => {
+    if (colorPick !== 'all' && g.color !== colorPick) return '';
     const items = buckets[g.color];
     if (!items.length) return '';
     const rowsHtml = items.map(({ r, rec }) => buildRow(r, g.color, 'Last contact ' + rec.label, '')).join('');
@@ -8686,9 +8742,15 @@ function jrvRenderInSeq() {
     `;
   }
 
+  // Filtering to one colour means exactly that: the bounced / responded / manual-lead
+  // strips are not recency groups, so they stand down until the filter is cleared.
+  const filtering = (jrvInSeqState.colorFilter || 'all') !== 'all';
+  const emptyForColor = '<div class="jrv-inseq-empty">Nobody in the ' +
+    escapeHtml(jrvInSeqState.colorFilter || '') + ' group right now.</div>';
   body.innerHTML = (dupHtml + (jrvInSeqState.groupBy === 'company'
     ? companyHtml
-    : (bouncedHtml + respondedHtml + manualLeadHtml + groupsHtml))
+    : (filtering ? (groupsHtml || emptyForColor)
+                 : (bouncedHtml + respondedHtml + manualLeadHtml + groupsHtml)))
   ) || ('<div class="jrv-inseq-empty">' + emptyLabel + '</div>');
   jrvRenderBulkBar();
 }
@@ -11465,6 +11527,16 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="jrv-inseq-searchbar">
       <input type="text" id="jrvInSeqSearch" class="jrv-inseq-search-input" placeholder="Search by name, company, or title…" oninput="jrvInSeqOnSearch(this.value)" autocomplete="off">
       <button class="jrv-inseq-search-clear" onclick="jrvInSeqClearSearch()">Clear</button>
+      <!-- Jump to one recency colour without scrolling past the others -->
+      <div class="jrv-inseq-groupby">
+        <span class="jrv-inseq-groupby-label">Show</span>
+        <div class="jrv-inseq-groupby-seg">
+          <button id="jrvColor_all" class="jrv-inseq-groupby-btn active" onclick="jrvInSeqSetColor('all')" title="Everyone, in the usual sections">All <span id="jrvColorCount_all" class="jrv-color-count">0</span></button>
+          <button id="jrvColor_green" class="jrv-inseq-groupby-btn jrv-color-green" onclick="jrvInSeqSetColor('green')" title="Contacted in the last 14 days">🟢 <span id="jrvColorCount_green" class="jrv-color-count">0</span></button>
+          <button id="jrvColor_yellow" class="jrv-inseq-groupby-btn jrv-color-yellow" onclick="jrvInSeqSetColor('yellow')" title="Getting stale, 15 to 30 days">🟡 <span id="jrvColorCount_yellow" class="jrv-color-count">0</span></button>
+          <button id="jrvColor_red" class="jrv-inseq-groupby-btn jrv-color-red" onclick="jrvInSeqSetColor('red')" title="Overdue, 31 days or more">🔴 <span id="jrvColorCount_red" class="jrv-color-count">0</span></button>
+        </div>
+      </div>
       <div class="jrv-inseq-groupby">
         <span class="jrv-inseq-groupby-label">Group by</span>
         <div class="jrv-inseq-groupby-seg">
