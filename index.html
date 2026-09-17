@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0916-B -->
+<!-- BUILD: ELEVATE-2026-0917-A -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -92,6 +92,8 @@
   .contact-signal-low { background:var(--dark4); color:var(--text-muted); border:1px solid var(--border); font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   .contact-info-badge { background:var(--dark4); color:var(--text-muted); font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; letter-spacing:0.02em; }
   .contact-sequence-badge { background:rgba(124,58,237,0.2); color:#a78bfa; border:1px solid rgba(124,58,237,0.45); font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
+  /* the same person arriving as a DIFFERENT record — approving both double-enrols them */
+  .contact-dup-badge { background:rgba(231,76,60,0.18); color:#ff8f7a; border:1px solid rgba(231,76,60,0.5); font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; letter-spacing:0.05em; }
   .contact-title { font-size:13px; color:var(--text-muted); margin-top:3px; }
   .contact-company { font-size:13px; color:var(--gold); font-weight:600; margin-top:2px; }
   /* Location sits directly under the name so it reads before the title/company. */
@@ -2937,6 +2939,59 @@ async function initQueue() {
   }
 }
 
+/**
+ * Everyone already being worked, by email.
+ *
+ * A queue card carries its OWN record's in_sequence flag, which says nothing about the
+ * same person arriving as a different record — an enrich pulling someone you already
+ * added by hand, or the same contact surfacing from two hiring signals. Approving both
+ * enrols the person twice and they get two sets of outreach.
+ *
+ * Read from memory first, then the In Sequence / In the Mix day caches, so this costs
+ * no Make operations. If neither panel has been opened this browser has nothing to
+ * compare against, which is why the backend keys and the display collapse still matter.
+ */
+function jrvPipelineEmailMap() {
+  const map = new Map();
+  const add = (rows) => {
+    (rows || []).forEach(r => {
+      const e = (r.contact_email || '').toString().trim().toLowerCase();
+      if (!e || map.has(e)) return;
+      if (r.is_client === true || r.is_client === 'true') return;
+      if (r.removed_from_sequence === true || r.removed_from_sequence === 'true') return;
+      map.set(e, { name: r.contact_name || '', stage: (r.pipeline_stage || '').toString().toLowerCase() });
+    });
+  };
+  add(jrvInSeqState && jrvInSeqState.records);
+  try {
+    [JRV_CACHE_KEYS.inseq, JRV_CACHE_KEYS.inmix].forEach(k => {
+      const c = jrvCacheRead(k);
+      if (c && Array.isArray(c.data)) add(c.data);
+    });
+  } catch (_) {}
+  return map;
+}
+
+// Cards in THIS queue that are the same person: flag every copy after the first.
+function jrvQueueDupEmails() {
+  const seen = new Set(), dups = new Set();
+  (queueContacts || []).forEach(c => {
+    const e = (c.contact_email || '').toString().trim().toLowerCase();
+    if (!e) return;
+    if (seen.has(e)) dups.add(e); else seen.add(e);
+  });
+  return dups;
+}
+
+// What a card would duplicate, if anything: 'pipeline' | 'queue' | ''
+function jrvDupKind(c, pipelineMap, queueDups) {
+  const e = (c.contact_email || '').toString().trim().toLowerCase();
+  if (!e) return '';
+  if (pipelineMap.has(e)) return 'pipeline';
+  if (queueDups.has(e)) return 'queue';
+  return '';
+}
+
 function renderQueue() {
   const list = document.getElementById('queueList');
   if (!queueContacts.length) {
@@ -2951,7 +3006,11 @@ function renderQueue() {
       hsDrafts[k] = { subject: c.email_draft_subject || '', body: c.email_draft_body || '' };
     }
   });
+  const _pipeMap = jrvPipelineEmailMap();
+  const _queueDups = jrvQueueDupEmails();
   list.innerHTML = queueContacts.map((c, i) => {
+    const dupKind = jrvDupKind(c, _pipeMap, _queueDups);
+    const dupWho = dupKind === 'pipeline' ? (_pipeMap.get((c.contact_email || '').trim().toLowerCase()) || {}) : {};
     const name = c.contact_name || c.full_name || 'Unknown';
     const initial = name.charAt(0).toUpperCase();
     const title = c.contact_title || c.title || '';
@@ -2997,6 +3056,8 @@ function renderQueue() {
               ${!isClient && inRCRM ? '<span class="contact-rcrm-badge">IN RCRM</span>' : ''}
               ${!isClient && !inRCRM ? '<span class="contact-new-badge">NEW</span>' : ''}
               ${inSequence ? `<span class="contact-sequence-badge">⚡ IN SEQUENCE</span>` : ''}
+              ${!inSequence && dupKind === 'pipeline' ? `<span class="contact-dup-badge" title="${escapeAttr('Already being worked' + (dupWho.stage === 'in_the_mix' ? ' in In the Mix' : ' in In Sequence') + '. Approving this enrols them a second time.')}">⚠ ALREADY IN ${dupWho.stage === 'in_the_mix' ? 'THE MIX' : 'SEQUENCE'}</span>` : ''}
+              ${dupKind === 'queue' ? `<span class="contact-dup-badge" title="${escapeAttr('The same email appears on another card in this queue. Approve one of them only.')}">⚠ DUPLICATE CARD</span>` : ''}
               ${signalLabel ? `<span class="${signalClass}">${signalLabel}</span>` : ''}
               ${employees ? `<span class="contact-info-badge">👥 ${escapeHtml(employees)}</span>` : ''}
             </div>
@@ -3223,6 +3284,19 @@ async function submitOne(idx) {
   const payload = buildPayload(c);
   const decision = payload.decision;
 
+  // Approving someone already being worked enrols them twice, so they get two sets of
+  // outreach. Declines are never blocked — removing a duplicate card is the fix.
+  if (decision !== 'decline') {
+    const kind = jrvDupKind(c, jrvPipelineEmailMap(), jrvQueueDupEmails());
+    if (kind && !confirm(
+      (kind === 'pipeline'
+        ? c.contact_name + ' (' + (c.contact_email || '') + ') is already in your pipeline.'
+        : c.contact_name + ' (' + (c.contact_email || '') + ') appears on another card in this queue.') +
+      '\n\nApproving now means a second enrolment and a second run of outreach to the same person.\n\nApprove anyway?')) {
+      return;
+    }
+  }
+
   btn.disabled = true;
   btn.classList.add('sending');
   btn.textContent = 'Submitting…';
@@ -3311,9 +3385,26 @@ async function submitQueue() {
   result.style.display = 'none';
 
   let ok = 0, fail = 0, skipped = 0;
+  // Check the whole batch for people already being worked BEFORE sending any of it, so
+  // the choice is made once rather than card by card halfway through a run.
+  const _pipeMap = jrvPipelineEmailMap();
+  const _queueDups = jrvQueueDupEmails();
+  const _dupCards = queueContacts.filter(c => !c._submitted && buildPayload(c).decision !== 'decline' && jrvDupKind(c, _pipeMap, _queueDups));
+  let _skipDups = false;
+  if (_dupCards.length) {
+    const lines = _dupCards.map(c => '• ' + (c.contact_name || '') + ' (' + (c.contact_email || '') + ')').join('\n');
+    _skipDups = confirm(
+      'These are already being worked, or appear twice in this queue:\n\n' + lines +
+      '\n\nApproving them means a second enrolment and duplicate outreach.\n\n' +
+      'OK = skip them and submit the rest.\nCancel = submit everything anyway.');
+  }
   console.log('[Approval] Submitting ' + queueContacts.length + ' decisions to ' + APPROVAL_WEBHOOK);
   for (const c of queueContacts) {
     if (c._submitted) { skipped++; continue; }
+    if (_skipDups && _dupCards.indexOf(c) >= 0) {
+      console.log('[Approval] skipped duplicate: ' + c.contact_name + ' (' + (c.contact_email || '') + ')');
+      skipped++; continue;
+    }
     const payload = buildPayload(c);
     const decision = payload.decision;
     try {
