@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0918-A -->
+<!-- BUILD: ELEVATE-2026-0918-B -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -824,6 +824,8 @@
   .jrv-inseq-ctx-btn.has-ctx { background: rgba(200,130,10,0.14); border-color: rgba(200,130,10,0.4); color: var(--gold-light); }
   .jrv-inseq-note-btn { background: rgba(96,165,250,0.08); border:1px solid rgba(96,165,250,0.32); color:#93c5fd; cursor:pointer; padding:4px 9px; border-radius:4px; font-size:10.5px; font-weight:600; font-family: inherit; letter-spacing:0.2px; }
   .jrv-inseq-note-btn:hover { background: rgba(96,165,250,0.16); border-color:#93c5fd; }
+  .jrv-inseq-note-btn { display:inline-flex; align-items:center; gap:5px; }
+  .jrv-rcrm-logo { width:13px; height:13px; border-radius:3px; flex:none; display:inline-block; vertical-align:-2px; }
   .jrv-inseq-note-btn.logged { background: rgba(74,222,128,0.14); border-color: rgba(74,222,128,0.4); color:#4ade80; }
   .jrv-inseq-cleartag-btn { background: rgba(231,76,60,0.12); border:1px solid rgba(231,76,60,0.4); color:#e74c3c; cursor:pointer; padding:4px 9px; border-radius:4px; font-size:10.5px; font-weight:600; font-family: inherit; letter-spacing:0.2px; }
   .jrv-inseq-cleartag-btn:hover { background: rgba(231,76,60,0.22); }
@@ -3988,6 +3990,8 @@ const JRV_CONFIG = {
   // and replies with RCRM's status, so the dashboard knows it really landed. Nothing is
   // stored on the queue record. Separate from Context, which only feeds the drafter.
   NOTE_LOG_URL: 'https://hook.us2.make.com/ge7ozl5fvmd9i3ss2ociqierdwayo90k',
+  // RecruitCRM app icon (their favicon, 96px), embedded so it never depends on their CDN.
+  RCRM_LOGO: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAUVUlEQVR4Ae1dCXAdxZn+u3tm3v10WLcV4UNgbCFzx9w2IYawuw4EMLUkxRaVbEEVu6xTlaKyVxYlu0vVbm1ICips4UCAkFoSkwoQWBsKiLnBgADf9yXLus93ztmdv+dJz0+2LEv2jCxb+lyypOnRzJv/6//o/+/uITAlIAg0AYGtLxDofpxA+f20tvZKpg9+rticM4cLFhbARIARTm0asmMEIDviCnrQ4MQMCIUSJ9Wvc1ZS4mhZboeY5hzQdjnQ/yaHhjUC7yMAiIApAgKThSZBa7dCINkOwej5myK8aiAmkvGoUM2YEFoc5RoHZkQIiBBnapgSEkZiAhxAIQRUFJkqgDCUHcNzKAWav7RDhEAOHTyfE0Jtwh1bEGoRwU0OTBdgZ6llZ4gSSjsCUoTwBOVOwnKMFFEhmT5QnA61LUqf0wB68xNgA5k8gnwjYM4964PJnsCsQE17JZndWC2MbDXhg9WCOpXcUMvBoUWCkhjKLkrACgFxNJRxgICiCW5pRDgKCjEnZSEoCkV+x/9y0iEFH12AyH2Tx4n8jrQB5fgTx18dpMsmRLVQTwxBhUm4auC9UkhmEk9NMdXqEwHoRBXrcERJB3V62/W9Xe2WOrdr8LzGQWgiHHyCpwTMaVofNFoPzRXB+gtoSdFCAsn53GBzhJGpwOZivFsEhajhbdWhe0+eBo4K9/aoWAK1h5jYGQxBRAKI1kvDShtVnX2EV+4yu/h2Tvu2dVes7YKmJk/J8EQAc+7ZX5ytSVxKqboUHH65MJILwNYrsAeH8AYUzlxYQqC5CvIWUEo3g80+AEi/VzPw9J7m1ast8ACnRED5yq6ocm7v1YT0fdPR+XXE5vOwP4VPd7/2B4IDZT2EqZtosOg1bu5d2/7ff7UDhkwf5GQ5Yd8xEVEduQHa4oofvL+YqsFvEyu9Aj/auegEFZgWEJKKQRoOfSyy85839C9e6l+9fHCoccIkjJeA/IXrH3g0kAyuuI2yjnuFnr0SBAvANISQwWzQaUdf8Xunb87qzkfrtgw1TYgENo5z8heMP/JaKSUXrIJs5z8K07kQzfs06fXHQgZlGMnFhE4vYRFyfujSG7rSG9bsg5ysxm1ZyDjaXeGH/uXD2SVW/J+53vc3GClEz0ozf5IQAocOwfAmYS98uDNe9MJEwtaxenBe+OHvf1ZdLAI/4Xrv3RiyqeTs9LInDYLuT2TNxSy+7T8ro4x2gvjteEfbJzRBxbc2FceqFv+Y68nv4gBHPe2h+xSFNEk47i5liexF0SXiUGrDozuGm8b6uzFj9IaVa7Tooru+z+3Ud/Hq09bejxeuWxDqfIi0/HvNg51XDx0eUxPGJKCnofEObiRWgZUNzvT88cHNmGSUBgju+tey27ZVDx8+3vmjEeCeXHL3by9gFn+Q2+niM3swezqASagUvVGdL/4eVq5hMIYWHC1Z1/HW37w7EJi7+H6R7r5opuefHIRjY8K2929rShpvGOu8owlwmRqsC15PjcRfiymTNT/z4Joi06oQZcq9pTd/HD/eecfYlpoVfwyzku57uG2UzPT+U4PgClBx4Caon3fj8c45hgCjjlxJiXoTliVmcIqQ3ZenlahanrkT7nk6ONo5IwlAh6EUF90KunS8M/ACnFAs9CWXFfceWjJa+wgCqtWWWkWZvYw7OszAG7hakEmWBxv+YlRnPIIAI3H1FcLpmpfLNM3AKwhhYSmBXVnU+HjJ0W0jTVDdeUvASIZhBp7CjYgcs5GHFp1/dFuegMobOyJK2cZFwpyW6X1/IXOjDpRpF4oFRzflCcikN9QqInbOTOjvFyhTI4rUgBH2PU+Ao0E9lhVrYAY+QQdhR8+DBU9FC4/mCVAuXDYHsqk4+ADh49eEP4co+IJJhKAgFD4vpBwa4YjzKeaQsnc2d2TeyNs5SByf1LAFOFx4HlzJkkdQxTibkuMKUwra5hzvj1rO5bMNT0fKTedi2AUV/Hsm59r5GPwJmwMNKLPpheWlsBVaho/nCFgmFCaaa7g7/PUu8ymFrzEC58wKQUSj+Dt4BkmmjVJt6dMha3JQ2LGf28KHNvAcFdvKYipURlUoiWqgKdQlZTBjQ3fShJ6UidewXSIDCnOJ8Fw7BAdCk5FAbGlVuuCwS0DxwLeigv6oEriGv3mXgzCx55fjQ9//tdlwUV3MfWAvIEuiIY1BZ8KAh17aC9vaMlAcpkNt4BKdQYHKnt04OwpXzS+GxV+JQl1ZEGaFkQDsDJKcwawFh/sN/PsUbNiXgI0tSUjqNl6buoR6nYwkwlSZGakuPOYSIHgt2iVR4fWkYan2srddPrcIGmZHwWv0Ys+NqAwsJ2c2c1ohUPgOVMU1+NalFfDNi8uhsTYK8RAmxkaxgfKJs3j+3o40vL6lD373aSfsaE9DQM19dk9JIBUM+HuzoaDe7hJgZ/+tSIhDZai04HXxRQgxZHu9R6EjHRZ+2nDg/KowrLqxDm69pBwFr455DSmJMGpTY10cFtRE4eI5UXjk9RZ4d+eAe/2A6iUJ/eisLqoEaEJn2+SaA1faPK5ECSFxP8ICQvybgzvsU+Q9JMdpNB/1FSF46NZ5cPdV1ScU/tGQPf6GRWXwH7fXw3XnFbuaYTtedh4MRWl5OcxZmg9+XALUZe0xHCcEPQ6A3DhD+kbic0VTapk0O8VhFf5h+VdgxUUVQ8SfHC5Gbfinv5wLC2sikNK5dx6ZVmFK4u1SOLAqPxvFFU1It4sAkpoftV86CdOjOaqC9AO3oMm5a0m1J+HuNQtK4HvX1GCYS8D0Sgt0HcisqmJYNi+vmq5sqB1H85MFryF7JsXuT/0MsKWeYUTzldIgfPuKKggHxjPbcny44/IqWDKvCFKG7YkVFWYKlOLqWEX9nfmEm0uAo/Ao+DQMkSaI+UiAax0MDtegzb4Moy0vUVGkwdcWlgLDTuQ4cMrgcrBntQbN1M2h4WN0qCUKhHsuJRk9ULwp87G+IK0DwcHeV1H4clTsNS6bE4fqYg2ylkdjGOIo1ApHhn+ncoUihVasAXifBpK9U/FZA0w0P1Ec5c4tC4IfmIdRVU1RwB1tn/JTuKvXhEKcZCEBhDliAFXCnzqANEF+OmHpfGMY/ZTFNPADRWEFYiEGXg1lMGBmDi3K9xYKDSvRR2pBmavwGu4iBvxHib8+gKEJUpk/93CjOHfceuryIe4azxJGxYYCJ1zeTQWBoB/JWXlFGQFRH1VAZjF1HAMksx54yVFgWAJ0/CIePYQQ5UyQt/LqSsEwCBGWRsC78O3I3YZ6kI8+QFMIDA5a0Dbgz0wOed2+tAWaTEmAF7CpELGCkXD6NrQQs7Sjl/57A/9LHiqSa2JWU2ZE/cCW1hQc7M1CyKMIC/OdSIAoIMBYQQVU49VTcCbCdS9o/9/f3Qcdg4Z7zKvkmcwDfbB7EAbQvMk8kRcQRBB06SNTEW5P9SVhQ4bKgP5pgrtcCke/nx9MwdpNvbljHlm8j/cOwls7eiGC1/fKiGKOimB1cmQyzusy5JGb5fI0jj+Xz4NhrJuxODzz/mHY0eaNJieyNjz5bhuaHx3CXg7w5H4X5EhkPvSD97VgCbc6hQRw7q8vIOgHZMnzswNJ+K+1B6BryBSdLGQl7/E/tcCrG7shiCVK4mEYjfJHgRwpOyIBO/Gb/MDeLwHLFUlkUdxvZyxcGy3rzy9+3g1NL+/FWvHJBRVp3YHH3mxBAloxBOVu6dNbcE4ckY+ZFQj8ghPyIJbCSsFrRywJkEVx02cbNDzNRGZCM5iYe35DJwykbbh3aS0sqS92a7wngpy1IUuRv/6gDf5vQwf0pWyIBZWhXXLAO1AiOFMLCCg1sZBnWXJLHq8hR8AyVyPvMCmQJKCwdey5r2zsgZ2dGfhGY5mb0ayvCkFZRIVAQTQjS5iDaOtlmCmjnXWbeqAZzZiFeQcpfOq18EGaHIUTns7vtKJAdzlHt6z74gOQAB2TWKY1OQQM38WdK4SWYzcScLC3FaOjHrdOXF8ZhlIkQVWoO2UmkbFdJ7sde/6+7iykkAzZFgkoJ7f1yXg+ozA5oSUFBJR3S6OUZT5Vw7Jybo7tcxh0FHJZWOxrAepq4N7uDOzryrijWekrZHZWBgZDug8O5nlkSiMUUPJVEf+6TDt34BYT4O/c3xR4exmnDeVYK/N+JOwSgBogndnpguucITcRS2Y05ecZhpQ1BjmgUcXXWXGFEMK2GC/N500w9HlICH44S8R2+XHBS0gHljEcN6Y+3ZAaMRWWOxNCHa7xfN6EutkJYaTxR8+1TjphA2t5HacYl59dsG2FRgoJkAMZJncQ9JwAMpSK2NeTdcO8aQ8ZLtMSU/CN+emhOaW0jaQvk7JkORL/247pgf60J3vcndGQe53atCRtVqzVjxxDWOHeQSHinntK6dek6d3ZnnHDvWmPUBzsw5sTyTefNYcPuQToHZVJoKoJPuxPKqeGdyVN+GjPAEx7MAMUvaIPdi7Nj4Rzc0M3lCUxRkv5ESVIArIYhr61rQ8GMtN8+b3oB8EuwJz5qsJkHBIT+SSJsVCf3EPba8hauSThs/0JeHdXH0xvlOPXh10ADSMJ4M5P0D7wHgLeT+2Qvl0O7aUZWvNJh7sAYvoiwFEL2qEg7+MSkCl+YAA9ZicOysEPyLlBQUzrvrWtH15q7oLpCgKDmGy6sK3wWM7qf7RSRxPU7ldlzE0VIwEDOCJe/c5h2HLozKw/nyocEtBtkWkvPDbkduXElIo24vNYPYr5+uaDSfj5GwdckzSdQJgCwhT9mX0v9hQeP7JS/iAcAkX4aqBVHBSomPz6A1atfrbuAPRnphEJTANiJfar298YEYkcKQ7v/N1+Goh3+blLlnTIYU0BC9PAT3/YBj9d24L12+kyQMuA4GW7U7N/OWJAlCcgVHTHHkEHW/yeTCXpjWJUJEuHT73XCg+/egB2tU8DnyDXCWtkJzRfNiInkyegyznYa/LoXkJ8rt9CLk0tQ9M05uaf+6gDfvTiPngNq1ZysfRZCTcnE8kYrZmdRzcd8bpvX29bB+q+JCHH9+pJbtZ0jgRZGly3uQdJ2AM/e70FNrcm3CrWWQWZlaRsn7N53Y6jm0bMuYjUXS6UmnNWCDMb9dMXFEKOkmXCrmPQhC9bkrADE3dyRb1cHBcLMrdGezzINcFrPumE1n7Dnb02ZSEnKUdmrespff05aG4e0btGTAaiFcktXFU+Jw65WUzS8wzXbyNB6hbw1+/oRy1IwWtbe+HKuUXw1XlFML8iBLOiGoQD1J0FN9w12BSocI0HVA1ZVtu2d+DJY987M4KAnl99L1nxg5deVUK1y4WZnrTNuoffeBDUKBbICfTjgO2dHQPQvD8JdV92w4LqCJxbGYba0iBUxjWXjLrSACR0y12L7OcCkFOFkAs7YmVb7J3//9Zo7ccI2dhVso42Ru4DO7kY+OR3MbmgL4SDBekndPQF29rTsKsrNz08ghpQElahNKpCbXEQwqg1fWiupGZMVTBFATOb+mP/K00to7UfQ8DgK0v3RxZtfV4wdoHg4rQ9mezUchKVnNUgy5kypS1D166kDaIj7RIl/QMZImxqAnt/pGo779j8wvHOGFXAmd01zwst9hmQ0x+NuFNH3H18qGui5KSroKq483jceE1MVrhwEtDCtqN3/Lrvl3dsPd4poxIw8IeSg+CkfkEUNTPVNvB2Q2oi5/PkFuYR4vfQ8eQgJ0GzoPpusJ08O9Z5x31/AN227fegVT9HqDMVn2/KgwacDqOz+pGDv7mufczzRjnmCrztlfsy6d7un9JYxdtTs49NUUiTwYjOAtU/76mpWjd0dEJv0Mgj8cQVu3kr+zHjxiYxdSO9qQMZclLNVuLaU8H+hf879DqrMef5jkWAK/KOpxe+Yy2c85AiYLc4yzIE3gJHJEyzWbT8OX3H1of3PEYS+YYxcKL4zSUh/epjOyNvBDoUpX0h56Ri5j1iR0PmGhSDxSqf0/dteKj3+XsODzWcUFDjkeSQCglS9cOObzDR+kPbTF9LBDlDEgE+Q4bBCgzQWORXxt7m/+n5zX3DTndcSwwm/DLP6vvev4zOCqyyM5kVGGl5u0HPmQaZB9FgOwkvXp1t+fLZgWeuHy62jHt9x0nZkrJ7X6vWyuu/I7Jdd3FuNsr3vU/h4ZAPcLNXfTRc8iZj5KmKLmN98+p8oWVCi2tOXmr3PqGW1152hZYWtztOYjmYSj3eVzureXBXnNMBEYp9xsJFL5NDX7x8+MnbWwvOmPDKplMWV/0Du+NpJXIVjfYsF8nBqx1u12OCvwi14mx59aEUu0GI066E4xtBCa23M8k3O2JLdkzkranHg2f9tfQ7j8bV2V9fpGrm5bYxcAmx1fMEYVUEnFLB7SicMYRIoTqmoGSQgNKDAmphIb7FJhWfOh19Xyy7qXX/C3feWTiDbcK9fsTdwGMsW7Ze2bqooSxYsb/WSsNcAWQ+ZkVqGWXVQDJlhIsSwXmRsK2wECxA5HxId/cQIldzEPAtxsWOTOTWSCKXpCfEQi010I/qQtVSVOH9hGh9XKidwiFtlPCDQMR+y2L7YU+wveflBSn8Gx8WsfgLAg1NavHyW8IB+1CJA6WziKWV0aBaSqKxUkLMIpR9nIERF6IjDtQKA6kJEkcLcb07DLbQUIuY3FVQ7n6JYlNyBVa5Gf/Qsjq56JyA3Jqco3CxxMwddxc2+b5rSmzCgjrRYllBenUgA2ngxRkgsxLYCRKE0YTjiAGR7OujTqgH7IEepzjbqw5enGirqda9MDEnFtBpgSArVwL9NPKMmrCSmqZVBYzU10MMDawDf9IY6wg4s68NahEIUOyS3NEUG2xFo5yhJaMCvx/Z5ZFJUXPiGDhGJJihDtoK4zaljpXJ2iZNdRqsf5PhWNeainK57vCNekT9MGOwtFmmn2NtbVhpT4agj4czLGYZykiNZgjcFu9NxAxmMIMZnMX4M1g6m0xzx8zzAAAAAElFTkSuQmCC',
   // Clear the warm/cold response tag: sets response_state="" + has_replied=false so the
   // daily Response Classifier won't re-tag it. Drops the contact out of Responded back
   // into the normal recency list.
@@ -8566,7 +8570,7 @@ function jrvRenderInSeq() {
               ${bounced ? `<span class="jrv-inseq-bounce" title="${escapeAttr(bounceReason || 'Hard bounce detected — auto-removed from sequence, RCRM note logged')}">⚠ Bounced</span>` : ''}
               ${jrvRcrmBtn(r)}
               <button class="jrv-inseq-ctx-btn${(r.manual_lead_context || '').trim() ? ' has-ctx' : ''}" onclick="jrvOpenContextModal('${escapeJs(qk)}')" title="Add context for the draft — e.g. a phone call the drafter should factor in. Saved before you draft.">✎ Context${(r.manual_lead_context || '').trim() ? ' ✓' : ''}</button>
-              <button class="jrv-inseq-note-btn" onclick="jrvOpenNoteModal('${escapeJs(qk)}', this)" title="Write a note straight onto this contact in RecruitCRM (their company too). Nothing is kept on the dashboard.">📝 Log RCRM Note</button>
+              <button class="jrv-inseq-note-btn" onclick="jrvOpenNoteModal('${escapeJs(qk)}', this)" title="Write a note straight onto this contact in RecruitCRM (their company too). Nothing is kept on the dashboard.">${jrvNoteBtnLabel()}</button>
               ${draftBtnHtml}
               ${hasReplied ? `<button class="jrv-inseq-cleartag-btn" onclick="jrvClearResponseTag('${escapeJs(qk)}', this)" title="Remove the warm/cold tag — moves this contact out of Responded back into the normal recently-contacted list">✕ Clear tag</button>` : ''}
             </div>
@@ -8928,6 +8932,7 @@ function jrvOpenContextModal(queueKey) {
   const who = document.getElementById('jrvContextWho');
   if (who) who.textContent = r ? (r.contact_name || r.contact_email || 'this contact') : 'this contact';
   if (ta) ta.value = (r && r.manual_lead_context) ? r.manual_lead_context : '';
+  const _lg = document.getElementById('jrvCtxRcrmLogo'); if (_lg && !_lg.src) _lg.src = JRV_CONFIG.RCRM_LOGO;
   const saveBtn = document.getElementById('jrvContextSaveBtn');
   if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save context'; }
   jrvContextMicStop();
@@ -8982,11 +8987,15 @@ async function jrvSaveContext() {
 // it shows on both profiles) and is NOT kept on the dashboard. The box always opens
 // empty. The webhook waits for RCRM and replies with its status, so a rejected note
 // stays in the box with the reason instead of vanishing silently.
+function jrvNoteBtnLabel() {
+  return `<img class="jrv-rcrm-logo" src="${JRV_CONFIG.RCRM_LOGO}" alt="">Log RCRM Note`;
+}
 let jrvNoteKey = null;
 let jrvNoteSrcBtn = null;
 function jrvOpenNoteModal(queueKey, srcBtn) {
   const r = jrvFindContextRecord(queueKey);
   jrvNoteKey = queueKey;
+  const _lg = document.getElementById('jrvNoteRcrmLogo'); if (_lg && !_lg.src) _lg.src = JRV_CONFIG.RCRM_LOGO;
   jrvNoteSrcBtn = srcBtn || null;
   const who = document.getElementById('jrvNoteWho');
   if (who) who.textContent = r ? (r.contact_name || r.contact_email || 'this contact') + (r.company_name ? ' at ' + r.company_name : '') : 'this contact';
@@ -9059,7 +9068,7 @@ async function jrvLogRcrmNote() {
     if (src && document.body.contains(src)) {
       src.classList.add('logged');
       src.textContent = '✓ Logged to RCRM';
-      setTimeout(() => { src.classList.remove('logged'); src.textContent = '📝 Log RCRM Note'; }, 3500);
+      setTimeout(() => { src.classList.remove('logged'); src.innerHTML = jrvNoteBtnLabel(); }, 3500);
     }
   } catch (e) {
     console.error('[RCRM note] log failed:', e);
@@ -11785,7 +11794,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <div class="jrv-modal-body" style="padding:18px;">
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;">Extra context for <strong id="jrvContextWho" style="color:var(--gold-light);"></strong> that the AI drafter factors in <em>on top of</em> the live email thread it reads — a phone call, something you learned, or what to emphasize next. Save this <strong>before</strong> you draft.</div>
-      <div style="font-size:12px;color:var(--text-muted);background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.10);border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.5;">Stays on the dashboard for the drafter and is not sent to RCRM. To file a note in RCRM, use <strong style="color:#93c5fd;">📝 Log RCRM Note</strong>.</div>
+      <div style="font-size:12px;color:var(--text-muted);background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.10);border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.5;">Stays on the dashboard for the drafter and is not sent to RCRM. To file a note in RCRM, use <strong style="color:#93c5fd;white-space:nowrap;"><img id="jrvCtxRcrmLogo" class="jrv-rcrm-logo" alt=""> Log RCRM Note</strong>.</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;">Context — type or dictate</span>
         <button type="button" id="jrvContextMicBtn" onclick="jrvContextMicToggle()" class="jrv-ctx-mic" title="Dictate (speech to text)">🎤 Dictate</button>
@@ -11803,7 +11812,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <div id="jrvNoteModal" class="jrv-modal-overlay" style="display:none;" onclick="if(event.target===this) jrvCloseNoteModal()">
   <div class="jrv-modal" style="max-width:600px;">
     <div class="jrv-modal-head">
-      <div class="jrv-modal-title">Log RCRM Note</div>
+      <div class="jrv-modal-title" style="display:flex;align-items:center;gap:8px;"><img id="jrvNoteRcrmLogo" class="jrv-rcrm-logo" style="width:18px;height:18px;border-radius:4px;" alt="">Log RCRM Note</div>
       <button class="jrv-modal-close" onclick="jrvCloseNoteModal()" aria-label="Close">×</button>
     </div>
     <div class="jrv-modal-body" style="padding:18px;">
