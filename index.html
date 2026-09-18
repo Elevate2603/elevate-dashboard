@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: ELEVATE-2026-0917-B -->
+<!-- BUILD: ELEVATE-2026-0918-A -->
 <!-- ELEVATE-2026-0612-AG-SOURCING-SHORTLIST -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -822,6 +822,9 @@
   .jrv-inseq-ctx-btn { background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.14); color: var(--text-muted); cursor:pointer; padding:4px 9px; border-radius:4px; font-size:10.5px; font-weight:600; font-family: inherit; letter-spacing:0.2px; }
   .jrv-inseq-ctx-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--gold); color: var(--gold-light); }
   .jrv-inseq-ctx-btn.has-ctx { background: rgba(200,130,10,0.14); border-color: rgba(200,130,10,0.4); color: var(--gold-light); }
+  .jrv-inseq-note-btn { background: rgba(96,165,250,0.08); border:1px solid rgba(96,165,250,0.32); color:#93c5fd; cursor:pointer; padding:4px 9px; border-radius:4px; font-size:10.5px; font-weight:600; font-family: inherit; letter-spacing:0.2px; }
+  .jrv-inseq-note-btn:hover { background: rgba(96,165,250,0.16); border-color:#93c5fd; }
+  .jrv-inseq-note-btn.logged { background: rgba(74,222,128,0.14); border-color: rgba(74,222,128,0.4); color:#4ade80; }
   .jrv-inseq-cleartag-btn { background: rgba(231,76,60,0.12); border:1px solid rgba(231,76,60,0.4); color:#e74c3c; cursor:pointer; padding:4px 9px; border-radius:4px; font-size:10.5px; font-weight:600; font-family: inherit; letter-spacing:0.2px; }
   .jrv-inseq-cleartag-btn:hover { background: rgba(231,76,60,0.22); }
   .jrv-inseq-cleartag-btn:disabled { opacity:0.6; cursor:wait; }
@@ -3981,6 +3984,10 @@ const JRV_CONFIG = {
   // Per-contact extra context written to manual_lead_context — the drafter reads it
   // server-side on the next draft. Added on top of the live thread the drafter reads.
   CONTEXT_SET_URL: 'https://hook.us2.make.com/b0r1n4kag6t2ner4jy3qv5te8qc3o3w1',
+  // Log RCRM Note (scenario 6322059): files one note on the contact (company attached)
+  // and replies with RCRM's status, so the dashboard knows it really landed. Nothing is
+  // stored on the queue record. Separate from Context, which only feeds the drafter.
+  NOTE_LOG_URL: 'https://hook.us2.make.com/ge7ozl5fvmd9i3ss2ociqierdwayo90k',
   // Clear the warm/cold response tag: sets response_state="" + has_replied=false so the
   // daily Response Classifier won't re-tag it. Drops the contact out of Responded back
   // into the normal recency list.
@@ -8559,6 +8566,7 @@ function jrvRenderInSeq() {
               ${bounced ? `<span class="jrv-inseq-bounce" title="${escapeAttr(bounceReason || 'Hard bounce detected — auto-removed from sequence, RCRM note logged')}">⚠ Bounced</span>` : ''}
               ${jrvRcrmBtn(r)}
               <button class="jrv-inseq-ctx-btn${(r.manual_lead_context || '').trim() ? ' has-ctx' : ''}" onclick="jrvOpenContextModal('${escapeJs(qk)}')" title="Add context for the draft — e.g. a phone call the drafter should factor in. Saved before you draft.">✎ Context${(r.manual_lead_context || '').trim() ? ' ✓' : ''}</button>
+              <button class="jrv-inseq-note-btn" onclick="jrvOpenNoteModal('${escapeJs(qk)}', this)" title="Write a note straight onto this contact in RecruitCRM (their company too). Nothing is kept on the dashboard.">📝 Log RCRM Note</button>
               ${draftBtnHtml}
               ${hasReplied ? `<button class="jrv-inseq-cleartag-btn" onclick="jrvClearResponseTag('${escapeJs(qk)}', this)" title="Remove the warm/cold tag — moves this contact out of Responded back into the normal recently-contacted list">✕ Clear tag</button>` : ''}
             </div>
@@ -8942,10 +8950,9 @@ async function jrvSaveContext() {
   const context = ta ? ta.value : '';
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
   try {
-    // Send the RCRM slugs we already hold (the panel resolves contact slugs lazily and
-    // caches them). The webhook files ONE note against the contact with the company
-    // associated to it, so the same note shows on both profiles in RCRM — and it also
-    // writes these slugs back to the queue record if it was missing them.
+    // Context only feeds the drafter; it no longer files an RCRM note (that is the
+    // separate Log RCRM Note button). The slugs are sent so the webhook can write them
+    // back to the queue record if it was missing them.
     const _rec = jrvFindContextRecord(qk) || {};
     const res = await fetch(JRV_CONFIG.CONTEXT_SET_URL, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -8967,6 +8974,96 @@ async function jrvSaveContext() {
     console.error('[Context] save failed:', e);
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Retry save'; }
     alert('Could not save context: ' + (e.message || ''));
+  }
+}
+
+// ── Log RCRM Note ──
+// One-shot: the note goes to RecruitCRM (on the contact, with their company attached so
+// it shows on both profiles) and is NOT kept on the dashboard. The box always opens
+// empty. The webhook waits for RCRM and replies with its status, so a rejected note
+// stays in the box with the reason instead of vanishing silently.
+let jrvNoteKey = null;
+let jrvNoteSrcBtn = null;
+function jrvOpenNoteModal(queueKey, srcBtn) {
+  const r = jrvFindContextRecord(queueKey);
+  jrvNoteKey = queueKey;
+  jrvNoteSrcBtn = srcBtn || null;
+  const who = document.getElementById('jrvNoteWho');
+  if (who) who.textContent = r ? (r.contact_name || r.contact_email || 'this contact') + (r.company_name ? ' at ' + r.company_name : '') : 'this contact';
+  const ta = document.getElementById('jrvNoteText');
+  if (ta) ta.value = '';
+  const err = document.getElementById('jrvNoteErr');
+  if (err) { err.textContent = ''; err.style.display = 'none'; }
+  const btn = document.getElementById('jrvNoteSaveBtn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Log to RCRM'; }
+  const modal = document.getElementById('jrvNoteModal');
+  if (modal) modal.style.display = 'flex';
+  if (ta) setTimeout(() => { ta.focus(); }, 50);
+}
+function jrvCloseNoteModal() {
+  try { if (jrvState && jrvState._dictateRec) jrvState._dictateRec.stop(); } catch (e) {}
+  const modal = document.getElementById('jrvNoteModal');
+  if (modal) modal.style.display = 'none';
+  const ta = document.getElementById('jrvNoteText');
+  if (ta) ta.value = '';
+  jrvNoteKey = null;
+  jrvNoteSrcBtn = null;
+}
+async function jrvLogRcrmNote() {
+  const qk = jrvNoteKey;
+  if (!qk) return;
+  const ta = document.getElementById('jrvNoteText');
+  const btn = document.getElementById('jrvNoteSaveBtn');
+  const err = document.getElementById('jrvNoteErr');
+  const showErr = (msg) => {
+    if (err) { err.textContent = msg; err.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
+  };
+  const note = (ta ? ta.value : '').trim();
+  if (!note) { showErr('Write the note first.'); return; }
+  const r = jrvFindContextRecord(qk) || {};
+  const contactSlug = (r.rcrm_contact_id || '').trim();
+  const companySlug = (r.rcrm_company_slug || '').trim();
+  if (!contactSlug && !companySlug) {
+    showErr('This contact is not linked to RCRM yet, so there is nowhere to file the note. Open it in RCRM or refresh the panel, then try again.');
+    return;
+  }
+  if (err) err.style.display = 'none';
+  if (btn) { btn.disabled = true; btn.textContent = 'Logging…'; }
+  try {
+    const res = await fetch(JRV_CONFIG.NOTE_LOG_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        queue_key: qk, note,
+        rel_to: contactSlug || companySlug,
+        rel_type: contactSlug ? 'contact' : 'company',
+        // Attach the company only when the note hangs off the contact.
+        assoc_company: contactSlug ? companySlug : '',
+      })
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch (e) {}
+    const status = data ? Number(data.status) : 0;
+    if (!res.ok || !data || status < 200 || status >= 300) {
+      const why = status === 429 ? 'RCRM is rate-limiting right now. Wait a minute and try again.'
+                : status === 401 || status === 403 ? 'RCRM refused the login token. The note was not logged.'
+                : status === 404 || status === 422 ? 'RCRM could not find this contact or company. The note was not logged.'
+                : status ? 'RCRM returned ' + status + '. The note was not logged.'
+                : 'No answer from RCRM. The note was not logged.';
+      showErr(why);
+      return;
+    }
+    const src = jrvNoteSrcBtn;
+    jrvCloseNoteModal();
+    if (src && document.body.contains(src)) {
+      src.classList.add('logged');
+      src.textContent = '✓ Logged to RCRM';
+      setTimeout(() => { src.classList.remove('logged'); src.textContent = '📝 Log RCRM Note'; }, 3500);
+    }
+  } catch (e) {
+    console.error('[RCRM note] log failed:', e);
+    showErr('Could not reach the note webhook: ' + (e.message || 'network error') + '. The note was not logged.');
   }
 }
 
@@ -11688,7 +11785,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <div class="jrv-modal-body" style="padding:18px;">
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;">Extra context for <strong id="jrvContextWho" style="color:var(--gold-light);"></strong> that the AI drafter factors in <em>on top of</em> the live email thread it reads — a phone call, something you learned, or what to emphasize next. Save this <strong>before</strong> you draft.</div>
-      <div style="font-size:12px;color:var(--gold-light);background:rgba(200,130,10,0.10);border:1px solid rgba(200,130,10,0.28);border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.5;">Saved as a note in RCRM too — one note filed on the contact with their company attached to it, so it shows on both profiles. Only new or changed text is filed, so re-saving the same words will not double up.</div>
+      <div style="font-size:12px;color:var(--text-muted);background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.10);border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.5;">Stays on the dashboard for the drafter and is not sent to RCRM. To file a note in RCRM, use <strong style="color:#93c5fd;">📝 Log RCRM Note</strong>.</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;">Context — type or dictate</span>
         <button type="button" id="jrvContextMicBtn" onclick="jrvContextMicToggle()" class="jrv-ctx-mic" title="Dictate (speech to text)">🎤 Dictate</button>
@@ -11697,6 +11794,29 @@ document.addEventListener('DOMContentLoaded', function() {
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
         <button onclick="jrvCloseContextModal()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:var(--text);border-radius:6px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px;">Cancel</button>
         <button id="jrvContextSaveBtn" onclick="jrvSaveContext()" style="background:var(--gold);border:1px solid var(--gold);color:#000;border-radius:6px;padding:9px 18px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;">Save context</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Log RCRM Note modal: one-shot note to RecruitCRM, nothing kept on the dashboard -->
+<div id="jrvNoteModal" class="jrv-modal-overlay" style="display:none;" onclick="if(event.target===this) jrvCloseNoteModal()">
+  <div class="jrv-modal" style="max-width:600px;">
+    <div class="jrv-modal-head">
+      <div class="jrv-modal-title">Log RCRM Note</div>
+      <button class="jrv-modal-close" onclick="jrvCloseNoteModal()" aria-label="Close">×</button>
+    </div>
+    <div class="jrv-modal-body" style="padding:18px;">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;">Files a note on <strong id="jrvNoteWho" style="color:var(--gold-light);"></strong> in RecruitCRM, with their company attached so it shows on both profiles. Once it is logged the box clears and nothing is kept here.</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;">Note, type or dictate</span>
+        <button type="button" id="jrvNoteMicBtn" onclick="jrvDictateTo('jrvNoteText','jrvNoteMicBtn')" class="jrv-ctx-mic" title="Dictate (speech to text)">🎤 Dictate</button>
+      </div>
+      <textarea id="jrvNoteText" style="width:100%;height:160px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);color:var(--text);border-radius:6px;padding:10px 12px;font-size:13px;font-family:inherit;line-height:1.5;resize:vertical;" placeholder="e.g. Called Paige, left the agreement with her. Following up Monday." spellcheck="true"></textarea>
+      <div id="jrvNoteErr" style="display:none;margin-top:10px;font-size:12px;color:#f87171;background:rgba(231,76,60,0.10);border:1px solid rgba(231,76,60,0.35);border-radius:6px;padding:8px 10px;line-height:1.5;"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+        <button onclick="jrvCloseNoteModal()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:var(--text);border-radius:6px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px;">Cancel</button>
+        <button id="jrvNoteSaveBtn" onclick="jrvLogRcrmNote()" style="background:var(--gold);border:1px solid var(--gold);color:#000;border-radius:6px;padding:9px 18px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;">Log to RCRM</button>
       </div>
     </div>
   </div>
